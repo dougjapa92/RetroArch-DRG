@@ -45,10 +45,13 @@ android {
 
   productFlavors {
     normal {
-      resValue "string", "app_name", "RetroArch"
+      resValue "string", "app_name", "RetroArch DRG"
       buildConfigField "boolean", "PLAY_STORE_BUILD", "false"
 
       dimension "variant"
+      ndk {
+        abiFilters 'armeabi-v7a', 'arm64-v8a' 
+      } 
     }
     aarch64 {
       applicationIdSuffix '.aarch64'

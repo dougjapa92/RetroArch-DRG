@@ -23,12 +23,30 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y unzip zip
+          sudo apt-get install -y unzip zip curl
+
+      - name: Atualizar núcleos 32-bit (armeabi-v7a)
+        run: |
+          set -e
+          CORES_DIR="pkg/android/phoenix/assets/cores"
+          TEMP_DIR="tmp_cores32"
+          BASE_URL="https://buildbot.libretro.com/nightly/android/latest/armeabi-v7a/"
+          
+          mkdir -p "$CORES_DIR" "$TEMP_DIR"
+          
+          # Baixa todos os zips do Buildbot
+          curl -s $BASE_URL | grep -o 'href=".*\.zip"' | sed 's/href="//;s/"//' | while read ZIP_NAME; do
+            curl -L "$BASE_URL$ZIP_NAME" -o "$TEMP_DIR/$ZIP_NAME"
+            unzip -o "$TEMP_DIR/$ZIP_NAME" -d "$TEMP_DIR"
+          done
+
+          # Copia só os arquivos .so para cores
+          cp -f "$TEMP_DIR"/*.so "$CORES_DIR/"
+          rm -rf "$TEMP_DIR"
 
       - name: Compile Phoenix - debug-tvbox
         run: |
           cd pkg/android/phoenix
-          # Os assets já estão presentes no repositório
           ./gradlew assembleDebug
           find . -iname "*.apk" -exec ls -l "{}" \;
 
@@ -51,12 +69,30 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y unzip zip
+          sudo apt-get install -y unzip zip curl
+
+      - name: Atualizar núcleos 64-bit (arm64-v8a)
+        run: |
+          set -e
+          CORES_DIR="pkg/android/phoenix64/assets/cores"
+          TEMP_DIR="tmp_cores64"
+          BASE_URL="https://buildbot.libretro.com/nightly/android/latest/arm64-v8a/"
+          
+          mkdir -p "$CORES_DIR" "$TEMP_DIR"
+          
+          # Baixa todos os zips do Buildbot
+          curl -s $BASE_URL | grep -o 'href=".*\.zip"' | sed 's/href="//;s/"//' | while read ZIP_NAME; do
+            curl -L "$BASE_URL$ZIP_NAME" -o "$TEMP_DIR/$ZIP_NAME"
+            unzip -o "$TEMP_DIR/$ZIP_NAME" -d "$TEMP_DIR"
+          done
+
+          # Copia só os arquivos .so para cores
+          cp -f "$TEMP_DIR"/*.so "$CORES_DIR/"
+          rm -rf "$TEMP_DIR"
 
       - name: Compile Phoenix64 - debug-celular
         run: |
           cd pkg/android/phoenix64
-          # Os assets já estão presentes no repositório
           ./gradlew assembleDebug
           find . -iname "*.apk" -exec ls -l "{}" \;
 

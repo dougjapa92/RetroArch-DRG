@@ -1,4 +1,4 @@
-name: CI Android
+name: CI Android - Phoenix & Phoenix64
 
 on:
   push:
@@ -14,36 +14,58 @@ env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
 
 jobs:
-  build:
+  build-phoenix:
     runs-on: ubuntu-22.04
-
+    name: Build Phoenix (debug-tvbox)
     steps:
-    - uses: actions/checkout@v3
+      - uses: actions/checkout@v3
 
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y p7zip-full curl
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip zip
 
-    - name: Download RetroArch assets
-      run: |
-        curl -L https://github.com/libretro/retroarch-assets/releases/download/Latest/assets.7z -o assets.7z
-        7z x assets.7z -oassets
+      - name: Compile Phoenix - debug-tvbox
+        run: |
+          cd pkg/android/phoenix
+          # Os assets já estão presentes no repositório
+          ./gradlew assembleDebug
+          find . -iname "*.apk" -exec ls -l "{}" \;
 
-    - name: Compile RA
-      run: |
-        cd pkg/android/phoenix
-        # Copiar assets para o build
-        cp -r ../../assets/* assets/
-        ./gradlew assembleDebug
-        find . -iname "*.apk" -exec ls -l "{}" \;
+      - name: Get short SHA
+        id: slug_phoenix
+        run: echo "::set-output name=sha8::$(echo ${GITHUB_SHA} | cut -c1-8)"
 
-    - name: Get short SHA
-      id: slug
-      run: echo "::set-output name=sha8::$(echo ${GITHUB_SHA} | cut -c1-8)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: retroarch-phoenix-${{ steps.slug_phoenix.outputs.sha8 }}
+          path: |
+            pkg/android/phoenix/build/outputs/apk/tvbox/debug/phoenix-tvbox-debug.apk
 
-    - uses: actions/upload-artifact@v4
-      with:
-        name: retroarch-android-${{ steps.slug.outputs.sha8 }}
-        path: |
-          pkg/android/phoenix/build/outputs/apk/normal/debug/phoenix-normal-debug.apk
+  build-phoenix64:
+    runs-on: ubuntu-22.04
+    name: Build Phoenix64 (debug-celular)
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip zip
+
+      - name: Compile Phoenix64 - debug-celular
+        run: |
+          cd pkg/android/phoenix64
+          # Os assets já estão presentes no repositório
+          ./gradlew assembleDebug
+          find . -iname "*.apk" -exec ls -l "{}" \;
+
+      - name: Get short SHA
+        id: slug_phoenix64
+        run: echo "::set-output name=sha8::$(echo ${GITHUB_SHA} | cut -c1-8)"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: retroarch-phoenix64-${{ steps.slug_phoenix64.outputs.sha8 }}
+          path: |
+            pkg/android/phoenix64/build/outputs/apk/celular/debug/phoenix-celular-debug.apk

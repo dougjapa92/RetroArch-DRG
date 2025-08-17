@@ -34,25 +34,30 @@ jobs:
 
           mkdir -p "$CORES_DIR" "$TEMP_DIR"
 
-          # Baixa e processa cada zip individualmente
-          curl -s $BASE_URL | grep -o 'href=".*\.zip"' | sed 's/href="//;s/"//' | while read ZIP_NAME; do
-            echo "Baixando $ZIP_NAME..."
-            curl -L "$BASE_URL$ZIP_NAME" -o "$TEMP_DIR/$ZIP_NAME"
-            unzip -o "$TEMP_DIR/$ZIP_NAME" -d "$TEMP_DIR"
-            
-            # Atualiza apenas arquivos existentes
-            for SO_FILE in "$TEMP_DIR"/*.so; do
-              FILE_NAME=$(basename "$SO_FILE")
-              if [ -f "$CORES_DIR/$FILE_NAME" ]; then
-                cp -f "$SO_FILE" "$CORES_DIR/"
-                echo "Atualizado $FILE_NAME"
-              else
-                echo "Ignorado $FILE_NAME (não existe na pasta de destino)"
-              fi
-            done
+          # Baixa a página do Buildbot
+          curl -s "$BASE_URL" -o "$TEMP_DIR/index.html"
 
-            rm -f "$TEMP_DIR/$ZIP_NAME"
-          done
+          # Extrai apenas arquivos zip
+          grep -o 'href=".*\.zip"' "$TEMP_DIR/index.html" | sed 's/href="//;s/"//' > "$TEMP_DIR/zips.txt"
+
+          while read ZIP_NAME; do
+              echo "Baixando $ZIP_NAME..."
+              curl -L "$BASE_URL$ZIP_NAME" -o "$TEMP_DIR/$ZIP_NAME"
+              unzip -o "$TEMP_DIR/$ZIP_NAME" -d "$TEMP_DIR"
+
+              # Atualiza apenas núcleos existentes
+              for SO_FILE in "$TEMP_DIR"/*.so; do
+                  FILE_NAME=$(basename "$SO_FILE")
+                  if [ -f "$CORES_DIR/$FILE_NAME" ]; then
+                      cp -f "$SO_FILE" "$CORES_DIR/"
+                      echo "Atualizado $FILE_NAME"
+                  else
+                      echo "Ignorado $FILE_NAME (não existe na pasta de destino)"
+                  fi
+              done
+
+              rm -f "$TEMP_DIR/$ZIP_NAME"
+          done < "$TEMP_DIR/zips.txt"
 
           rm -rf "$TEMP_DIR"
 
@@ -92,25 +97,26 @@ jobs:
 
           mkdir -p "$CORES_DIR" "$TEMP_DIR"
 
-          # Baixa e processa cada zip individualmente
-          curl -s $BASE_URL | grep -o 'href=".*\.zip"' | sed 's/href="//;s/"//' | while read ZIP_NAME; do
-            echo "Baixando $ZIP_NAME..."
-            curl -L "$BASE_URL$ZIP_NAME" -o "$TEMP_DIR/$ZIP_NAME"
-            unzip -o "$TEMP_DIR/$ZIP_NAME" -d "$TEMP_DIR"
-            
-            # Atualiza apenas arquivos existentes
-            for SO_FILE in "$TEMP_DIR"/*.so; do
-              FILE_NAME=$(basename "$SO_FILE")
-              if [ -f "$CORES_DIR/$FILE_NAME" ]; then
-                cp -f "$SO_FILE" "$CORES_DIR/"
-                echo "Atualizado $FILE_NAME"
-              else
-                echo "Ignorado $FILE_NAME (não existe na pasta de destino)"
-              fi
-            done
+          curl -s "$BASE_URL" -o "$TEMP_DIR/index.html"
+          grep -o 'href=".*\.zip"' "$TEMP_DIR/index.html" | sed 's/href="//;s/"//' > "$TEMP_DIR/zips.txt"
 
-            rm -f "$TEMP_DIR/$ZIP_NAME"
-          done
+          while read ZIP_NAME; do
+              echo "Baixando $ZIP_NAME..."
+              curl -L "$BASE_URL$ZIP_NAME" -o "$TEMP_DIR/$ZIP_NAME"
+              unzip -o "$TEMP_DIR/$ZIP_NAME" -d "$TEMP_DIR"
+
+              for SO_FILE in "$TEMP_DIR"/*.so; do
+                  FILE_NAME=$(basename "$SO_FILE")
+                  if [ -f "$CORES_DIR/$FILE_NAME" ]; then
+                      cp -f "$SO_FILE" "$CORES_DIR/"
+                      echo "Atualizado $FILE_NAME"
+                  else
+                      echo "Ignorado $FILE_NAME (não existe na pasta de destino)"
+                  fi
+              done
+
+              rm -f "$TEMP_DIR/$ZIP_NAME"
+          done < "$TEMP_DIR/zips.txt"
 
           rm -rf "$TEMP_DIR"
 

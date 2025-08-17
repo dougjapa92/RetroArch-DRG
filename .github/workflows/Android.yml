@@ -32,8 +32,8 @@ jobs:
 
       - name: Download and update cores (32-bit)
         run: |
-          chmod +x ./cores.sh
-          ./cores.sh armeabi-v7a pkg/android/phoenix/assets/cores tmp_cores32
+          source ./cores.sh
+          baixar_cores "armeabi-v7a" "pkg/android/phoenix/assets/cores" "tmp_cores32"
 
       - name: Compile Phoenix - debug
         run: |
@@ -68,8 +68,8 @@ jobs:
 
       - name: Download and update cores (64-bit)
         run: |
-          chmod +x ./cores.sh
-          ./cores.sh arm64-v8a pkg/android/phoenix64/assets/cores tmp_cores64
+          source ./cores.sh
+          baixar_cores "arm64-v8a" "pkg/android/phoenix64/assets/cores" "tmp_cores32"
 
       - name: Compile Phoenix64 - debug (aarch64)
         run: |

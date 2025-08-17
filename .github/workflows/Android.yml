@@ -16,7 +16,7 @@ env:
 jobs:
   build-phoenix:
     runs-on: ubuntu-22.04
-    name: Build Phoenix (debug-tvbox)
+    name: Build Phoenix (armeabi-v7a)
     steps:
       - uses: actions/checkout@v3
 
@@ -25,15 +25,19 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y unzip zip curl
 
-      - name: Baixar e atualizar núcleos 32-bit (armeabi-v7a)
+      - name: Set execute permissions recursively
         run: |
-          source cores.sh
-          baixar_cores "armeabi-v7a" "pkg/android/phoenix/assets/cores" "tmp_cores32"
+          chmod -R 775 pkg/android/phoenix
+          chmod -R 775 pkg/android/phoenix64
 
-      - name: Compile Phoenix - debug-tvbox
+      - name: Download and update cores (32-bit)
+        run: |
+          chmod +x .github/scripts/cores.sh
+          .github/scripts/cores.sh armeabi-v7a pkg/android/phoenix/assets/cores tmp_cores32
+
+      - name: Compile Phoenix - debug
         run: |
           cd pkg/android/phoenix
-          chmod 775 ./gradlew
           ./gradlew assembleDebug
           find . -iname "*.apk" -exec ls -l "{}" \;
 
@@ -44,12 +48,11 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: retroarch-phoenix-${{ steps.slug_phoenix.outputs.sha8 }}
-          path: |
-            pkg/android/phoenix/build/outputs/apk/normal/debug/phoenix-normal-debug.apk
+          path: pkg/android/phoenix/build/outputs/apk/normal/debug/phoenix-normal-debug.apk
 
   build-phoenix64:
     runs-on: ubuntu-22.04
-    name: Build Phoenix64 (debug-celular)
+    name: Build Phoenix64 (arm64-v8a, flavor aarch64)
     steps:
       - uses: actions/checkout@v3
 
@@ -58,16 +61,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y unzip zip curl
 
-      - name: Baixar e atualizar núcleos 64-bit (arm64-v8a)
+      - name: Set execute permissions recursively
         run: |
-          source cores.sh
-          baixar_cores "arm64-v8a" "pkg/android/phoenix64/assets/cores" "tmp_cores64"
+          chmod -R 775 pkg/android/phoenix
+          chmod -R 775 pkg/android/phoenix64
 
-      - name: Compile Phoenix64 - debug-celular
+      - name: Download and update cores (64-bit)
+        run: |
+          chmod +x .github/scripts/cores.sh
+          .github/scripts/cores.sh arm64-v8a pkg/android/phoenix64/assets/cores tmp_cores64
+
+      - name: Compile Phoenix64 - debug (aarch64)
         run: |
           cd pkg/android/phoenix64
-          chmod 775 ./gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleAarch64Debug
           find . -iname "*.apk" -exec ls -l "{}" \;
 
       - name: Get short SHA
@@ -77,5 +84,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: retroarch-phoenix64-${{ steps.slug_phoenix64.outputs.sha8 }}
-          path: |
-            pkg/android/phoenix64/build/outputs/apk/normal/debug/phoenix-normal-debug.apk
+          path: pkg/android/phoenix64/build/outputs/apk/aarch64/debug/phoenix64-debug.apk

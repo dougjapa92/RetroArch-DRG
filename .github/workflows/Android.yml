@@ -33,6 +33,7 @@ jobs:
       - name: Compile Phoenix - debug-tvbox
         run: |
           cd pkg/android/phoenix
+          chmod 775 ./gradlew
           ./gradlew assembleDebug
           find . -iname "*.apk" -exec ls -l "{}" \;
 
@@ -65,6 +66,7 @@ jobs:
       - name: Compile Phoenix64 - debug-celular
         run: |
           cd pkg/android/phoenix64
+          chmod 775 ./gradlew
           ./gradlew assembleDebug
           find . -iname "*.apk" -exec ls -l "{}" \;
 

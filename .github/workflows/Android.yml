@@ -77,6 +77,20 @@ jobs:
           ./gradlew assembleAarch64Debug
           find . -iname "*.apk" -exec ls -l "{}" \;
 
+      - name: List Phoenix build outputs (arm64-v8a)
+        run: |
+          echo "=== Phoenix APKs ==="
+          ls -R pkg/android/phoenix/build/outputs/apk || true
+          echo "Listing all APKs in Phoenix:"
+          find pkg/android/phoenix/build/outputs/apk -iname "*.apk" || true
+
+      - name: List Phoenix64 build outputs (arm64-v8a)
+        run: |
+          echo "=== Phoenix64 APKs ==="
+          ls -R pkg/android/phoenix64/build/outputs/apk || true
+          echo "Listing all APKs in Phoenix64:"
+          find pkg/android/phoenix64/build/outputs/apk -iname "*.apk" || true
+
       - name: Get short SHA
         id: slug_phoenix64
         run: echo "::set-output name=sha8::$(echo ${GITHUB_SHA} | cut -c1-8)"

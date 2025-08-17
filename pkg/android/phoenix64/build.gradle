@@ -117,7 +117,7 @@ android {
             if (variant.flavorName == "aarch64") {
                 def apkDir = new File("${project.rootDir}/pkg/android/phoenix64/build/outputs/apk/aarch64/${variant.buildType.name}")
                 apkDir.mkdirs()
-                output.outputFileName = "phoenix64-aarch64-${variant.buildType.name}.apk"
+                output.outputFileName = "phoenix64-aarch64-debug.apk"
             }
         }
     }

@@ -1,0 +1,4 @@
+- name: Set execute permissions recursively
+  run: |
+    chmod -R 775 pkg/android/phoenix
+    chmod -R 775 pkg/android/phoenix64

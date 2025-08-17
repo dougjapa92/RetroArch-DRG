@@ -55,6 +55,7 @@ android {
             resValue "string", "app_name", "RetroArch DRG"
             buildConfigField "boolean", "PLAY_STORE_BUILD", "false"
             dimension "variant"
+
             ndk {
                 abiFilters 'armeabi-v7a', 'arm64-v8a'
             }
@@ -110,13 +111,13 @@ android {
         }
     }
 
-    // Força saída do APK para a pasta phoenix64
+    // Força saída do APK para phoenix64
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
             if (variant.flavorName == "aarch64") {
                 def apkDir = new File("${project.rootDir}/pkg/android/phoenix64/build/outputs/apk/aarch64/${variant.buildType.name}")
                 apkDir.mkdirs()
-                output.outputFileName = "${apkDir}/phoenix64-aarch64-debug.apk"
+                output.outputFileName = "phoenix64-aarch64-${variant.buildType.name}.apk"
             }
         }
     }
@@ -129,4 +130,11 @@ dependencies {
 String getManifestAttribute(String attribute) {
     def manifest = new XmlParser().parse("${project.projectDir}/AndroidManifest.xml")
     return manifest.attributes().find { ((String) it.key).contains(attribute) }.value
+}
+
+// Tarefa de verificação de APK
+tasks.register("printAarch64Apk") {
+    doLast {
+        println "APK aarch64 será gerado em: ${buildDir}/outputs/apk/aarch64/debug/phoenix64-aarch64-debug.apk"
+    }
 }

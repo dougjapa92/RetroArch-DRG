@@ -20,9 +20,21 @@ jobs:
     steps:
     - uses: actions/checkout@v3
 
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y p7zip-full curl
+
+    - name: Download RetroArch assets
+      run: |
+        curl -L https://github.com/libretro/retroarch-assets/releases/download/Latest/assets.7z -o assets.7z
+        7z x assets.7z -oassets
+
     - name: Compile RA
       run: |
         cd pkg/android/phoenix
+        # Copiar assets para o build
+        cp -r ../../assets/* assets/
         ./gradlew assembleDebug
         find . -iname "*.apk" -exec ls -l "{}" \;
 
@@ -35,4 +47,3 @@ jobs:
         name: retroarch-android-${{ steps.slug.outputs.sha8 }}
         path: |
           pkg/android/phoenix/build/outputs/apk/normal/debug/phoenix-normal-debug.apk
-          pkg/android/phoenix/build/outputs/apk/aarch64/debug/phoenix-aarch64-debug.apk

@@ -35,6 +35,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     public static String PACKAGE_NAME;
     boolean checkPermissions = false;
     private SharedPreferences prefs;
+    private ProgressDialog progressDialog;
 
     private final String[] ASSET_FOLDERS = {
             "assets", "autoconfig", "cores", "database",
@@ -146,57 +147,73 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
 
-        ProgressDialog progressDialog;
-        AtomicInteger processedFiles = new AtomicInteger(0);
+        AtomicInteger progressCount = new AtomicInteger(0);
+        int totalTasks = ASSET_FOLDERS.length * 2; // extração + movimentação
 
         @Override
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
             progressDialog.setMessage("Configurando RetroArch DRG...");
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
-            progressDialog.setCancelable(false);
-            progressDialog.setProgress(0);
             progressDialog.setMax(100);
+            progressDialog.setCancelable(false);
             progressDialog.show();
 
             if (!TEMP_DIR.exists()) TEMP_DIR.mkdirs();
+            if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
+            if (!CONFIG_DIR.exists()) CONFIG_DIR.mkdirs();
         }
 
         @Override
         protected Boolean doInBackground(Void... voids) {
             try {
-                // 1) Extrair assets para /data/data/com.retroarch
+                // Extrair assets para /data/data/com.retroarch usando multithread
+                ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length, 4));
+
                 for (String folder : ASSET_FOLDERS) {
-                    copyAssetFolder(folder, new File(TEMP_DIR, folder));
+                    executor.submit(() -> {
+                        try {
+                            copyAssetFolder(folder, new File(TEMP_DIR, folder));
+                        } catch (IOException e) {
+                            Log.e("UnifiedExtractionTask", "Erro copiando: " + folder, e);
+                        } finally {
+                            publishProgress(progressCount.incrementAndGet() * 100 / totalTasks);
+                        }
+                    });
                 }
 
-                // 2) Mover tudo para /Android/media/com.retroarch usando multithread
-                moveDirectoryMultithread(TEMP_DIR, BASE_DIR);
+                executor.shutdown();
+                while (!executor.isTerminated()) {
+                    Thread.sleep(50);
+                }
 
-                // 3) Atualizar retroarch.cfg em /Android/data/com.retroarch/files
+                // Mover a pasta inteira para /Android/media/com.retroarch usando multithread
+                File[] children = TEMP_DIR.listFiles();
+                if (children != null) {
+                    ExecutorService moveExecutor = Executors.newFixedThreadPool(Math.min(children.length, 4));
+                    for (File child : children) {
+                        moveExecutor.submit(() -> {
+                            try {
+                                moveFile(child, new File(BASE_DIR, child.getName()));
+                            } catch (IOException e) {
+                                Log.e("UnifiedExtractionTask", "Erro movendo: " + child.getName(), e);
+                            } finally {
+                                publishProgress(progressCount.incrementAndGet() * 100 / totalTasks);
+                            }
+                        });
+                    }
+                    moveExecutor.shutdown();
+                    while (!moveExecutor.isTerminated()) Thread.sleep(50);
+                }
+
+                // Atualiza retroarch.cfg
                 updateRetroarchCfg();
 
             } catch (Exception e) {
-                Log.e("UnifiedExtractionTask", "Erro", e);
+                Log.e("UnifiedExtractionTask", "Erro geral", e);
                 return false;
             }
-
             return true;
-        }
-
-        @Override
-        protected void onProgressUpdate(Integer... values) {
-            if (values.length > 0) {
-                progressDialog.setProgress(values[0]);
-                progressDialog.setMessage("Extraindo... " + values[0] + "%");
-            }
-        }
-
-        @Override
-        protected void onPostExecute(Boolean result) {
-            progressDialog.dismiss();
-            prefs.edit().putBoolean("firstRun", false).apply();
-            finalStartup();
         }
 
         private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
@@ -217,32 +234,9 @@ public final class MainMenuActivity extends PreferenceActivity {
                             int read;
                             while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
                         }
-                        publishProgress(0); // atualiza a barra de progresso
                     }
                 }
             }
-        }
-
-        private void moveDirectoryMultithread(File srcDir, File destDir) throws IOException, InterruptedException {
-            if (!destDir.exists()) destDir.mkdirs();
-            File[] children = srcDir.listFiles();
-            if (children == null) return;
-
-            ExecutorService executor = Executors.newFixedThreadPool(Math.min(children.length, 4));
-            for (File child : children) {
-                executor.submit(() -> {
-                    try {
-                        moveFile(child, new File(destDir, child.getName()));
-                    } catch (Exception e) {
-                        Log.e("UnifiedExtractionTask", "Erro movendo " + child.getName(), e);
-                    } finally {
-                        processedFiles.incrementAndGet();
-                        publishProgress(processedFiles.get() * 100 / children.length);
-                    }
-                });
-            }
-            executor.shutdown();
-            while (!executor.isTerminated()) Thread.sleep(50);
         }
 
         private void moveFile(File src, File dst) throws IOException {
@@ -278,10 +272,24 @@ public final class MainMenuActivity extends PreferenceActivity {
                     content.append(folder).append("_directory = \"").append(f.getAbsolutePath()).append("\"\n");
                 }
             }
-
             try (FileOutputStream out = new FileOutputStream(cfgFile, false)) {
                 out.write(content.toString().getBytes());
             }
+        }
+
+        @Override
+        protected void onProgressUpdate(Integer... values) {
+            if (values.length > 0) {
+                progressDialog.setProgress(values[0]);
+                progressDialog.setMessage("Extraindo... " + values[0] + "%");
+            }
+        }
+
+        @Override
+        protected void onPostExecute(Boolean result) {
+            progressDialog.dismiss();
+            prefs.edit().putBoolean("firstRun", false).apply();
+            finalStartup();
         }
     }
 
@@ -289,7 +297,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         Intent retro = new Intent(this, RetroActivityFuture.class);
         retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
-        MainMenuActivity.startRetroActivity(
+        startRetroActivity(
                 retro,
                 null,
                 new File(BASE_DIR, "cores").getAbsolutePath(),

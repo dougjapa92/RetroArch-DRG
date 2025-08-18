@@ -5,7 +5,6 @@ import com.retroarch.browser.retroactivity.RetroActivityFuture;
 
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.media.AudioManager;
@@ -15,7 +14,6 @@ import android.os.Environment;
 import android.preference.PreferenceActivity;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
-import android.util.Log;
 import android.content.pm.PackageManager;
 import android.Manifest;
 
@@ -30,6 +28,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class MainMenuActivity extends PreferenceActivity {
+
     private final int REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS = 124;
     public static String PACKAGE_NAME;
     boolean checkPermissions = false;
@@ -107,6 +106,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS) {
             boolean allGranted = true;
+
             for (int i = 0; i < permissions.length; i++) {
                 if (grantResults[i] != PackageManager.PERMISSION_GRANTED) {
                     allGranted = false;
@@ -142,6 +142,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     }
 
     private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
+
         ProgressDialog progressDialog;
         AtomicInteger processedFiles = new AtomicInteger(0);
         int totalFiles = 0;
@@ -153,6 +154,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);
             progressDialog.show();
+
             if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
             totalFiles = countAllFiles(ASSET_FOLDERS);
         }
@@ -160,6 +162,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         @Override
         protected Boolean doInBackground(Void... voids) {
             ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length, 4));
+
             for (String folder : ASSET_FOLDERS) {
                 executor.submit(() -> {
                     try {
@@ -177,6 +180,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
 
             try { updateRetroarchCfg(); } catch (IOException e) { return false; }
+
             return true;
         }
 
@@ -189,6 +193,8 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected void onPostExecute(Boolean result) {
             progressDialog.dismiss();
             prefs.edit().putBoolean("firstRun", false).apply();
+
+            // Chama o RetroActivityFuture e agenda o fechamento do app
             finalStartup();
         }
 
@@ -218,6 +224,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 for (String asset : assets) {
                     String fullPath = assetFolder + "/" + asset;
                     File outFile = new File(targetFolder, asset);
+
                     if (getAssets().list(fullPath).length > 0) {
                         copyAssetFolder(fullPath, outFile);
                     } else {
@@ -242,9 +249,11 @@ public final class MainMenuActivity extends PreferenceActivity {
             StringBuilder content = new StringBuilder();
 
             for (String line : lines) {
+                boolean replaced = false;
                 for (String folder : ASSET_FOLDERS) {
                     if (line.startsWith(folder + "_directory")) {
                         line = folder + "_directory = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"";
+                        replaced = true;
                         break;
                     }
                 }
@@ -254,9 +263,6 @@ public final class MainMenuActivity extends PreferenceActivity {
             try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
                 out.write(content.toString().getBytes());
             }
-
-            // Fecha o aplicativo 3 segundos após cfg estar totalmente populado
-            new android.os.Handler().postDelayed(() -> finishAffinity(), 3000);
         }
     }
 
@@ -274,6 +280,9 @@ public final class MainMenuActivity extends PreferenceActivity {
                 getApplicationInfo().sourceDir
         );
         startActivity(retro);
+
+        // Fecha todo o aplicativo 3 segundos depois
+        new android.os.Handler().postDelayed(() -> finishAffinity(), 3000);
     }
 
     public static void startRetroActivity(Intent retro, String contentPath, String corePath,
@@ -288,4 +297,4 @@ public final class MainMenuActivity extends PreferenceActivity {
         String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
         retro.putExtra("EXTERNAL", external);
     }
-} 
+}

@@ -50,8 +50,8 @@ public final class MainMenuActivity extends PreferenceActivity {
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
 
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
-
         UserPreferences.updateConfigFile(this);
+
         checkRuntimePermissions();
     }
 
@@ -128,20 +128,20 @@ public final class MainMenuActivity extends PreferenceActivity {
                         .show();
             }
         } else {
-            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+            super.onRequestPermissionsResult(requestCode, grantResults, permissions);
         }
     }
 
     private void startExtractionOrRetro() {
         boolean firstRun = prefs.getBoolean("firstRun", true);
         if (firstRun) {
-            new AssetExtractionTask().execute();
+            new UnifiedExtractionTask().execute();
         } else {
             finalStartup();
         }
     }
 
-    private class AssetExtractionTask extends AsyncTask<Void, Integer, Boolean> {
+    private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
 
         ProgressDialog progressDialog;
         AtomicInteger processedFiles = new AtomicInteger(0);

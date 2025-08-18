@@ -18,11 +18,10 @@ import android.content.pm.PackageManager;
 import android.Manifest;
 
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.InputStream;
 import java.io.IOException;
-import java.util.List;
+import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -39,10 +38,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             "filters", "info", "overlays", "shaders", "system"
     };
 
-    // Diretório onde os assets serão extraídos
     private final File BASE_DIR = new File(Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
-
-    // Diretório do retroarch.cfg que o RetroArch lê
     private final File CONFIG_DIR = new File(Environment.getExternalStorageDirectory() + "/Android/data/com.retroarch/files");
 
     @Override
@@ -159,7 +155,6 @@ public final class MainMenuActivity extends PreferenceActivity {
             progressDialog.show();
 
             if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
-            if (!CONFIG_DIR.exists()) CONFIG_DIR.mkdirs();
             totalFiles = countAllFiles(ASSET_FOLDERS);
         }
 
@@ -183,7 +178,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 try { Thread.sleep(100); } catch (InterruptedException ignored) {}
             }
 
-            try { updateRetroarchCfg(); } catch (IOException e) { return false; }
+            try { generateRetroarchCfg(); } catch (IOException e) { return false; }
 
             return true;
         }
@@ -242,23 +237,32 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
         }
 
-        private void updateRetroarchCfg() throws IOException {
-            File cfgFile = new File(CONFIG_DIR, "retroarch.cfg");
+        private void generateRetroarchCfg() throws IOException {
+            File cfgFile = new File(BASE_DIR, "retroarch.cfg");
             if (!cfgFile.exists()) cfgFile.createNewFile();
 
-            List<String> lines = java.nio.file.Files.readAllLines(cfgFile.toPath());
-
+            List<String> lines = Files.readAllLines(cfgFile.toPath());
             StringBuilder content = new StringBuilder();
+
             for (String line : lines) {
                 boolean replaced = false;
                 for (String folder : ASSET_FOLDERS) {
                     if (line.startsWith(folder + "_directory") || (folder.equals("system") && line.startsWith("system_directory"))) {
-                        line = folder + "_directory = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"";
+                        line = folder.equals("system") ? 
+                               "system_directory = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"" :
+                               folder + "_directory = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"";
                         replaced = true;
                         break;
                     }
                 }
                 content.append(line).append("\n");
+            }
+
+            if (lines.isEmpty()) {
+                for (String folder : ASSET_FOLDERS) {
+                    content.append(folder.equals("system") ? "system_directory" : folder + "_directory")
+                           .append(" = \"").append(new File(BASE_DIR, folder).getAbsolutePath()).append("\"\n");
+                }
             }
 
             try (FileOutputStream out = new FileOutputStream(cfgFile, false)) {
@@ -275,7 +279,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 retro,
                 null,
                 new File(BASE_DIR, "cores").getAbsolutePath(),
-                new File(CONFIG_DIR, "retroarch.cfg").getAbsolutePath(),
+                new File(BASE_DIR, "retroarch.cfg").getAbsolutePath(),
                 Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
                 BASE_DIR.getAbsolutePath(),
                 getApplicationInfo().sourceDir

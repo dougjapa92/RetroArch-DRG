@@ -24,6 +24,9 @@ import java.io.InputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public final class MainMenuActivity extends PreferenceActivity {
 
@@ -85,7 +88,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                             .setPositiveButton("OK", (dialog, which) ->
                                     requestPermissions(permissionsList.toArray(new String[0]),
                                             REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
-                            .setNegativeButton("Cancel", (dialog, which) -> finish())
+                            .setNegativeButton("Sair", (dialog, which) -> finish())
                             .show();
                 } else {
                     requestPermissions(permissionsList.toArray(new String[0]),
@@ -114,7 +117,6 @@ public final class MainMenuActivity extends PreferenceActivity {
             if (allGranted) {
                 startExtractionOrRetro();
             } else {
-                // Mostra dialog explicando a necessidade e solicita novamente
                 new AlertDialog.Builder(this)
                         .setTitle("Permissões necessárias")
                         .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
@@ -142,8 +144,8 @@ public final class MainMenuActivity extends PreferenceActivity {
     private class AssetExtractionTask extends AsyncTask<Void, Integer, Boolean> {
 
         ProgressDialog progressDialog;
+        AtomicInteger processedFiles = new AtomicInteger(0);
         int totalFiles = 0;
-        int processedFiles = 0;
 
         @Override
         protected void onPreExecute() {
@@ -159,17 +161,27 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         @Override
         protected Boolean doInBackground(Void... voids) {
-            try {
-                for (String folder : ASSET_FOLDERS) {
-                    File target = new File(BASE_DIR, folder);
-                    copyAssetFolder(folder, target);
-                }
-                generateRetroarchCfg();
-                return true;
-            } catch (IOException e) {
-                Log.e("MainMenuActivity", "Erro ao extrair assets", e);
-                return false;
+            ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length, 4));
+
+            for (String folder : ASSET_FOLDERS) {
+                executor.submit(() -> {
+                    try {
+                        copyAssetFolder(folder, new File(BASE_DIR, folder));
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                });
             }
+
+            executor.shutdown();
+            while (!executor.isTerminated()) {
+                publishProgress((processedFiles.get() * 100) / totalFiles);
+                try { Thread.sleep(100); } catch (InterruptedException ignored) {}
+            }
+
+            try { generateRetroarchCfg(); } catch (IOException e) { return false; }
+
+            return true;
         }
 
         @Override
@@ -186,9 +198,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         private int countAllFiles(String[] folders) {
             int count = 0;
-            for (String folder : folders) {
-                count += countFilesRecursive(folder);
-            }
+            for (String folder : folders) count += countFilesRecursive(folder);
             return count;
         }
 
@@ -197,9 +207,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 String[] assets = getAssets().list(assetFolder);
                 if (assets == null || assets.length == 0) return 1;
                 int total = 0;
-                for (String asset : assets) {
-                    total += countFilesRecursive(assetFolder + "/" + asset);
-                }
+                for (String asset : assets) total += countFilesRecursive(assetFolder + "/" + asset);
                 return total;
             } catch (IOException e) {
                 return 0;
@@ -222,12 +230,9 @@ public final class MainMenuActivity extends PreferenceActivity {
                              FileOutputStream out = new FileOutputStream(outFile)) {
                             byte[] buffer = new byte[1024];
                             int read;
-                            while ((read = in.read(buffer)) != -1) {
-                                out.write(buffer, 0, read);
-                            }
+                            while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
                         }
-                        processedFiles++;
-                        publishProgress((int)((processedFiles / (float) totalFiles) * 100));
+                        processedFiles.incrementAndGet();
                     }
                 }
             }
@@ -250,27 +255,25 @@ public final class MainMenuActivity extends PreferenceActivity {
     }
 
     public void finalStartup() {
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
         Intent retro = new Intent(this, RetroActivityFuture.class);
         retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
-        startRetroActivity(
+        MainMenuActivity.startRetroActivity(
                 retro,
                 null,
                 new File(BASE_DIR, "cores").getAbsolutePath(),
                 new File(BASE_DIR, "retroarch.cfg").getAbsolutePath(),
                 Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
                 BASE_DIR.getAbsolutePath(),
-                getApplicationInfo().sourceDir);
+                getApplicationInfo().sourceDir
+        );
         startActivity(retro);
         finish();
     }
 
     public static void startRetroActivity(Intent retro, String contentPath, String corePath,
                                           String configFilePath, String imePath, String dataDirPath, String dataSourcePath) {
-        if (contentPath != null) {
-            retro.putExtra("ROM", contentPath);
-        }
+        if (contentPath != null) retro.putExtra("ROM", contentPath);
         retro.putExtra("LIBRETRO", corePath);
         retro.putExtra("CONFIGFILE", configFilePath);
         retro.putExtra("IME", imePath);

@@ -3,10 +3,8 @@ package com.retroarch.browser.debug;
 import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.preference.PreferenceManager;
 import android.provider.Settings;
 
 import com.retroarch.browser.mainmenu.MainMenuActivity;
@@ -18,10 +16,11 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.List;
+import java.nio.file.Files;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.List;
 
 public class CoreSideloadActivity extends Activity {
 
@@ -72,7 +71,6 @@ public class CoreSideloadActivity extends Activity {
         };
 
         private final File BASE_DIR = new File(android.os.Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
-        private final File CONFIG_DIR = new File(android.os.Environment.getExternalStorageDirectory(), "Android/data/com.retroarch/files");
 
         CoreSideloadWorkerTask(Activity ctx, String corePath, String contentPath) {
             this.ctx = ctx;
@@ -89,7 +87,6 @@ public class CoreSideloadActivity extends Activity {
             progressDialog.show();
 
             if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
-            if (!CONFIG_DIR.exists()) CONFIG_DIR.mkdirs();
             totalFiles = countAllFiles(ASSET_FOLDERS);
         }
 
@@ -132,7 +129,7 @@ public class CoreSideloadActivity extends Activity {
 
             } catch (IOException ex) { return ex.getMessage(); }
 
-            try { updateRetroarchCfg(); } catch (IOException e) { return e.getMessage(); }
+            try { generateRetroarchCfg(); } catch (IOException e) { return e.getMessage(); }
 
             return null;
         }
@@ -177,23 +174,32 @@ public class CoreSideloadActivity extends Activity {
             }
         }
 
-        private void updateRetroarchCfg() throws IOException {
-            File cfgFile = new File(CONFIG_DIR, "retroarch.cfg");
+        private void generateRetroarchCfg() throws IOException {
+            File cfgFile = new File(BASE_DIR, "retroarch.cfg");
             if (!cfgFile.exists()) cfgFile.createNewFile();
 
-            List<String> lines = java.nio.file.Files.readAllLines(cfgFile.toPath());
-
+            List<String> lines = Files.readAllLines(cfgFile.toPath());
             StringBuilder content = new StringBuilder();
+
             for (String line : lines) {
                 boolean replaced = false;
                 for (String folder : ASSET_FOLDERS) {
                     if (line.startsWith(folder + "_directory") || (folder.equals("system") && line.startsWith("system_directory"))) {
-                        line = folder + "_directory = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"";
+                        line = folder.equals("system") ? 
+                               "system_directory = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"" :
+                               folder + "_directory = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"";
                         replaced = true;
                         break;
                     }
                 }
                 content.append(line).append("\n");
+            }
+
+            if (lines.isEmpty()) {
+                for (String folder : ASSET_FOLDERS) {
+                    content.append(folder.equals("system") ? "system_directory" : folder + "_directory")
+                           .append(" = \"").append(new File(BASE_DIR, folder).getAbsolutePath()).append("\"\n");
+                }
             }
 
             try (FileOutputStream out = new FileOutputStream(cfgFile, false)) {
@@ -210,8 +216,6 @@ public class CoreSideloadActivity extends Activity {
         protected void onPostExecute(String s) {
             progressDialog.dismiss();
 
-            if (s != null) progressDialog.setMessage("Erro: " + s);
-
             // Inicia RetroArch com o core sideloaded
             Intent retro = new Intent(ctx, RetroActivityFuture.class);
             retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
@@ -220,7 +224,7 @@ public class CoreSideloadActivity extends Activity {
                     retro,
                     contentPath,
                     destination.getAbsolutePath(),
-                    new File(CONFIG_DIR, "retroarch.cfg").getAbsolutePath(),
+                    new File(BASE_DIR, "retroarch.cfg").getAbsolutePath(),
                     Settings.Secure.getString(ctx.getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
                     BASE_DIR.getAbsolutePath(),
                     ctx.getApplicationInfo().sourceDir

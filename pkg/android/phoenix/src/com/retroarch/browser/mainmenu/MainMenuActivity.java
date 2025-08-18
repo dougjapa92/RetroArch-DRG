@@ -10,7 +10,6 @@ import android.provider.Settings;
 import android.util.Log;
 
 import com.retroarch.browser.retroactivity.RetroActivityFuture;
-import com.retroarch.browser.preferences.UserPreferences;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -36,22 +35,20 @@ public class MainMenuActivity extends Activity {
         try {
             String[] assets = getAssets().list(assetPath);
             if (assets == null || assets.length == 0) {
-                // Arquivo
                 copyAsset(assetPath, outDir);
                 return true;
             } else {
-                // Pasta
                 if (!outDir.exists()) outDir.mkdirs();
                 for (String asset : assets) {
                     String newAssetPath = assetPath.isEmpty() ? asset : assetPath + "/" + asset;
                     File newOutFile = new File(outDir, asset);
 
-                    // Não sobrescreve pasta de dados do usuário
-                    if (isUserDataFolder(asset)) {
-                        continue;
+                    if (isUserDataFolder(outDir.getAbsolutePath())) {
+                        // Pasta do usuário → não sobrescreve arquivos existentes
+                        copyAssetPreserveUserData(newAssetPath, newOutFile);
+                    } else {
+                        copyAssetFolder(newAssetPath, newOutFile);
                     }
-
-                    copyAssetFolder(newAssetPath, newOutFile);
                 }
                 return true;
             }
@@ -61,20 +58,30 @@ public class MainMenuActivity extends Activity {
         }
     }
 
-    private boolean isUserDataFolder(String folderName) {
-        return folderName.equalsIgnoreCase("save") ||
-               folderName.equalsIgnoreCase("states") ||
-               folderName.equalsIgnoreCase("savestates");
+    private boolean isUserDataFolder(String path) {
+        String lower = path.toLowerCase();
+        return lower.contains("/save") || lower.contains("/states") || lower.contains("/savestates");
+    }
+
+    private void copyAssetPreserveUserData(String assetPath, File outFile) throws IOException {
+        if (outFile.exists()) return; // Não sobrescreve arquivos do usuário
+        if (!outFile.getParentFile().exists()) outFile.getParentFile().mkdirs();
+
+        InputStream in = getAssets().open(assetPath);
+        OutputStream out = new FileOutputStream(outFile);
+        byte[] buffer = new byte[4096];
+        int read;
+        while ((read = in.read(buffer)) != -1) {
+            out.write(buffer, 0, read);
+        }
+        in.close();
+        out.flush();
+        out.close();
     }
 
     private void copyAsset(String assetPath, File outFile) throws IOException {
-        if (outFile.exists() && isUserDataFolder(outFile.getName())) {
-            // Não sobrescreve arquivos do usuário
-            return;
-        }
-        if (!outFile.getParentFile().exists()) {
-            outFile.getParentFile().mkdirs();
-        }
+        if (!outFile.getParentFile().exists()) outFile.getParentFile().mkdirs();
+
         InputStream in = getAssets().open(assetPath);
         OutputStream out = new FileOutputStream(outFile);
         byte[] buffer = new byte[4096];
@@ -99,11 +106,13 @@ public class MainMenuActivity extends Activity {
         Intent retro = new Intent(this, RetroActivityFuture.class);
         retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
+        String configPath = CUSTOM_BASE_DIR + "/retroarch.cfg";
+
         startRetroActivity(
                 retro,
                 null,
                 CUSTOM_BASE_DIR + "/cores/",
-                UserPreferences.getDefaultConfigPath(this),
+                configPath,
                 Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
                 CUSTOM_BASE_DIR,
                 getApplicationInfo().sourceDir);
@@ -112,9 +121,9 @@ public class MainMenuActivity extends Activity {
         finish();
     }
 
-    private void startRetroActivity(Intent retro, String rom, String corePath,
-                                    String configPath, String ime,
-                                    String externalFilesDir, String apkPath) {
+    public void startRetroActivity(Intent retro, String rom, String corePath,
+                                   String configPath, String ime,
+                                   String externalFilesDir, String apkPath) {
         retro.putExtra("ROM", rom);
         retro.putExtra("LIBRETRO", corePath);
         retro.putExtra("CONFIGFILE", configPath);

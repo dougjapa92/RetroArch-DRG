@@ -259,4 +259,4 @@ public final class MainMenuActivity extends PreferenceActivity {
             finalStartup();
         }
     }
-}
+} 

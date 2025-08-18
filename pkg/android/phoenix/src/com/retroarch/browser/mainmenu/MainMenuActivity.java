@@ -18,7 +18,6 @@ import com.retroarch.browser.debug.CoreSideloadActivity;
 import com.retroarch.browser.preferences.util.UserPreferences;
 import com.retroarch.browser.retroactivity.RetroActivityFuture;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -118,8 +117,33 @@ public final class MainMenuActivity extends PreferenceActivity {
     }
 
     private void startCoreSideload() {
-        Intent intent = new Intent(this, CoreSideloadActivity.class);
-        startActivity(intent);
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        boolean alreadyExtracted = prefs.getBoolean("assets_extracted", false);
+
+        if (alreadyExtracted) {
+            finalStartup(); // já extraiu, abre RetroArch normalmente
+        } else {
+            Intent intent = new Intent(this, CoreSideloadActivity.class);
+            startActivity(intent);
+            finish();
+        }
+    }
+
+    private void finalStartup() {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        Intent retro = new Intent(this, RetroActivityFuture.class);
+        retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+        MainMenuActivity.startRetroActivity(
+                retro,
+                null,
+                prefs.getString("libretro_path", getApplicationInfo().dataDir + "/cores/"),
+                UserPreferences.getDefaultConfigPath(this),
+                Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
+                getApplicationInfo().dataDir,
+                getApplicationInfo().sourceDir);
+
+        startActivity(retro);
         finish();
     }
 

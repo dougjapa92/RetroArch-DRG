@@ -36,8 +36,8 @@ public final class MainMenuActivity extends PreferenceActivity {
     private SharedPreferences prefs;
 
     private final String[] ASSET_FOLDERS = {
-            "assets", "autoconfig", "cores", "database", "filters",
-            "info", "overlays", "shaders", "system"
+            "assets", "autoconfig", "cores", "database",
+            "filters", "info", "overlays", "shaders", "system"
     };
 
     private final File BASE_DIR = new File(Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
@@ -128,7 +128,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                         .show();
             }
         } else {
-            super.onRequestPermissionsResult(requestCode, grantResults, permissions);
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
     }
 

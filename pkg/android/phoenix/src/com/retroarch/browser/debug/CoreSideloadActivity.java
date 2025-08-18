@@ -2,16 +2,13 @@ package com.retroarch.browser.debug;
 
 import android.app.Activity;
 import android.app.ProgressDialog;
-import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
-import android.provider.Settings;
+import android.widget.Toast;
 
 import com.retroarch.browser.mainmenu.MainMenuActivity;
-import com.retroarch.browser.retroactivity.RetroActivityFuture;
-import com.retroarch.browser.preferences.util.UserPreferences;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -59,7 +56,7 @@ public class CoreSideloadActivity extends Activity {
             for (String folder : ASSET_FOLDERS) {
                 count += countFilesRecursive(folder);
             }
-            return count;
+            return Math.max(count, 1);
         }
 
         private int countFilesRecursive(String assetFolder) {
@@ -76,6 +73,10 @@ public class CoreSideloadActivity extends Activity {
 
         @Override
         protected String doInBackground(Void... voids) {
+            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(CoreSideloadActivity.this);
+            boolean alreadyExtracted = prefs.getBoolean("assets_extracted", false);
+            if (alreadyExtracted) return null; // não extrai novamente
+
             ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length, 4));
 
             for (String folder : ASSET_FOLDERS) {
@@ -95,6 +96,8 @@ public class CoreSideloadActivity extends Activity {
             }
 
             try { generateRetroarchCfg(); } catch (IOException e) { return e.getMessage(); }
+
+            prefs.edit().putBoolean("assets_extracted", true).apply(); // marca extração completa
             return null;
         }
 
@@ -145,24 +148,11 @@ public class CoreSideloadActivity extends Activity {
         @Override
         protected void onPostExecute(String s) {
             progressDialog.dismiss();
+            if (s != null) Toast.makeText(CoreSideloadActivity.this, "Erro: " + s, Toast.LENGTH_LONG).show();
 
-            Intent retro = new Intent(CoreSideloadActivity.this, RetroActivityFuture.class);
-            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(CoreSideloadActivity.this);
-            retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-
-            MainMenuActivity.startRetroActivity(
-                    retro,
-                    null,
-                    new File(BASE_DIR, "cores").getAbsolutePath(),
-                    new File(BASE_DIR, "retroarch.cfg").getAbsolutePath(),
-                    Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
-                    BASE_DIR.getAbsolutePath(),
-                    getApplicationInfo().sourceDir
-            );
-
-            startActivity(retro);
-            finishAffinity(); // encerra todas as Activities anteriores
-            System.exit(0);   // garante encerramento do app
+            // encerra app após extração
+            finishAffinity();
+            System.exit(0);
         }
     }
 }

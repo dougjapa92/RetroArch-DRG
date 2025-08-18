@@ -25,12 +25,22 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
+/**
+ * MainMenuActivity ajustada para:
+ * - Armazenamento compartilhado em /Android/media/com.retroarch/RetroArch-DRG
+ * - Extração visível ao usuário (UI padrão RetroArch)
+ * - Geração única do retroarch.cfg em /Android/data/com.retroarch/files
+ * - Preservação de saves e states
+ */
 public final class MainMenuActivity extends Activity {
 
     private static final int REQUEST_CODE_PERMISSIONS = 124;
     private static String PACKAGE_NAME;
+
+    // Diretório compartilhado para assets do RetroArch-DRG
     private static final String CUSTOM_BASE_DIR = Environment.getExternalStorageDirectory().getAbsolutePath()
             + "/Android/media/com.retroarch/RetroArch-DRG";
+
     private ProgressDialog progressDialog;
 
     @Override
@@ -43,8 +53,11 @@ public final class MainMenuActivity extends Activity {
         checkPermissionsAndStart();
     }
 
+    /**
+     * Checa permissões em Android < 11 e inicia extração
+     */
     private void checkPermissionsAndStart() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             boolean read = checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
             boolean write = checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
 
@@ -83,6 +96,9 @@ public final class MainMenuActivity extends Activity {
                 .show();
     }
 
+    /**
+     * Inicia extração visível e AsyncTask para copiar assets
+     */
     private void startExtractionTask() {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
         boolean firstRun = prefs.getBoolean("first_run_extraction_done", false);
@@ -153,10 +169,13 @@ public final class MainMenuActivity extends Activity {
         out.close();
     }
 
+    /**
+     * Gera retroarch.cfg no diretório padrão apenas uma vez
+     */
     private void generateRetroArchConfigOnce() {
         File cfg = new File(Environment.getExternalStorageDirectory().getAbsolutePath()
                 + "/Android/data/com.retroarch/files/retroarch.cfg");
-        if (cfg.exists()) return; // Não sobrescreve se já existir
+        if (cfg.exists()) return; // não sobrescreve se já existir
 
         try {
             if (!cfg.getParentFile().exists()) cfg.getParentFile().mkdirs();

@@ -241,24 +241,34 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         private void updateRetroarchCfg() throws IOException {
             File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
-            if (!originalCfg.exists()) originalCfg.createNewFile();
 
-            // Lê o cfg original
+            // Se não existir, copiar o arquivo padrão do assets
+            if (!originalCfg.exists()) {
+                if (!CONFIG_DIR.exists()) CONFIG_DIR.mkdirs();
+                try (InputStream in = getAssets().open("retroarch.cfg");
+                     FileOutputStream out = new FileOutputStream(originalCfg)) {
+                    byte[] buffer = new byte[1024];
+                    int read;
+                    while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
+                }
+            }
+
+            // Lê todas as linhas do arquivo
             List<String> lines = java.nio.file.Files.readAllLines(originalCfg.toPath());
-
             StringBuilder content = new StringBuilder();
+
             for (String line : lines) {
-                boolean replaced = false;
                 for (String folder : ASSET_FOLDERS) {
-                    if (line.startsWith(folder + "_directory")) {
+                    // Substitui todas as linhas *_directory, incluindo system_directory
+                    if (line.startsWith(folder + "_directory") || line.startsWith("system_directory")) {
                         line = folder + "_directory = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"";
-                        replaced = true;
                         break;
                     }
                 }
                 content.append(line).append("\n");
             }
 
+            // Salva o arquivo atualizado
             try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
                 out.write(content.toString().getBytes());
             }

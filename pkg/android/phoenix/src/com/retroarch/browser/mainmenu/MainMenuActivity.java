@@ -3,59 +3,76 @@ package com.retroarch.browser.mainmenu;
 import com.retroarch.browser.preferences.util.UserPreferences;
 import com.retroarch.browser.retroactivity.RetroActivityFuture;
 
+import android.app.AlertDialog;
+import android.app.ProgressDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.media.AudioManager;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.preference.PreferenceActivity;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
+import android.util.Log;
+import android.Manifest;
 
-import java.io.*;
-import java.util.List;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.IOException;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
-import android.content.pm.PackageManager;
-import android.Manifest;
-import android.content.DialogInterface;
-import android.app.AlertDialog;
-import android.app.ProgressDialog;
-import android.util.Log;
 
-/**
- * MainMenuActivity com extração/movimentação multithread e cfg automático.
- */
 public final class MainMenuActivity extends PreferenceActivity {
-    final private int REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS = 124;
-    public static String PACKAGE_NAME;
-    boolean checkPermissions = false;
-    private ProgressDialog progressDialog;
 
-    public void showMessageOKCancel(String message, DialogInterface.OnClickListener onClickListener) {
-        new AlertDialog.Builder(this).setMessage(message)
-                .setPositiveButton("OK", onClickListener).setCancelable(false)
-                .setNegativeButton("Cancel", null).create().show();
+    private final int REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS = 124;
+    public static String PACKAGE_NAME;
+    private boolean checkPermissions = false;
+    private SharedPreferences prefs;
+
+    private final String[] ASSET_FOLDERS = {
+            "assets", "autoconfig", "cores", "database",
+            "filters", "info", "overlays", "shaders", "system"
+    };
+
+    private final File TEMP_DIR = new File(getApplicationInfo().dataDir + "/tmp_assets");
+    private final File BASE_DIR = new File(Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
+    private final File CONFIG_DIR = new File(Environment.getExternalStorageDirectory() + "/Android/data/com.retroarch/files");
+
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+
+        PACKAGE_NAME = getPackageName();
+        setVolumeControlStream(AudioManager.STREAM_MUSIC);
+
+        prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        UserPreferences.updateConfigFile(this);
+
+        checkRuntimePermissions();
     }
 
     private boolean addPermission(List<String> permissionsList, String permission) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
                 permissionsList.add(permission);
-                if (!shouldShowRequestPermissionRationale(permission))
-                    return false;
+                return !shouldShowRequestPermissionRationale(permission);
             }
         }
         return true;
     }
 
     public void checkRuntimePermissions() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            List<String> permissionsNeeded = new ArrayList<String>();
-            final List<String> permissionsList = new ArrayList<String>();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            List<String> permissionsNeeded = new ArrayList<>();
+            final List<String> permissionsList = new ArrayList<>();
 
             if (!addPermission(permissionsList, Manifest.permission.READ_EXTERNAL_STORAGE))
                 permissionsNeeded.add("Read External Storage");
@@ -65,17 +82,18 @@ public final class MainMenuActivity extends PreferenceActivity {
             if (permissionsList.size() > 0) {
                 checkPermissions = true;
                 if (permissionsNeeded.size() > 0) {
-                    String message = "You need to grant access to " + permissionsNeeded.get(0);
+                    String message = "Você precisa conceder acesso a " + permissionsNeeded.get(0);
                     for (int i = 1; i < permissionsNeeded.size(); i++)
-                        message = message + ", " + permissionsNeeded.get(i);
+                        message += ", " + permissionsNeeded.get(i);
 
-                    showMessageOKCancel(message,
-                            (dialog, which) -> {
-                                if (which == AlertDialog.BUTTON_POSITIVE) {
+                    new AlertDialog.Builder(this)
+                            .setMessage(message)
+                            .setCancelable(false)
+                            .setPositiveButton("OK", (dialog, which) ->
                                     requestPermissions(permissionsList.toArray(new String[0]),
-                                            REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
-                                }
-                            });
+                                            REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
+                            .setNegativeButton("Sair", (dialog, which) -> finish())
+                            .show();
                 } else {
                     requestPermissions(permissionsList.toArray(new String[0]),
                             REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
@@ -84,172 +102,145 @@ public final class MainMenuActivity extends PreferenceActivity {
         }
 
         if (!checkPermissions) {
-            new AssetTask().execute();
+            startExtractionOrRetro();
         }
-    }
-
-    public void finalStartup() {
-        final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
-        Intent retro = new Intent(this, RetroActivityFuture.class);
-        retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-
-        startRetroActivity(
-                retro,
-                null,
-                prefs.getString("libretro_path", getApplicationInfo().dataDir + "/cores/"),
-                UserPreferences.getDefaultConfigPath(this),
-                Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
-                getApplicationInfo().dataDir,
-                getApplicationInfo().sourceDir);
-        startActivity(retro);
-        finish();
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        switch (requestCode) {
-            case REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS:
-                for (int i = 0; i < permissions.length; i++) {
-                    if (grantResults[i] == PackageManager.PERMISSION_GRANTED) {
-                        Log.i("MainMenuActivity", "Permission: " + permissions[i] + " was granted.");
-                    } else {
-                        Log.i("MainMenuActivity", "Permission: " + permissions[i] + " was not granted.");
-                        checkPermissions = true;
-                        showMessageOKCancel("Permissions are required to continue.",
-                                (dialog, which) -> checkRuntimePermissions());
-                        return;
-                    }
+        if (requestCode == REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS) {
+            boolean allGranted = true;
+            for (int i = 0; i < permissions.length; i++) {
+                if (grantResults[i] != PackageManager.PERMISSION_GRANTED) {
+                    allGranted = false;
+                    break;
                 }
-                break;
-            default:
-                super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-                break;
+            }
+
+            if (allGranted) {
+                startExtractionOrRetro();
+            } else {
+                new AlertDialog.Builder(this)
+                        .setTitle("Permissões necessárias")
+                        .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
+                        .setCancelable(false)
+                        .setPositiveButton("Conceder", (dialog, which) -> {
+                            requestPermissions(permissions, REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
+                        })
+                        .setNegativeButton("Sair", (dialog, which) -> finish())
+                        .show();
+            }
+        } else {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
-        new AssetTask().execute();
     }
 
-    public static void startRetroActivity(Intent retro, String contentPath, String corePath,
-                                          String configFilePath, String imePath, String dataDirPath, String dataSourcePath) {
-        if (contentPath != null) {
-            retro.putExtra("ROM", contentPath);
+    private void startExtractionOrRetro() {
+        boolean firstRun = prefs.getBoolean("firstRun", true);
+        if (firstRun) {
+            new UnifiedExtractionTask().execute();
+        } else {
+            finalStartup();
         }
-        retro.putExtra("LIBRETRO", corePath);
-        retro.putExtra("CONFIGFILE", configFilePath);
-        retro.putExtra("IME", imePath);
-        retro.putExtra("DATADIR", dataDirPath);
-        retro.putExtra("APK", dataSourcePath);
-        retro.putExtra("SDCARD", Environment.getExternalStorageDirectory().getAbsolutePath());
-        String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
-        retro.putExtra("EXTERNAL", external);
     }
 
-    @Override
-    public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
 
-        PACKAGE_NAME = getPackageName();
-        setVolumeControlStream(AudioManager.STREAM_MUSIC);
-
-        UserPreferences.updateConfigFile(this);
-
-        checkRuntimePermissions();
-    }
-
-    private class AssetTask extends AsyncTask<Void, Integer, Void> {
-        private final File srcDir = new File("/data/data/com.retroarch");
-        private final File destDir = new File(Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
-        private final AtomicInteger progressCount = new AtomicInteger(0);
+        ProgressDialog progressDialog;
+        AtomicInteger processedFiles = new AtomicInteger(0);
+        int totalFiles = 0;
 
         @Override
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
-            progressDialog.setMessage("Preparando arquivos...");
+            progressDialog.setMessage("Configurando RetroArch DRG...\n\nO aplicativo encerrará após configuração inicial.");
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
-            progressDialog.setMax(100);
-            progressDialog.setProgress(0);
             progressDialog.setCancelable(false);
             progressDialog.show();
+
+            if (!TEMP_DIR.exists()) TEMP_DIR.mkdirs();
+            totalFiles = countAllFiles(ASSET_FOLDERS);
         }
 
         @Override
-        protected Void doInBackground(Void... voids) {
-            try {
-                if (!destDir.getParentFile().exists()) destDir.getParentFile().mkdirs();
-                if (!srcDir.exists()) return null;
+        protected Boolean doInBackground(Void... voids) {
+            ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length, 4));
 
-                File[] children = srcDir.listFiles();
-                if (children != null) {
-                    ExecutorService executor = Executors.newFixedThreadPool(Math.min(children.length, 4));
-                    for (File child : children) {
-                        executor.submit(() -> {
-                            try {
-                                moveFile(child, new File(destDir, child.getName()));
-                            } catch (Exception e) {
-                                Log.e("AssetTask", "Erro movendo " + child.getName(), e);
-                            } finally {
-                                int prog = progressCount.incrementAndGet() * 100 / children.length;
-                                publishProgress(prog);
-                            }
-                        });
+            // Extrai os assets para TEMP_DIR
+            for (String folder : ASSET_FOLDERS) {
+                executor.submit(() -> {
+                    try {
+                        copyAssetFolder(folder, new File(TEMP_DIR, folder));
+                    } catch (IOException e) {
+                        e.printStackTrace();
                     }
-                    executor.shutdown();
-                    while (!executor.isTerminated()) Thread.sleep(50);
-                }
-
-                // Atualiza retroarch.cfg com diretórios absolutos
-                File cfgFile = new File(destDir, "retroarch.cfg");
-                if (!cfgFile.exists()) cfgFile.createNewFile();
-                try (FileOutputStream out = new FileOutputStream(cfgFile, false)) {
-                    String[] folders = {"assets", "autoconfig", "cores", "database", "filters", "info", "overlays", "shaders", "system"};
-                    StringBuilder content = new StringBuilder("# RetroArch DRG cfg\n");
-                    for (String folder : folders) {
-                        File f = new File(destDir, folder);
-                        if (f.exists()) {
-                            content.append(folder).append("_directory = \"").append(f.getAbsolutePath()).append("\"\n");
-                        }
-                    }
-                    out.write(content.toString().getBytes());
-                }
-
-            } catch (Exception e) {
-                Log.e("AssetTask", "Erro geral", e);
+                });
             }
-            return null;
-        }
 
-        private void moveFile(File src, File dst) throws IOException {
-            if (src.isDirectory()) {
-                if (!dst.exists()) dst.mkdirs();
-                File[] files = src.listFiles();
-                if (files != null) {
-                    for (File f : files) moveFile(f, new File(dst, f.getName()));
-                }
-                src.delete();
-            } else {
-                if (!src.renameTo(dst)) {
-                    try (InputStream in = new FileInputStream(src);
-                         OutputStream out = new FileOutputStream(dst)) {
-                        byte[] buf = new byte[8192];
-                        int len;
-                        while ((len = in.read(buf)) > 0) out.write(buf, 0, len);
-                    }
-                    src.delete();
+            executor.shutdown();
+            while (!executor.isTerminated()) {
+                publishProgress((processedFiles.get() * 100) / totalFiles);
+                try { Thread.sleep(100); } catch (InterruptedException ignored) {}
+            }
+
+            // Mover para BASE_DIR
+            for (String folder : ASSET_FOLDERS) {
+                File src = new File(TEMP_DIR, folder);
+                File dst = new File(BASE_DIR, folder);
+                if (src.exists()) {
+                    if (!dst.exists()) dst.mkdirs();
+                    moveDirectory(src, dst);
                 }
             }
+
+            // Atualiza retroarch.cfg
+            try { updateRetroarchCfg(); } catch (IOException e) { return false; }
+
+            return true;
         }
 
         @Override
         protected void onProgressUpdate(Integer... values) {
-            if (values.length > 0) {
-                progressDialog.setProgress(values[0]);
-                progressDialog.setMessage("Extraindo... " + values[0] + "%");
-            }
+            progressDialog.setProgress(values[0]);
         }
 
         @Override
-        protected void onPostExecute(Void aVoid) {
+        protected void onPostExecute(Boolean result) {
             progressDialog.dismiss();
-            finalStartup();
+            prefs.edit().putBoolean("firstRun", false).apply();
+            finish();
         }
-    }
-} 
+
+        private int countAllFiles(String[] folders) {
+            int count = 0;
+            for (String folder : folders) count += countFilesRecursive(folder);
+            return count;
+        }
+
+        private int countFilesRecursive(String assetFolder) {
+            try {
+                String[] assets = getAssets().list(assetFolder);
+                if (assets == null || assets.length == 0) return 1;
+                int total = 0;
+                for (String asset : assets) total += countFilesRecursive(assetFolder + "/" + asset);
+                return total;
+            } catch (IOException e) { return 0; }
+        }
+
+        private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
+            String[] assets = getAssets().list(assetFolder);
+            if (!targetFolder.exists()) targetFolder.mkdirs();
+
+            if (assets != null && assets.length > 0) {
+                for (String asset : assets) {
+                    String fullPath = assetFolder + "/" + asset;
+                    File outFile = new File(targetFolder, asset);
+
+                    if (getAssets().list(fullPath).length > 0) {
+                        copyAssetFolder(fullPath, outFile);
+                    } else {
+                        try (InputStream in = getAssets().open(fullPath);
+                             FileOutputStream out = new FileOutputStream(outFile)) {
+                            byte[] buffer = new byte[1024];
+                            int read;
+                            while ((read 

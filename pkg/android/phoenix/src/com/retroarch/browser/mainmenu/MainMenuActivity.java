@@ -1,6 +1,8 @@
 package com.retroarch.browser.mainmenu;
 
+import com.retroarch.browser.preferences.util.UserPreferences;
 import com.retroarch.browser.retroactivity.RetroActivityFuture;
+
 import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.Intent;
@@ -29,13 +31,13 @@ public final class MainMenuActivity extends PreferenceActivity {
     private static final String MEDIA_DIR = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/media/com.retroarch";
     public static String PACKAGE_NAME;
     boolean checkPermissions = false;
+
     private ProgressDialog progressDialog;
-    private int totalFiles = 0;
-    private int extractedFiles = 0;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
         PACKAGE_NAME = getPackageName();
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
 
@@ -90,7 +92,9 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
         }
 
-        if (!checkPermissions) startExtractionIfNeeded();
+        if (!checkPermissions) {
+            startExtraction();
+        }
     }
 
     @Override
@@ -115,22 +119,11 @@ public final class MainMenuActivity extends PreferenceActivity {
                 super.onRequestPermissionsResult(requestCode, permissions, grantResults);
                 break;
         }
-        startExtractionIfNeeded();
-    }
-
-    private void startExtractionIfNeeded() {
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
-        boolean extracted = prefs.getBoolean("extraction_done", false);
-        if (!extracted) {
-            startExtraction();
-        } else {
-            launchRetroActivity();
-        }
+        startExtraction();
     }
 
     private void startExtraction() {
         new AsyncTask<Void, Integer, Void>() {
-
             @Override
             protected void onPreExecute() {
                 progressDialog = new ProgressDialog(MainMenuActivity.this);
@@ -138,32 +131,13 @@ public final class MainMenuActivity extends PreferenceActivity {
                 progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
                 progressDialog.setCancelable(false);
                 progressDialog.show();
-
-                totalFiles = countAssets("");
-                extractedFiles = 0;
-                progressDialog.setMax(100);
             }
 
             @Override
             protected Void doInBackground(Void... voids) {
                 extractAssets("");
+                publishProgress(100);
                 return null;
-            }
-
-            private int countAssets(String path) {
-                try {
-                    String[] assets = getAssets().list(path);
-                    if (assets == null || assets.length == 0) return 1;
-                    int count = 0;
-                    for (String asset : assets) {
-                        String newPath = path.isEmpty() ? asset : path + "/" + asset;
-                        count += countAssets(newPath);
-                    }
-                    return count;
-                } catch (IOException e) {
-                    Log.e("MainMenuActivity", "Erro ao contar assets: " + path, e);
-                    return 0;
-                }
             }
 
             private void extractAssets(String path) {
@@ -171,8 +145,6 @@ public final class MainMenuActivity extends PreferenceActivity {
                     String[] assets = getAssets().list(path);
                     if (assets == null || assets.length == 0) {
                         copyAsset(path, new File(MEDIA_DIR, path));
-                        extractedFiles++;
-                        publishProgress(extractedFiles);
                         return;
                     }
                     for (String asset : assets) {
@@ -198,18 +170,13 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             @Override
             protected void onProgressUpdate(Integer... values) {
-                int progressPercent = (int)((values[0] * 100.0) / totalFiles);
-                progressDialog.setProgress(progressPercent);
-                progressDialog.setMessage("Configurando RetroArch DRG...\n\nO aplicativo encerrará após configuração inicial.\n" +
-                        "Progresso: " + progressPercent + "% (" + values[0] + "/" + totalFiles + ")");
+                progressDialog.setProgress(values[0]);
             }
 
             @Override
             protected void onPostExecute(Void aVoid) {
                 progressDialog.dismiss();
                 updateRetroarchCfg();
-                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(MainMenuActivity.this);
-                prefs.edit().putBoolean("extraction_done", true).apply();
                 launchRetroActivity();
             }
         }.execute();
@@ -217,8 +184,6 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     private void updateRetroarchCfg() {
         File cfgFile = new File(getFilesDir(), "retroarch.cfg");
-        if (cfgFile.exists()) return; // não sobrescreve se já existir
-
         try {
             StringBuilder sb = new StringBuilder();
             sb.append("system_directory = \"" + MEDIA_DIR + "/system\"\n");
@@ -253,5 +218,25 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         startActivity(retro);
         finish();
+    }
+
+    // MÉTODO ESTÁTICO PARA COMPATIBILIDADE COM CoreSideloadActivity
+    public static void startRetroActivity(
+            Intent retro,
+            String contentPath,
+            String corePath,
+            String configFilePath,
+            String imePath,
+            String dataDirPath,
+            String dataSourcePath
+    ) {
+        if (contentPath != null) retro.putExtra("ROM", contentPath);
+        retro.putExtra("LIBRETRO", corePath);
+        retro.putExtra("CONFIGFILE", configFilePath);
+        retro.putExtra("IME", imePath);
+        retro.putExtra("DATADIR", dataDirPath);
+        retro.putExtra("APK", dataSourcePath);
+        retro.putExtra("SDCARD", Environment.getExternalStorageDirectory().getAbsolutePath());
+        retro.putExtra("EXTERNAL", MEDIA_DIR);
     }
 } 

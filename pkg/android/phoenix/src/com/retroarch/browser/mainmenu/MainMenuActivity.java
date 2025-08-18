@@ -6,12 +6,14 @@ import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.media.AudioManager;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.util.Log;
 
@@ -26,8 +28,9 @@ import java.io.OutputStream;
 public final class MainMenuActivity extends Activity {
 
     private static final int REQUEST_CODE_PERMISSIONS = 124;
-    private static final String CUSTOM_BASE_DIR = Environment.getExternalStorageDirectory().getAbsolutePath() + "/RetroArch-DRG";
-    public static String PACKAGE_NAME;
+    private static String PACKAGE_NAME;
+    private static final String CUSTOM_BASE_DIR = Environment.getExternalStorageDirectory().getAbsolutePath()
+            + "/Android/media/com.retroarch/RetroArch-DRG";
     private ProgressDialog progressDialog;
 
     @Override
@@ -81,57 +84,57 @@ public final class MainMenuActivity extends Activity {
     }
 
     private void startExtractionTask() {
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        boolean firstRun = prefs.getBoolean("first_run_extraction_done", false);
+
+        if (firstRun) {
+            startRetroActivityFuture();
+            return;
+        }
+
         progressDialog = new ProgressDialog(this);
-        progressDialog.setMessage("Extraindo assets para RetroArch-DRG...");
+        progressDialog.setTitle("Extraindo RetroArch-DRG");
+        progressDialog.setMessage("Extraindo base.apk");
+        progressDialog.setProgressStyle(ProgressDialog.STYLE_SPINNER);
         progressDialog.setCancelable(false);
         progressDialog.show();
 
-        new AsyncTask<Void, String, Void>() {
-
+        new AsyncTask<Void, Void, Void>() {
             @Override
             protected Void doInBackground(Void... voids) {
-                extractAllAssets();
-                publishProgress("Gerando retroarch.cfg...");
-                generateRetroArchConfig();
+                try {
+                    String[] folders = new String[]{"assets", "autoconfig", "cores", "database", "filters", "info", "overlays", "shaders", "system"};
+                    for (String folder : folders) {
+                        copyAssetFolder(folder, new File(CUSTOM_BASE_DIR, folder));
+                    }
+                    generateRetroArchConfigOnce();
+                } catch (Exception e) {
+                    Log.e("MainMenuActivity", "Erro na extração", e);
+                }
                 return null;
-            }
-
-            @Override
-            protected void onProgressUpdate(String... values) {
-                if (progressDialog != null) progressDialog.setMessage(values[0]);
             }
 
             @Override
             protected void onPostExecute(Void aVoid) {
                 if (progressDialog != null && progressDialog.isShowing()) progressDialog.dismiss();
+                PreferenceManager.getDefaultSharedPreferences(MainMenuActivity.this)
+                        .edit()
+                        .putBoolean("first_run_extraction_done", true)
+                        .apply();
                 startRetroActivityFuture();
             }
         }.execute();
     }
 
-    private void extractAllAssets() {
-        try {
-            String[] assets = getAssets().list("");
-            if (assets != null) {
-                for (String asset : assets) {
-                    copyAssetOrFolder(asset, new File(CUSTOM_BASE_DIR, asset));
-                    publishProgress("Extraindo: " + asset);
-                }
-            }
-        } catch (IOException e) {
-            Log.e("MainMenuActivity", "Erro ao listar assets", e);
-        }
-    }
-
-    private void copyAssetOrFolder(String assetPath, File outFile) throws IOException {
+    private void copyAssetFolder(String assetPath, File outDir) throws IOException {
         String[] list = getAssets().list(assetPath);
         if (list == null || list.length == 0) {
-            copyAssetFile(assetPath, outFile);
+            copyAssetFile(assetPath, outDir);
         } else {
-            if (!outFile.exists()) outFile.mkdirs();
+            if (!outDir.exists()) outDir.mkdirs();
             for (String child : list) {
-                String childAssetPath = assetPath + "/" + child;
-                copyAssetOrFolder(childAssetPath, new File(outFile, child));
+                String childPath = assetPath + "/" + child;
+                copyAssetFolder(childPath, new File(outDir, child));
             }
         }
     }
@@ -150,15 +153,23 @@ public final class MainMenuActivity extends Activity {
         out.close();
     }
 
-    private void generateRetroArchConfig() {
-        File cfg = new File(CUSTOM_BASE_DIR + "/retroarch.cfg");
+    private void generateRetroArchConfigOnce() {
+        File cfg = new File(Environment.getExternalStorageDirectory().getAbsolutePath()
+                + "/Android/data/com.retroarch/files/retroarch.cfg");
+        if (cfg.exists()) return; // Não sobrescreve se já existir
+
         try {
             if (!cfg.getParentFile().exists()) cfg.getParentFile().mkdirs();
             FileOutputStream out = new FileOutputStream(cfg, false);
             String content = ""
                     + "system_directory = \"" + CUSTOM_BASE_DIR + "/system\"\n"
                     + "core_directory = \"" + CUSTOM_BASE_DIR + "/cores\"\n"
-                    + "assets_directory = \"" + CUSTOM_BASE_DIR + "/assets\"\n";
+                    + "assets_directory = \"" + CUSTOM_BASE_DIR + "/assets\"\n"
+                    + "database_directory = \"" + CUSTOM_BASE_DIR + "/database\"\n"
+                    + "filters_directory = \"" + CUSTOM_BASE_DIR + "/filters\"\n"
+                    + "info_directory = \"" + CUSTOM_BASE_DIR + "/info\"\n"
+                    + "overlays_directory = \"" + CUSTOM_BASE_DIR + "/overlays\"\n"
+                    + "shaders_directory = \"" + CUSTOM_BASE_DIR + "/shaders\"\n";
             out.write(content.getBytes());
             out.flush();
             out.close();
@@ -174,7 +185,8 @@ public final class MainMenuActivity extends Activity {
         startRetroActivity(retro,
                 null,
                 CUSTOM_BASE_DIR + "/cores/",
-                CUSTOM_BASE_DIR + "/retroarch.cfg",
+                Environment.getExternalStorageDirectory().getAbsolutePath()
+                        + "/Android/data/com.retroarch/files/retroarch.cfg",
                 Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
                 CUSTOM_BASE_DIR,
                 getApplicationInfo().sourceDir);
@@ -195,4 +207,4 @@ public final class MainMenuActivity extends Activity {
         String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
         retro.putExtra("EXTERNAL", external);
     }
-}
+} 

@@ -13,6 +13,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.preference.PreferenceActivity;
 import android.preference.PreferenceManager;
+import android.provider.Settings;
 import android.util.Log;
 
 import java.io.File;
@@ -25,6 +26,8 @@ import java.util.concurrent.Executors;
 public class MainMenuActivity extends PreferenceActivity {
 
     private static final String TAG = "MainMenuActivity";
+    public static String PACKAGE_NAME;
+
     private ProgressDialog progressDialog;
     private SharedPreferences prefs;
 
@@ -36,6 +39,7 @@ public class MainMenuActivity extends PreferenceActivity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        PACKAGE_NAME = getPackageName();
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
 
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
@@ -44,7 +48,7 @@ public class MainMenuActivity extends PreferenceActivity {
         if (firstRun) {
             new UnifiedExtractionTask().execute();
         } else {
-            launchRetroArchWithClosing();
+            launchRetroArch();
         }
     }
 
@@ -105,18 +109,19 @@ public class MainMenuActivity extends PreferenceActivity {
         @Override
         protected void onPostExecute(Void aVoid) {
             progressDialog.dismiss();
+
             prefs.edit().putBoolean("firstRun", false).apply();
 
-            // Após extração e retroarch.cfg, inicia RetroArch e o encerramento
-            launchRetroArchWithClosing();
+            launchRetroArch();
         }
     }
 
     private void copyAssetFolder(String assetFolder, File destDir) {
         try {
             String[] files = getAssets().list(assetFolder);
-            if (!destDir.exists()) destDir.mkdirs();
             if (files == null || files.length == 0) return;
+
+            if (!destDir.exists()) destDir.mkdirs();
 
             for (String filename : files) {
                 try (InputStream in = getAssets().open(assetFolder + "/" + filename);
@@ -153,25 +158,36 @@ public class MainMenuActivity extends PreferenceActivity {
         }
     }
 
-    private void launchRetroArchWithClosing() {
-        // Inicia RetroArch normalmente
+    private void launchRetroArch() {
         Intent intent = new Intent(this, RetroActivityFuture.class);
         startActivity(intent);
 
-        // ProgressDialog "Encerrando..." após 5s
-        new Handler().postDelayed(() -> {
-            ProgressDialog closingDialog = new ProgressDialog(MainMenuActivity.this);
-            closingDialog.setMessage("Encerrando...");
-            closingDialog.setProgressStyle(ProgressDialog.STYLE_SPINNER);
-            closingDialog.setIndeterminate(true);
-            closingDialog.setCancelable(false);
-            closingDialog.show();
+        // ProgressDialog "Encerrando..." por 5 segundos
+        ProgressDialog closingDialog = new ProgressDialog(MainMenuActivity.this);
+        closingDialog.setMessage("Encerrando...");
+        closingDialog.setProgressStyle(ProgressDialog.STYLE_SPINNER);
+        closingDialog.setIndeterminate(true);
+        closingDialog.setCancelable(false);
+        closingDialog.show();
 
-            new Handler().postDelayed(() -> {
-                closingDialog.dismiss();
-                finishAffinity(); // Fecha totalmente o app
-                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
-            }, 5000); // 5 segundos
-        }, 5000); // 5 segundos de delay para garantir que RetroArch iniciou
+        new Handler().postDelayed(() -> {
+            closingDialog.dismiss();
+            finishAffinity();
+            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+        }, 5000);
     }
-} 
+
+    // Método estático restaurado para compatibilidade com CoreSideloadActivity
+    public static void startRetroActivity(Intent retro, String contentPath, String corePath,
+                                          String configFilePath, String imePath, String dataDirPath, String dataSourcePath) {
+        if (contentPath != null) retro.putExtra("ROM", contentPath);
+        retro.putExtra("LIBRETRO", corePath);
+        retro.putExtra("CONFIGFILE", configFilePath);
+        retro.putExtra("IME", imePath);
+        retro.putExtra("DATADIR", dataDirPath);
+        retro.putExtra("APK", dataSourcePath);
+        retro.putExtra("SDCARD", Environment.getExternalStorageDirectory().getAbsolutePath());
+        String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
+        retro.putExtra("EXTERNAL", external);
+    }
+}

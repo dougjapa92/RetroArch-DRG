@@ -2,94 +2,104 @@ package com.retroarch.browser.debug;
 
 import android.app.Activity;
 import android.app.ProgressDialog;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
-import android.widget.Toast;
+import android.provider.Settings;
+import android.util.Log;
 
+import com.retroarch.browser.mainmenu.MainMenuActivity;
 import com.retroarch.browser.preferences.util.UserPreferences;
+import com.retroarch.browser.retroactivity.RetroActivityFuture;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class CoreSideloadActivity extends Activity {
 
+    private static final String EXTRA_CORE = "LIBRETRO";
+    private static final String EXTRA_CONTENT = "ROM";
+
     private ProgressDialog progressDialog;
+    private CoreSideloadWorkerTask workerThread;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        new AssetExtractionTask().execute();
+
+        if (!getIntent().hasExtra(EXTRA_CORE)) {
+            finish();
+            return;
+        }
+
+        workerThread = new CoreSideloadWorkerTask(
+                this,
+                getIntent().getStringExtra(EXTRA_CORE),
+                getIntent().getStringExtra(EXTRA_CONTENT)
+        );
+        workerThread.execute();
     }
 
-    private class AssetExtractionTask extends AsyncTask<Void, Integer, String> {
+    @Override
+    protected void onDestroy() {
+        if (workerThread != null) {
+            workerThread.cancel(true);
+            workerThread = null;
+        }
+        super.onDestroy();
+    }
+
+    private class CoreSideloadWorkerTask extends AsyncTask<Void, Integer, String> {
+
+        private final Activity ctx;
+        private final String corePath;
+        private final String contentPath;
+        private File destination;
+        private AtomicInteger processedFiles = new AtomicInteger(0);
+        private int totalFiles = 0;
 
         private final String[] ASSET_FOLDERS = {
                 "assets", "autoconfig", "cores", "database",
                 "filters", "info", "overlays", "shaders", "system"
         };
-        private final File MEDIA_DIR = new File(android.os.Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
-        private final File CFG_DIR = new File(android.os.Environment.getExternalStorageDirectory(),
-                "Android/data/com.retroarch/files");
-        private AtomicInteger processedFiles = new AtomicInteger(0);
-        private int totalFiles = 0;
+
+        private final File BASE_DIR = new File(android.os.Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
+
+        CoreSideloadWorkerTask(Activity ctx, String corePath, String contentPath) {
+            this.ctx = ctx;
+            this.corePath = corePath;
+            this.contentPath = contentPath;
+        }
 
         @Override
         protected void onPreExecute() {
-            progressDialog = new ProgressDialog(CoreSideloadActivity.this);
+            progressDialog = new ProgressDialog(ctx);
             progressDialog.setMessage("Configurando RetroArch DRG...\n\nO aplicativo encerrará após configuração inicial.");
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);
             progressDialog.show();
 
-            if (!MEDIA_DIR.exists()) MEDIA_DIR.mkdirs();
-            if (!CFG_DIR.exists()) CFG_DIR.mkdirs();
-            totalFiles = countAllFiles();
-        }
-
-        private int countAllFiles() {
-            int count = 0;
-            for (String folder : ASSET_FOLDERS) {
-                count += countFilesRecursive(folder);
-            }
-            return Math.max(count, 1);
-        }
-
-        private int countFilesRecursive(String assetFolder) {
-            try {
-                String[] assets = getAssets().list(assetFolder);
-                if (assets == null || assets.length == 0) return 1;
-                int total = 0;
-                for (String asset : assets) total += countFilesRecursive(assetFolder + "/" + asset);
-                return total;
-            } catch (IOException e) {
-                return 0;
-            }
+            if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
+            totalFiles = countAllFiles(ASSET_FOLDERS);
         }
 
         @Override
         protected String doInBackground(Void... voids) {
-            SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(CoreSideloadActivity.this);
-            boolean alreadyExtracted = prefs.getBoolean("assets_extracted", false);
-
-            if (alreadyExtracted && verifyAllFilesExist()) return null;
-
             ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length, 4));
 
             for (String folder : ASSET_FOLDERS) {
                 executor.submit(() -> {
-                    try {
-                        copyAssetFolder(folder, new File(MEDIA_DIR, folder));
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
+                    try { copyAssetFolder(folder, new File(BASE_DIR, folder)); }
+                    catch (IOException e) { e.printStackTrace(); }
                 });
             }
 
@@ -99,27 +109,51 @@ public class CoreSideloadActivity extends Activity {
                 try { Thread.sleep(100); } catch (InterruptedException ignored) {}
             }
 
+            // Copy core
+            File coreFile = new File(corePath);
+            File coresDir = new File(BASE_DIR, "cores");
+            if (!coresDir.exists()) coresDir.mkdirs();
+            destination = new File(coresDir, coreFile.getName());
+
+            try (InputStream in = new FileInputStream(coreFile);
+                 OutputStream out = new FileOutputStream(destination)) {
+
+                byte[] buf = new byte[1024];
+                int length;
+                long copied = 0;
+                long max = coreFile.length();
+
+                while ((length = in.read(buf)) != -1) {
+                    out.write(buf, 0, length);
+                    copied += length;
+                    publishProgress((int)((processedFiles.get() * 100 + copied * 100 / max) / totalFiles));
+                }
+
+            } catch (IOException ex) { return ex.getMessage(); }
+
             try { generateRetroarchCfg(); } catch (IOException e) { return e.getMessage(); }
 
-            prefs.edit().putBoolean("assets_extracted", true).apply();
             return null;
         }
 
-        private boolean verifyAllFilesExist() {
-            boolean allExist = true;
-            for (String folder : ASSET_FOLDERS) {
-                File dir = new File(MEDIA_DIR, folder);
-                if (!dir.exists() || dir.listFiles() == null || dir.listFiles().length == 0) {
-                    allExist = false;
-                    break;
-                }
-            }
-            File cfg = new File(CFG_DIR, "retroarch.cfg");
-            return allExist && cfg.exists();
+        private int countAllFiles(String[] folders) {
+            int count = 0;
+            for (String folder : folders) count += countFilesRecursive(folder);
+            return count;
+        }
+
+        private int countFilesRecursive(String assetFolder) {
+            try {
+                String[] assets = ctx.getAssets().list(assetFolder);
+                if (assets == null || assets.length == 0) return 1;
+                int total = 0;
+                for (String asset : assets) total += countFilesRecursive(assetFolder + "/" + asset);
+                return total;
+            } catch (IOException e) { return 0; }
         }
 
         private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
-            String[] assets = getAssets().list(assetFolder);
+            String[] assets = ctx.getAssets().list(assetFolder);
             if (!targetFolder.exists()) targetFolder.mkdirs();
 
             if (assets != null && assets.length > 0) {
@@ -127,10 +161,10 @@ public class CoreSideloadActivity extends Activity {
                     String fullPath = assetFolder + "/" + asset;
                     File outFile = new File(targetFolder, asset);
 
-                    if (getAssets().list(fullPath).length > 0) {
+                    if (ctx.getAssets().list(fullPath).length > 0) {
                         copyAssetFolder(fullPath, outFile);
                     } else {
-                        try (InputStream in = getAssets().open(fullPath);
+                        try (InputStream in = ctx.getAssets().open(fullPath);
                              FileOutputStream out = new FileOutputStream(outFile)) {
                             byte[] buffer = new byte[1024];
                             int read;
@@ -143,14 +177,14 @@ public class CoreSideloadActivity extends Activity {
         }
 
         private void generateRetroarchCfg() throws IOException {
-            File cfgFile = new File(CFG_DIR, "retroarch.cfg");
+            File cfgFile = new File(BASE_DIR, "retroarch.cfg");
             if (!cfgFile.exists()) cfgFile.createNewFile();
 
             try (FileOutputStream out = new FileOutputStream(cfgFile, false)) {
                 StringBuilder content = new StringBuilder("# RetroArch DRG cfg\n");
                 for (String folder : ASSET_FOLDERS) {
                     content.append(folder).append("_directory = \"")
-                            .append(new File(MEDIA_DIR, folder).getAbsolutePath())
+                            .append(new File(BASE_DIR, folder).getAbsolutePath())
                             .append("\"\n");
                 }
                 out.write(content.toString().getBytes());
@@ -165,10 +199,26 @@ public class CoreSideloadActivity extends Activity {
         @Override
         protected void onPostExecute(String s) {
             progressDialog.dismiss();
-            if (s != null) Toast.makeText(CoreSideloadActivity.this, "Erro: " + s, Toast.LENGTH_LONG).show();
 
-            finishAffinity();
-            System.exit(0);
+            if (s != null) progressDialog.setMessage("Erro: " + s);
+
+            // Inicia RetroArch com o core sideloaded
+            Intent retro = new Intent(ctx, RetroActivityFuture.class);
+            final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(ctx);
+            retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+            MainMenuActivity.startRetroActivity(
+                    retro,
+                    contentPath,
+                    destination.getAbsolutePath(),
+                    new File(BASE_DIR, "retroarch.cfg").getAbsolutePath(),
+                    Settings.Secure.getString(ctx.getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
+                    BASE_DIR.getAbsolutePath(),
+                    ctx.getApplicationInfo().sourceDir
+            );
+
+            ctx.startActivity(retro);
+            ctx.finish();
         }
     }
 }

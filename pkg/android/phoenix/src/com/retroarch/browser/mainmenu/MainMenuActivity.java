@@ -18,10 +18,11 @@ import android.content.pm.PackageManager;
 import android.Manifest;
 
 import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -238,34 +239,16 @@ public final class MainMenuActivity extends PreferenceActivity {
         }
 
         private void generateRetroarchCfg() throws IOException {
-            File cfgFile = new File(BASE_DIR, "retroarch.cfg");
+            File cfgFile = new File(CONFIG_DIR, "retroarch.cfg");
             if (!cfgFile.exists()) cfgFile.createNewFile();
 
-            List<String> lines = Files.readAllLines(cfgFile.toPath());
-            StringBuilder content = new StringBuilder();
-
-            for (String line : lines) {
-                boolean replaced = false;
-                for (String folder : ASSET_FOLDERS) {
-                    if (line.startsWith(folder + "_directory") || (folder.equals("system") && line.startsWith("system_directory"))) {
-                        line = folder.equals("system") ? 
-                               "system_directory = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"" :
-                               folder + "_directory = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"";
-                        replaced = true;
-                        break;
-                    }
-                }
-                content.append(line).append("\n");
-            }
-
-            if (lines.isEmpty()) {
-                for (String folder : ASSET_FOLDERS) {
-                    content.append(folder.equals("system") ? "system_directory" : folder + "_directory")
-                           .append(" = \"").append(new File(BASE_DIR, folder).getAbsolutePath()).append("\"\n");
-                }
-            }
-
             try (FileOutputStream out = new FileOutputStream(cfgFile, false)) {
+                StringBuilder content = new StringBuilder("# RetroArch DRG cfg\n");
+                for (String folder : ASSET_FOLDERS) {
+                    content.append(folder).append("_directory = \"")
+                            .append(new File(BASE_DIR, folder).getAbsolutePath())
+                            .append("\"\n");
+                }
                 out.write(content.toString().getBytes());
             }
         }
@@ -279,7 +262,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 retro,
                 null,
                 new File(BASE_DIR, "cores").getAbsolutePath(),
-                new File(BASE_DIR, "retroarch.cfg").getAbsolutePath(),
+                new File(CONFIG_DIR, "retroarch.cfg").getAbsolutePath(),
                 Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
                 BASE_DIR.getAbsolutePath(),
                 getApplicationInfo().sourceDir

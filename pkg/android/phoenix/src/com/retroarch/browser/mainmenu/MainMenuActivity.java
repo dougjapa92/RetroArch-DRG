@@ -193,8 +193,6 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected void onPostExecute(Boolean result) {
             progressDialog.dismiss();
             prefs.edit().putBoolean("firstRun", false).apply();
-
-            // Chama o RetroActivityFuture e agenda o fechamento do app
             finalStartup();
         }
 
@@ -281,8 +279,11 @@ public final class MainMenuActivity extends PreferenceActivity {
         );
         startActivity(retro);
 
-        // Fecha todo o aplicativo 3 segundos depois
-        new android.os.Handler().postDelayed(() -> finishAffinity(), 3000);
+        // Encerra completamente o app 3 segundos depois
+        new android.os.Handler().postDelayed(() -> {
+            finishAffinity();  // finaliza todas as Activities
+            System.exit(0);    // finaliza o processo do app
+        }, 3000);
     }
 
     public static void startRetroActivity(Intent retro, String contentPath, String corePath,

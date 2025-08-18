@@ -1,11 +1,15 @@
 package com.retroarch.browser.mainmenu;
 
+import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.media.AudioManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
-import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.util.Log;
 
@@ -17,128 +21,78 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
-public class MainMenuActivity extends Activity {
-    private static final String CUSTOM_BASE_DIR =
-            Environment.getExternalStorageDirectory().getAbsolutePath() + "/RetroArch-DRG";
+public final class MainMenuActivity extends Activity {
+
+    private static final int REQUEST_CODE_PERMISSIONS = 124;
+    private static final String CUSTOM_BASE_DIR = Environment.getExternalStorageDirectory().getAbsolutePath() + "/RetroArch-DRG";
+    public static String PACKAGE_NAME;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        finalStartup();
+
+        PACKAGE_NAME = getPackageName();
+
+        setVolumeControlStream(AudioManager.STREAM_MUSIC);
+
+        checkPermissionsAndStart();
     }
 
-    private void extractAllAssets() {
-        copyAssetFolder("", new File(CUSTOM_BASE_DIR));
+    private void checkPermissionsAndStart() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            boolean read = checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+            boolean write = checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED;
+
+            if (!read || !write) {
+                requestPermissions(new String[]{
+                        Manifest.permission.READ_EXTERNAL_STORAGE,
+                        Manifest.permission.WRITE_EXTERNAL_STORAGE
+                }, REQUEST_CODE_PERMISSIONS);
+                return;
+            }
+        }
+        setupRetroArch();
     }
 
-    private boolean copyAssetFolder(String assetPath, File outDir) {
-        try {
-            String[] assets = getAssets().list(assetPath);
-            if (assets == null || assets.length == 0) {
-                copyAsset(assetPath, outDir);
-                return true;
-            } else {
-                if (!outDir.exists()) outDir.mkdirs();
-                for (String asset : assets) {
-                    String newAssetPath = assetPath.isEmpty() ? asset : assetPath + "/" + asset;
-                    File newOutFile = new File(outDir, asset);
-
-                    if (isUserDataFolder(outDir.getAbsolutePath())) {
-                        copyAssetPreserveUserData(newAssetPath, newOutFile);
-                    } else {
-                        copyAssetFolder(newAssetPath, newOutFile);
-                    }
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        if (requestCode == REQUEST_CODE_PERMISSIONS) {
+            for (int i = 0; i < permissions.length; i++) {
+                if (grantResults[i] != PackageManager.PERMISSION_GRANTED) {
+                    showMessageOKCancel("Permissão necessária para continuar: " + permissions[i],
+                            (dialog, which) -> checkPermissionsAndStart());
+                    return;
                 }
-                return true;
             }
-        } catch (IOException e) {
-            Log.e("MainMenuActivity", "Erro ao copiar assets: " + assetPath, e);
-            return false;
         }
+        setupRetroArch();
     }
 
-    private boolean isUserDataFolder(String path) {
-        String lower = path.toLowerCase();
-        return lower.contains("/save") || lower.contains("/states") || lower.contains("/savestates");
+    private void showMessageOKCancel(String message, DialogInterface.OnClickListener onClickListener) {
+        new AlertDialog.Builder(this)
+                .setMessage(message)
+                .setPositiveButton("OK", onClickListener)
+                .setCancelable(false)
+                .setNegativeButton("Cancel", null)
+                .create()
+                .show();
     }
 
-    private void copyAssetPreserveUserData(String assetPath, File outFile) throws IOException {
-        if (outFile.exists()) return; // preserva arquivos do usuário
-        if (!outFile.getParentFile().exists()) outFile.getParentFile().mkdirs();
+    private void setupRetroArch() {
+        // Extrai assets do APK para /RetroArch-DRG sobrescrevendo tudo
+        extractAllAssets();
 
-        InputStream in = getAssets().open(assetPath);
-        OutputStream out = new FileOutputStream(outFile);
-        byte[] buffer = new byte[4096];
-        int read;
-        while ((read = in.read(buffer)) != -1) {
-            out.write(buffer, 0, read);
-        }
-        in.close();
-        out.flush();
-        out.close();
-    }
+        // Gera retroarch.cfg no DRG com paths corretos
+        generateRetroArchConfig();
 
-    private void copyAsset(String assetPath, File outFile) throws IOException {
-        if (!outFile.getParentFile().exists()) outFile.getParentFile().mkdirs();
-
-        InputStream in = getAssets().open(assetPath);
-        OutputStream out = new FileOutputStream(outFile);
-        byte[] buffer = new byte[4096];
-        int read;
-        while ((read = in.read(buffer)) != -1) {
-            out.write(buffer, 0, read);
-        }
-        in.close();
-        out.flush();
-        out.close();
-    }
-
-    private void generateConfigWithPaths() {
-        File cfgFile = new File(CUSTOM_BASE_DIR + "/retroarch.cfg");
-
-        try {
-            // Garante que a pasta existe
-            cfgFile.getParentFile().mkdirs();
-            // Cria ou sobrescreve o arquivo
-            cfgFile.createNewFile();
-
-            try (FileOutputStream out = new FileOutputStream(cfgFile, false)) { // false -> sobrescreve
-                String content = ""
-                    + "system_directory = \"" + CUSTOM_BASE_DIR + "/system\"\n"
-                    + "core_directory = \"" + CUSTOM_BASE_DIR + "/cores\"\n"
-                    + "assets_directory = \"" + CUSTOM_BASE_DIR + "/assets\"\n"
-                    + "savefile_directory = \"" + CUSTOM_BASE_DIR + "/save\"\n"
-                    + "savestate_directory = \"" + CUSTOM_BASE_DIR + "/states\"\n";
-                out.write(content.getBytes());
-                out.flush();
-            }
-        } catch (IOException e) {
-            Log.e("MainMenuActivity", "Erro ao criar ou escrever retroarch.cfg", e);
-        }
-    }
-
-    public void finalStartup() {
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
-        boolean firstRun = prefs.getBoolean("first_run_extraction_done", false);
-
-        if (!firstRun) {
-            extractAllAssets();
-            generateConfigWithPaths();
-            prefs.edit().putBoolean("first_run_extraction_done", true).apply();
-        } else {
-            generateConfigWithPaths(); // garante que sempre haja config atualizado
-        }
-
+        // Inicia RetroActivityFuture com paths do DRG
         Intent retro = new Intent(this, RetroActivityFuture.class);
         retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
-        String configPath = CUSTOM_BASE_DIR + "/retroarch.cfg";
-
-        // compatível com chamadas antigas (7 parâmetros)
         startRetroActivity(retro,
                 null,
                 CUSTOM_BASE_DIR + "/cores/",
-                configPath,
+                CUSTOM_BASE_DIR + "/retroarch.cfg",
                 Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
                 CUSTOM_BASE_DIR,
                 getApplicationInfo().sourceDir);
@@ -147,27 +101,74 @@ public class MainMenuActivity extends Activity {
         finish();
     }
 
-    // Versão nova (8 parâmetros) com Activity
-    public static void startRetroActivity(Activity activity, Intent retro, String rom, String corePath,
-                                          String configPath, String ime,
-                                          String externalFilesDir, String apkPath) {
-        retro.putExtra("ROM", rom);
-        retro.putExtra("LIBRETRO", corePath);
-        retro.putExtra("CONFIGFILE", configPath);
-        retro.putExtra("IME", ime);
-        retro.putExtra("EXTERNAL_FILES_DIR", externalFilesDir);
-        retro.putExtra("APK_PATH", apkPath);
+    private void extractAllAssets() {
+        try {
+            String[] assets = getAssets().list("");
+            if (assets != null) {
+                for (String asset : assets) {
+                    copyAssetOrFolder(asset, new File(CUSTOM_BASE_DIR, asset));
+                }
+            }
+        } catch (IOException e) {
+            Log.e("MainMenuActivity", "Erro ao listar assets", e);
+        }
     }
 
-    // Versão compatível com chamadas antigas (7 parâmetros)
-    public static void startRetroActivity(Intent retro, String rom, String corePath,
-                                          String configPath, String ime,
-                                          String externalFilesDir, String apkPath) {
-        retro.putExtra("ROM", rom);
+    private void copyAssetOrFolder(String assetPath, File outFile) throws IOException {
+        String[] list = getAssets().list(assetPath);
+        if (list == null || list.length == 0) {
+            copyAssetFile(assetPath, outFile); // arquivo → sobrescreve
+        } else {
+            if (!outFile.exists()) outFile.mkdirs();
+            for (String child : list) {
+                String childAssetPath = assetPath + "/" + child;
+                copyAssetOrFolder(childAssetPath, new File(outFile, child));
+            }
+        }
+    }
+
+    private void copyAssetFile(String assetPath, File outFile) throws IOException {
+        if (!outFile.getParentFile().exists()) outFile.getParentFile().mkdirs();
+        InputStream in = getAssets().open(assetPath);
+        OutputStream out = new FileOutputStream(outFile, false); // sobrescreve
+        byte[] buffer = new byte[4096];
+        int read;
+        while ((read = in.read(buffer)) != -1) {
+            out.write(buffer, 0, read);
+        }
+        in.close();
+        out.flush();
+        out.close();
+    }
+
+    private void generateRetroArchConfig() {
+        File cfg = new File(CUSTOM_BASE_DIR + "/retroarch.cfg");
+        try {
+            if (!cfg.getParentFile().exists()) cfg.getParentFile().mkdirs();
+            FileOutputStream out = new FileOutputStream(cfg, false); // sobrescreve
+            String content = ""
+                    + "system_directory = \"" + CUSTOM_BASE_DIR + "/system\"\n"
+                    + "core_directory = \"" + CUSTOM_BASE_DIR + "/cores\"\n"
+                    + "assets_directory = \"" + CUSTOM_BASE_DIR + "/assets\"\n";
+            // NOTA: save e states ficam no /RetroArch → não colocamos paths aqui
+            out.write(content.getBytes());
+            out.flush();
+            out.close();
+        } catch (IOException e) {
+            Log.e("MainMenuActivity", "Erro ao criar retroarch.cfg", e);
+        }
+    }
+
+    public static void startRetroActivity(Intent retro, String contentPath, String corePath,
+                                          String configFilePath, String imePath, String dataDirPath, String dataSourcePath) {
+        if (contentPath != null) retro.putExtra("ROM", contentPath);
         retro.putExtra("LIBRETRO", corePath);
-        retro.putExtra("CONFIGFILE", configPath);
-        retro.putExtra("IME", ime);
-        retro.putExtra("EXTERNAL_FILES_DIR", externalFilesDir);
-        retro.putExtra("APK_PATH", apkPath);
+        retro.putExtra("CONFIGFILE", configFilePath);
+        retro.putExtra("IME", imePath);
+        retro.putExtra("DATADIR", dataDirPath);
+        retro.putExtra("APK", dataSourcePath);
+        retro.putExtra("SDCARD", Environment.getExternalStorageDirectory().getAbsolutePath());
+        String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
+        retro.putExtra("EXTERNAL", external);
     }
 }

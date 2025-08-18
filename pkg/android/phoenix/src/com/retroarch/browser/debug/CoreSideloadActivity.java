@@ -35,7 +35,9 @@ public class CoreSideloadActivity extends Activity {
                 "assets", "autoconfig", "cores", "database",
                 "filters", "info", "overlays", "shaders", "system"
         };
-        private final File BASE_DIR = new File(android.os.Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
+        private final File MEDIA_DIR = new File(android.os.Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
+        private final File CFG_DIR = new File(android.os.Environment.getExternalStorageDirectory(),
+                "Android/data/com.retroarch/files");
         private AtomicInteger processedFiles = new AtomicInteger(0);
         private int totalFiles = 0;
 
@@ -47,7 +49,8 @@ public class CoreSideloadActivity extends Activity {
             progressDialog.setCancelable(false);
             progressDialog.show();
 
-            if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
+            if (!MEDIA_DIR.exists()) MEDIA_DIR.mkdirs();
+            if (!CFG_DIR.exists()) CFG_DIR.mkdirs();
             totalFiles = countAllFiles();
         }
 
@@ -84,7 +87,7 @@ public class CoreSideloadActivity extends Activity {
             for (String folder : ASSET_FOLDERS) {
                 executor.submit(() -> {
                     try {
-                        copyAssetFolder(folder, new File(BASE_DIR, folder));
+                        copyAssetFolder(folder, new File(MEDIA_DIR, folder));
                     } catch (IOException e) {
                         e.printStackTrace();
                     }
@@ -108,13 +111,13 @@ public class CoreSideloadActivity extends Activity {
         private boolean verifyAllFilesExist() {
             boolean allExist = true;
             for (String folder : ASSET_FOLDERS) {
-                File dir = new File(BASE_DIR, folder);
+                File dir = new File(MEDIA_DIR, folder);
                 if (!dir.exists() || dir.listFiles() == null || dir.listFiles().length == 0) {
                     allExist = false;
                     break;
                 }
             }
-            File cfg = new File(BASE_DIR, "retroarch.cfg");
+            File cfg = new File(CFG_DIR, "retroarch.cfg");
             return allExist && cfg.exists();
         }
 
@@ -143,14 +146,14 @@ public class CoreSideloadActivity extends Activity {
         }
 
         private void generateRetroarchCfg() throws IOException {
-            File cfgFile = new File(BASE_DIR, "retroarch.cfg");
+            File cfgFile = new File(CFG_DIR, "retroarch.cfg");
             if (!cfgFile.exists()) cfgFile.createNewFile();
 
             try (FileOutputStream out = new FileOutputStream(cfgFile, false)) {
                 StringBuilder content = new StringBuilder("# RetroArch DRG cfg\n");
                 for (String folder : ASSET_FOLDERS) {
                     content.append(folder).append("_directory = \"")
-                            .append(new File(BASE_DIR, folder).getAbsolutePath())
+                            .append(new File(MEDIA_DIR, folder).getAbsolutePath())
                             .append("\"\n");
                 }
                 out.write(content.toString().getBytes());

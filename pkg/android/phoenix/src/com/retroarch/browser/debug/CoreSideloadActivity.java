@@ -58,7 +58,7 @@ public class CoreSideloadActivity extends Activity {
         super.onDestroy();
     }
 
-    private static class CoreSideloadWorkerTask extends AsyncTask<Void, Integer, String> {
+    private class CoreSideloadWorkerTask extends AsyncTask<Void, Integer, String> {
 
         private final Activity ctx;
         private final String corePath;
@@ -94,16 +94,12 @@ public class CoreSideloadActivity extends Activity {
 
         @Override
         protected String doInBackground(Void... voids) {
-            // Multithread copy
             ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length, 4));
 
             for (String folder : ASSET_FOLDERS) {
                 executor.submit(() -> {
-                    try {
-                        copyAssetFolder(folder, new File(BASE_DIR, folder));
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
+                    try { copyAssetFolder(folder, new File(BASE_DIR, folder)); }
+                    catch (IOException e) { e.printStackTrace(); }
                 });
             }
 
@@ -127,18 +123,14 @@ public class CoreSideloadActivity extends Activity {
                 long copied = 0;
                 long max = coreFile.length();
 
-                while ((length = in.read(buf)) > 0) {
+                while ((length = in.read(buf)) != -1) {
                     out.write(buf, 0, length);
                     copied += length;
                     publishProgress((int)((processedFiles.get() * 100 + copied * 100 / max) / totalFiles));
                 }
 
-            } catch (IOException ex) {
-                ex.printStackTrace();
-                return ex.getMessage();
-            }
+            } catch (IOException ex) { return ex.getMessage(); }
 
-            // Generate retroarch.cfg
             try { generateRetroarchCfg(); } catch (IOException e) { return e.getMessage(); }
 
             return null;
@@ -157,9 +149,7 @@ public class CoreSideloadActivity extends Activity {
                 int total = 0;
                 for (String asset : assets) total += countFilesRecursive(assetFolder + "/" + asset);
                 return total;
-            } catch (IOException e) {
-                return 0;
-            }
+            } catch (IOException e) { return 0; }
         }
 
         private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
@@ -203,34 +193,32 @@ public class CoreSideloadActivity extends Activity {
 
         @Override
         protected void onProgressUpdate(Integer... values) {
-            progressDialog.setProgress(values[0]);
+            if (values.length > 0) progressDialog.setProgress(values[0]);
         }
 
         @Override
         protected void onPostExecute(String s) {
             progressDialog.dismiss();
 
-            if (s == null) {
-                // Run RetroArch
-                Intent retro = new Intent(ctx, RetroActivityFuture.class);
-                SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(ctx);
+            if (s != null) progressDialog.setMessage("Erro: " + s);
 
-                retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            // Inicia RetroArch com o core sideloaded
+            Intent retro = new Intent(ctx, RetroActivityFuture.class);
+            final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(ctx);
+            retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
-                MainMenuActivity.startRetroActivity(
-                        retro,
-                        contentPath,
-                        destination.getAbsolutePath(),
-                        new File(BASE_DIR, "retroarch.cfg").getAbsolutePath(),
-                        Settings.Secure.getString(ctx.getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
-                        BASE_DIR.getAbsolutePath(),
-                        ctx.getApplicationInfo().sourceDir
-                );
-                ctx.startActivity(retro);
-                ctx.finish();
-            } else {
-                progressDialog.setMessage("Erro: " + s);
-            }
+            MainMenuActivity.startRetroActivity(
+                    retro,
+                    contentPath,
+                    destination.getAbsolutePath(),
+                    new File(BASE_DIR, "retroarch.cfg").getAbsolutePath(),
+                    Settings.Secure.getString(ctx.getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
+                    BASE_DIR.getAbsolutePath(),
+                    ctx.getApplicationInfo().sourceDir
+            );
+
+            ctx.startActivity(retro);
+            ctx.finish();
         }
     }
 }

@@ -7,7 +7,6 @@ import android.content.SharedPreferences;
 import android.media.AudioManager;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Environment;
 import android.preference.PreferenceActivity;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
@@ -26,18 +25,23 @@ import java.util.List;
 public final class MainMenuActivity extends PreferenceActivity {
     final private int REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS = 124;
     public static String PACKAGE_NAME;
-    boolean checkPermissions = false;
+    private boolean checkPermissions = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         PACKAGE_NAME = getPackageName();
-
-        // Bind audio stream
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
-
         UserPreferences.updateConfigFile(this);
-        checkRuntimePermissions();
+
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        boolean firstLaunch = prefs.getBoolean("first_launch", true);
+
+        if (firstLaunch) {
+            checkRuntimePermissions();
+        } else {
+            finalStartup();
+        }
     }
 
     private boolean addPermission(List<String> permissionsList, String permission) {
@@ -56,9 +60,9 @@ public final class MainMenuActivity extends PreferenceActivity {
             final List<String> permissionsList = new ArrayList<>();
 
             if (!addPermission(permissionsList, Manifest.permission.READ_EXTERNAL_STORAGE))
-                permissionsNeeded.add("Read External Storage");
+                permissionsNeeded.add("Leitura do armazenamento");
             if (!addPermission(permissionsList, Manifest.permission.WRITE_EXTERNAL_STORAGE))
-                permissionsNeeded.add("Write External Storage");
+                permissionsNeeded.add("Gravação no armazenamento");
 
             if (permissionsList.size() > 0) {
                 checkPermissions = true;
@@ -70,6 +74,8 @@ public final class MainMenuActivity extends PreferenceActivity {
                     showMessageOKCancel(message, (dialog, which) -> {
                         if (which == AlertDialog.BUTTON_POSITIVE) {
                             requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
+                        } else {
+                            finish(); // cancela app se usuário clicar cancelar
                         }
                     });
                 } else {
@@ -78,15 +84,15 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
         }
 
-        if (!checkPermissions) finalStartup();
+        if (!checkPermissions) startExtraction();
     }
 
-    public void showMessageOKCancel(String message, DialogInterface.OnClickListener onClickListener) {
+    private void showMessageOKCancel(String message, DialogInterface.OnClickListener onClickListener) {
         new AlertDialog.Builder(this)
                 .setMessage(message)
-                .setPositiveButton("OK", onClickListener)
+                .setPositiveButton("Conceder", onClickListener)
+                .setNegativeButton("Cancelar", (dialog, which) -> finish())
                 .setCancelable(false)
-                .setNegativeButton("Cancel", (dialog, which) -> finish())
                 .create()
                 .show();
     }
@@ -100,23 +106,45 @@ public final class MainMenuActivity extends PreferenceActivity {
                     allGranted = false;
                     if (!shouldShowRequestPermissionRationale(permissions[i])) {
                         new AlertDialog.Builder(this)
-                                .setMessage("Você precisa habilitar a permissão manualmente nas Configurações para que o app funcione.")
-                                .setPositiveButton("OK", (dialog, which) -> finish())
+                                .setMessage("Você precisa conceder permissão nas Configurações para que o app funcione.")
+                                .setPositiveButton("OK", (d, w) -> finish())
                                 .setCancelable(false)
                                 .show();
                         return;
                     }
                 }
             }
-            if (allGranted) finalStartup();
+            if (allGranted) startExtraction();
         } else {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
     }
 
-    public void finalStartup() {
+    private void startExtraction() {
+        // Marca que a extração já foi feita
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        prefs.edit().putBoolean("first_launch", false).apply();
+
         Intent intent = new Intent(this, CoreSideloadActivity.class);
         startActivity(intent);
+        finish();
+    }
+
+    public void finalStartup() {
+        Intent retro = new Intent(this, RetroActivityFuture.class);
+        retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+        MainMenuActivity.startRetroActivity(
+                retro,
+                null,
+                getApplicationInfo().dataDir + "/cores/",
+                UserPreferences.getDefaultConfigPath(this),
+                Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
+                getApplicationInfo().dataDir,
+                getApplicationInfo().sourceDir
+        );
+
+        startActivity(retro);
         finish();
     }
 
@@ -128,8 +156,8 @@ public final class MainMenuActivity extends PreferenceActivity {
         retro.putExtra("IME", imePath);
         retro.putExtra("DATADIR", dataDirPath);
         retro.putExtra("APK", dataSourcePath);
-        retro.putExtra("SDCARD", Environment.getExternalStorageDirectory().getAbsolutePath());
-        String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/media/" + PACKAGE_NAME + "/files";
+        retro.putExtra("SDCARD", android.os.Environment.getExternalStorageDirectory().getAbsolutePath());
+        String external = android.os.Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/media/" + PACKAGE_NAME + "/files";
         retro.putExtra("EXTERNAL", external);
     }
 }

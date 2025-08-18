@@ -45,6 +45,12 @@ public class MainMenuActivity extends Activity {
                 for (String asset : assets) {
                     String newAssetPath = assetPath.isEmpty() ? asset : assetPath + "/" + asset;
                     File newOutFile = new File(outDir, asset);
+
+                    // Não sobrescreve pasta de dados do usuário
+                    if (isUserDataFolder(asset)) {
+                        continue;
+                    }
+
                     copyAssetFolder(newAssetPath, newOutFile);
                 }
                 return true;
@@ -55,11 +61,20 @@ public class MainMenuActivity extends Activity {
         }
     }
 
+    private boolean isUserDataFolder(String folderName) {
+        return folderName.equalsIgnoreCase("save") ||
+               folderName.equalsIgnoreCase("states") ||
+               folderName.equalsIgnoreCase("savestates");
+    }
+
     private void copyAsset(String assetPath, File outFile) throws IOException {
+        if (outFile.exists() && isUserDataFolder(outFile.getName())) {
+            // Não sobrescreve arquivos do usuário
+            return;
+        }
         if (!outFile.getParentFile().exists()) {
             outFile.getParentFile().mkdirs();
         }
-        // Se não quiser sobrescrever, pode adicionar: if (outFile.exists()) return;
         InputStream in = getAssets().open(assetPath);
         OutputStream out = new FileOutputStream(outFile);
         byte[] buffer = new byte[4096];
@@ -73,12 +88,15 @@ public class MainMenuActivity extends Activity {
     }
 
     public void finalStartup() {
-        // Copia TODO o conteúdo dos assets recursivamente
-        extractAllAssets();
+        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        boolean firstRun = prefs.getBoolean("first_run_extraction_done", false);
 
-        final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        if (!firstRun) {
+            extractAllAssets();
+            prefs.edit().putBoolean("first_run_extraction_done", true).apply();
+        }
+
         Intent retro = new Intent(this, RetroActivityFuture.class);
-
         retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
         startRetroActivity(
@@ -104,4 +122,4 @@ public class MainMenuActivity extends Activity {
         retro.putExtra("EXTERNAL_FILES_DIR", externalFilesDir);
         retro.putExtra("APK_PATH", apkPath);
     }
-} 
+}

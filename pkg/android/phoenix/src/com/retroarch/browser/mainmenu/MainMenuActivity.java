@@ -93,13 +93,40 @@ public class MainMenuActivity extends Activity {
         out.close();
     }
 
+    private void generateConfigWithPaths() {
+        File cfgFile = new File(CUSTOM_BASE_DIR + "/retroarch.cfg");
+
+        try {
+            // Garante que a pasta existe
+            cfgFile.getParentFile().mkdirs();
+            // Cria ou sobrescreve o arquivo
+            cfgFile.createNewFile();
+
+            try (FileOutputStream out = new FileOutputStream(cfgFile, false)) { // false -> sobrescreve
+                String content = ""
+                    + "system_directory = \"" + CUSTOM_BASE_DIR + "/system\"\n"
+                    + "core_directory = \"" + CUSTOM_BASE_DIR + "/cores\"\n"
+                    + "assets_directory = \"" + CUSTOM_BASE_DIR + "/assets\"\n"
+                    + "savefile_directory = \"" + CUSTOM_BASE_DIR + "/save\"\n"
+                    + "savestate_directory = \"" + CUSTOM_BASE_DIR + "/states\"\n";
+                out.write(content.getBytes());
+                out.flush();
+            }
+        } catch (IOException e) {
+            Log.e("MainMenuActivity", "Erro ao criar ou escrever retroarch.cfg", e);
+        }
+    }
+
     public void finalStartup() {
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
         boolean firstRun = prefs.getBoolean("first_run_extraction_done", false);
 
         if (!firstRun) {
             extractAllAssets();
+            generateConfigWithPaths();
             prefs.edit().putBoolean("first_run_extraction_done", true).apply();
+        } else {
+            generateConfigWithPaths(); // garante que sempre haja config atualizado
         }
 
         Intent retro = new Intent(this, RetroActivityFuture.class);
@@ -107,7 +134,7 @@ public class MainMenuActivity extends Activity {
 
         String configPath = CUSTOM_BASE_DIR + "/retroarch.cfg";
 
-        // Usa a versão compatível com chamadas antigas (7 parâmetros)
+        // compatível com chamadas antigas (7 parâmetros)
         startRetroActivity(retro,
                 null,
                 CUSTOM_BASE_DIR + "/cores/",
@@ -120,7 +147,7 @@ public class MainMenuActivity extends Activity {
         finish();
     }
 
-    // Versão nova (8 parâmetros) com Activity, para chamadas novas
+    // Versão nova (8 parâmetros) com Activity
     public static void startRetroActivity(Activity activity, Intent retro, String rom, String corePath,
                                           String configPath, String ime,
                                           String externalFilesDir, String apkPath) {

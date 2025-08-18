@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.Context;
 import android.os.AsyncTask;
-import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 
@@ -18,20 +17,16 @@ import java.util.concurrent.Executors;
 public class MainMenuActivity extends Activity {
 
     private static final String TAG = "MainMenuActivity";
-    private static final String RETROARCH_DIR =
+    public static final String RETROARCH_DIR =
             "/storage/emulated/0/Android/media/com.retroarch/";
-
-    private ProgressDialog progressDialog;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        // dispara a task de extração logo no início
         new ExtractAssetsTask(this).execute();
     }
 
-    private static class ExtractAssetsTask extends AsyncTask<Void, String, Boolean> {
+    public static class ExtractAssetsTask extends AsyncTask<Void, Void, Boolean> {
         private final Context context;
         private ProgressDialog dialog;
 
@@ -52,7 +47,7 @@ public class MainMenuActivity extends Activity {
             try {
                 File baseDir = new File(RETROARCH_DIR, "assets");
                 if (!baseDir.exists() && !baseDir.mkdirs()) {
-                    Log.e(TAG, "Não foi possível criar " + baseDir.getAbsolutePath());
+                    Log.e(TAG, "Falha ao criar " + baseDir.getAbsolutePath());
                     return false;
                 }
 
@@ -70,10 +65,10 @@ public class MainMenuActivity extends Activity {
 
                 executor.shutdown();
                 while (!executor.isTerminated()) {
-                    Thread.sleep(200);
+                    Thread.sleep(100);
                 }
 
-                // atualizar retroarch.cfg
+                // Atualizar retroarch.cfg
                 File cfgFile = new File(RETROARCH_DIR, "retroarch.cfg");
                 updateRetroarchCfg(cfgFile);
 
@@ -87,16 +82,7 @@ public class MainMenuActivity extends Activity {
         @Override
         protected void onPostExecute(Boolean ok) {
             if (dialog != null && dialog.isShowing()) dialog.dismiss();
-
-            if (ok) {
-                Log.i(TAG, "Assets extraídos com sucesso em " + RETROARCH_DIR);
-            } else {
-                Log.e(TAG, "Falha ao extrair assets.");
-            }
-
-            if (context instanceof Activity) {
-                ((Activity) context).finish();
-            }
+            if (context instanceof Activity) ((Activity) context).finish();
         }
 
         private static void copyAsset(Context ctx, String assetName, File outFile) {
@@ -130,4 +116,4 @@ public class MainMenuActivity extends Activity {
             }
         }
     }
-}
+} 

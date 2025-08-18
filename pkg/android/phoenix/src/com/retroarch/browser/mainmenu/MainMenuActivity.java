@@ -28,6 +28,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.Scanner;
+import java.nio.file.Files;
 
 public final class MainMenuActivity extends PreferenceActivity {
 
@@ -191,8 +192,6 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected void onPostExecute(Boolean result) {
             progressDialog.dismiss();
             prefs.edit().putBoolean("firstRun", false).apply();
-
-            // Aguarda cfg estar populado com gamemode_enable e fecha após 2 segundos
             waitForGamemodeEnableAndClose();
         }
 
@@ -258,7 +257,6 @@ public final class MainMenuActivity extends PreferenceActivity {
                 String key = folder + "_directory";
                 String line = key + " = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"";
 
-                // Substituir linha existente se estiver presente
                 int index = content.indexOf(key + " =");
                 if (index >= 0) {
                     int endIndex = content.indexOf("\n", index);
@@ -273,36 +271,26 @@ public final class MainMenuActivity extends PreferenceActivity {
                 out.write(content.toString().getBytes());
             }
         }
+    }
 
-        private void waitForGamemodeEnableAndClose() {
-            final File cfgFile = new File(Environment.getExternalStorageDirectory(),
-                    "Android/data/" + PACKAGE_NAME + "/files/retroarch.cfg");
+    private void waitForGamemodeEnableAndClose() {
+        final File cfgFile = new File(Environment.getExternalStorageDirectory() + "/Android/data/" + PACKAGE_NAME + "/files/retroarch.cfg");
 
-            new Thread(() -> {
-                while (true) {
-                    try {
-                        Thread.sleep(500);
-                        if (!cfgFile.exists()) continue;
-                        Scanner scanner = new Scanner(cfgFile);
-                        boolean found = false;
-                        while (scanner.hasNextLine()) {
-                            if (scanner.nextLine().contains("gamemode_enable")) {
-                                found = true;
-                                break;
-                            }
-                        }
-                        scanner.close();
-
-                        if (found) {
-                            runOnUiThread(() -> {
-                                new android.os.Handler().postDelayed(this::finish, 2000);
-                            });
-                            break;
-                        }
-                    } catch (Exception ignored) {}
-                }
-            }).start();
-        }
+        new Thread(() -> {
+            while (true) {
+                try {
+                    Thread.sleep(500);
+                    if (!cfgFile.exists()) continue;
+                    String content = new String(Files.readAllBytes(cfgFile.toPath()));
+                    if (content.contains("gamemode_enable")) {
+                        runOnUiThread(() -> {
+                            new android.os.Handler().postDelayed(() -> MainMenuActivity.this.finish(), 2000);
+                        });
+                        break;
+                    }
+                } catch (Exception ignored) {}
+            }
+        }).start();
     }
 
     public void finalStartup() {

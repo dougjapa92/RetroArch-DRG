@@ -23,6 +23,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class MainMenuActivity extends PreferenceActivity {
+
     final private int REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS = 124;
     public static String PACKAGE_NAME;
     private boolean checkPermissions = false;
@@ -35,12 +36,12 @@ public final class MainMenuActivity extends PreferenceActivity {
         UserPreferences.updateConfigFile(this);
 
         SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
-        boolean firstLaunch = prefs.getBoolean("first_launch", true);
+        boolean assetsExtracted = prefs.getBoolean("assets_extracted", false);
 
-        if (firstLaunch) {
+        if (!assetsExtracted) {
             checkRuntimePermissions();
         } else {
-            finalStartup();
+            finalStartup(); // pula extração
         }
     }
 
@@ -48,7 +49,6 @@ public final class MainMenuActivity extends PreferenceActivity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
                 permissionsList.add(permission);
-                return shouldShowRequestPermissionRationale(permission);
             }
         }
         return true;
@@ -66,34 +66,27 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             if (permissionsList.size() > 0) {
                 checkPermissions = true;
-                if (permissionsNeeded.size() > 0) {
-                    String message = "O aplicativo precisa de acesso a " + permissionsNeeded.get(0);
-                    for (int i = 1; i < permissionsNeeded.size(); i++)
-                        message += ", " + permissionsNeeded.get(i);
-
-                    showMessageOKCancel(message, (dialog, which) -> {
-                        if (which == AlertDialog.BUTTON_POSITIVE) {
-                            requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
-                        } else {
-                            finish(); // cancela app se usuário clicar cancelar
-                        }
-                    });
-                } else {
-                    requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
-                }
+                showMessagePermissionsRequired(permissionsList);
             }
         }
 
         if (!checkPermissions) startExtraction();
     }
 
-    private void showMessageOKCancel(String message, DialogInterface.OnClickListener onClickListener) {
+    private void showMessagePermissionsRequired(List<String> permissionsList) {
+        String message = "O aplicativo precisa de acesso a: ";
+        for (int i = 0; i < permissionsList.size(); i++) {
+            message += permissionsList.get(i).replace("android.permission.", "");
+            if (i < permissionsList.size() - 1) message += ", ";
+        }
+        message += ".";
+
         new AlertDialog.Builder(this)
                 .setMessage(message)
-                .setPositiveButton("Conceder", onClickListener)
+                .setPositiveButton("Conceder", (dialog, which) ->
+                        requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
                 .setNegativeButton("Cancelar", (dialog, which) -> finish())
                 .setCancelable(false)
-                .create()
                 .show();
     }
 
@@ -104,27 +97,26 @@ public final class MainMenuActivity extends PreferenceActivity {
             for (int i = 0; i < permissions.length; i++) {
                 if (grantResults[i] != PackageManager.PERMISSION_GRANTED) {
                     allGranted = false;
-                    if (!shouldShowRequestPermissionRationale(permissions[i])) {
-                        new AlertDialog.Builder(this)
-                                .setMessage("Você precisa conceder permissão nas Configurações para que o app funcione.")
-                                .setPositiveButton("OK", (d, w) -> finish())
-                                .setCancelable(false)
-                                .show();
-                        return;
-                    }
+                    break;
                 }
             }
-            if (allGranted) startExtraction();
+            if (allGranted) {
+                startExtraction();
+            } else {
+                // sempre exibe alerta quando negar
+                new AlertDialog.Builder(this)
+                        .setMessage("O aplicativo precisa conceder permissões para funcionar corretamente.")
+                        .setPositiveButton("Conceder", (d, w) -> checkRuntimePermissions())
+                        .setNegativeButton("Cancelar", (d, w) -> finish())
+                        .setCancelable(false)
+                        .show();
+            }
         } else {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
     }
 
     private void startExtraction() {
-        // Marca que a extração já foi feita
-        SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
-        prefs.edit().putBoolean("first_launch", false).apply();
-
         Intent intent = new Intent(this, CoreSideloadActivity.class);
         startActivity(intent);
         finish();

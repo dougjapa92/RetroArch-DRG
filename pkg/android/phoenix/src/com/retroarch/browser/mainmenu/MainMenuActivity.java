@@ -1,8 +1,6 @@
 package com.retroarch.browser.mainmenu;
 
-import com.retroarch.browser.preferences.util.UserPreferences;
-import com.retroarch.browser.retroactivity.RetroActivityFuture;
-
+import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -15,45 +13,49 @@ import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.util.Log;
 
+import com.retroarch.browser.preferences.util.UserPreferences;
+import com.retroarch.browser.retroactivity.RetroActivityFuture;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-
 import java.util.List;
 import java.util.ArrayList;
-import android.content.pm.PackageManager;
 import android.Manifest;
+import android.content.pm.PackageManager;
 import android.content.DialogInterface;
 import android.app.AlertDialog;
 
 public final class MainMenuActivity extends PreferenceActivity {
+    private static final String CUSTOM_BASE_DIR = Environment.getExternalStorageDirectory().getAbsolutePath() + "/RetroArch";
     final private int REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS = 124;
     public static String PACKAGE_NAME;
     boolean checkPermissions = false;
-
-    private static final String CUSTOM_BASE_DIR =
-            Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/media/com.retroarch";
     private ProgressDialog progressDialog;
-    private int totalFiles = 0;
-    private int filesCopied = 0;
 
-    public void showMessageOKCancel(String message, DialogInterface.OnClickListener onClickListener) {
-        new AlertDialog.Builder(this)
-                .setMessage(message)
-                .setPositiveButton("OK", onClickListener)
-                .setCancelable(false)
-                .setNegativeButton("Cancel", null)
-                .create()
-                .show();
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        PACKAGE_NAME = getPackageName();
+        setVolumeControlStream(AudioManager.STREAM_MUSIC);
+
+        checkRuntimePermissions();
+    }
+
+    private void showMessageOKCancel(String message, DialogInterface.OnClickListener onClickListener) {
+        new AlertDialog.Builder(this).setMessage(message)
+            .setPositiveButton("OK", onClickListener)
+            .setCancelable(false)
+            .setNegativeButton("Cancel", null).create().show();
     }
 
     private boolean addPermission(List<String> permissionsList, String permission) {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
             if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
                 permissionsList.add(permission);
-                return !shouldShowRequestPermissionRationale(permission);
+                if (!shouldShowRequestPermissionRationale(permission)) return false;
             }
         }
         return true;
@@ -71,191 +73,132 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             if (permissionsList.size() > 0) {
                 checkPermissions = true;
-
                 if (permissionsNeeded.size() > 0) {
                     String message = "Você precisa conceder acesso a " + permissionsNeeded.get(0);
                     for (int i = 1; i < permissionsNeeded.size(); i++)
-                        message = message + ", " + permissionsNeeded.get(i);
+                        message += ", " + permissionsNeeded.get(i);
 
-                    showMessageOKCancel(message, (dialog, which) -> {
-                        if (which == AlertDialog.BUTTON_POSITIVE) {
-                            requestPermissions(
-                                    permissionsList.toArray(new String[permissionsList.size()]),
-                                    REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
-                        }
-                    });
+                    showMessageOKCancel(message,
+                        (dialog, which) -> {
+                            if (which == AlertDialog.BUTTON_POSITIVE) {
+                                requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
+                            }
+                        });
                 } else {
-                    requestPermissions(
-                            permissionsList.toArray(new String[permissionsList.size()]),
-                            REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
+                    requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
                 }
             }
         }
 
         if (!checkPermissions) {
-            startExtractionTask();
+            startExtraction();
         }
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS) {
-            boolean allGranted = true;
+            boolean grantedAll = true;
             for (int result : grantResults) {
-                if (result != PackageManager.PERMISSION_GRANTED) {
-                    allGranted = false;
-                    break;
-                }
+                if (result != PackageManager.PERMISSION_GRANTED) grantedAll = false;
             }
 
-            if (!allGranted) {
-                new AlertDialog.Builder(this)
-                        .setTitle("Permissões necessárias")
-                        .setMessage("O RetroArch DRG precisa de acesso ao armazenamento para funcionar corretamente.\n\n" +
-                                    "Por favor, habilite as permissões nas configurações ou reinstale o aplicativo.")
-                        .setCancelable(false)
-                        .setPositiveButton("OK", (dialog, which) -> finishAffinity())
-                        .show();
-            } else {
-                startExtractionTask();
+            if (!grantedAll) {
+                showMessageOKCancel("Permissões não concedidas. Habilite manualmente ou reinstale o aplicativo.",
+                        (dialog, which) -> finish());
+                return;
             }
-        } else {
-            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
+        startExtraction();
     }
 
-    private int countTotalFiles() {
-        final int[] total = {0};
-        String[] folders = {"assets", "autoconfig", "cores", "database",
-                "filters", "info", "overlays", "shaders", "system"};
-        for (String folder : folders) {
-            total[0] += countFilesInAssetFolder(folder);
-        }
-        return total[0];
-    }
-
-    private int countFilesInAssetFolder(String assetPath) {
-        try {
-            String[] assets = getAssets().list(assetPath);
-            if (assets == null || assets.length == 0) return 1;
-            int count = 0;
-            for (String asset : assets) {
-                String newAssetPath = assetPath.isEmpty() ? asset : assetPath + "/" + asset;
-                count += countFilesInAssetFolder(newAssetPath);
-            }
-            return count;
-        } catch (IOException e) {
-            return 0;
-        }
-    }
-
-    private void startExtractionTask() {
-        totalFiles = countTotalFiles();
-        filesCopied = 0;
-
-        progressDialog = new ProgressDialog(this);
-        progressDialog.setTitle("Configurando RetroArch DRG");
-        progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
-        progressDialog.setCancelable(false);
-        progressDialog.setMax(100); // porcentagem
-        progressDialog.setProgress(0);
-        progressDialog.setMessage("Configurando RetroArch DRG...\n\nO aplicativo encerrará após configuração inicial.\n\n0%");
-        progressDialog.show();
-
+    private void startExtraction() {
         new AsyncTask<Void, Integer, Void>() {
+            List<String> assetList = new ArrayList<>();
+            int totalFiles = 0;
+
+            @Override
+            protected void onPreExecute() {
+                progressDialog = new ProgressDialog(MainMenuActivity.this);
+                progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+                progressDialog.setMessage("Configurando RetroArch DRG...\n\nO aplicativo encerrará após configuração inicial.");
+                progressDialog.setCancelable(false);
+                progressDialog.show();
+
+                collectAssets(""); // conta o total de arquivos
+                totalFiles = assetList.size();
+                progressDialog.setMax(100);
+            }
+
             @Override
             protected Void doInBackground(Void... voids) {
-                try {
-                    String[] folders = {"assets", "autoconfig", "cores", "database",
-                            "filters", "info", "overlays", "shaders", "system"};
-                    for (String folder : folders) {
-                        copyAssetFolderWithProgress(folder, new File(CUSTOM_BASE_DIR, folder));
-                    }
-                    generateRetroArchConfigOnce();
-                } catch (Exception e) {
-                    Log.e("MainMenuActivity", "Erro na extração", e);
-                }
+                extractAssets(""); 
                 return null;
             }
 
             @Override
             protected void onProgressUpdate(Integer... values) {
-                int percent = values[0];
-                progressDialog.setProgress(percent);
-                progressDialog.setMessage("Configurando RetroArch DRG...\n\nO aplicativo encerrará após configuração inicial.\n\n"
-                        + percent + "%");
+                progressDialog.setProgress(values[0]);
             }
 
             @Override
             protected void onPostExecute(Void aVoid) {
-                if (progressDialog != null && progressDialog.isShowing())
-                    progressDialog.dismiss();
-                finishAffinity();
-                System.exit(0);
+                progressDialog.dismiss();
+                generateRetroarchConfig(); // cria retroarch.cfg no diretório padrão
+                finish();
+            }
+
+            private void collectAssets(String path) {
+                try {
+                    String[] list = getAssets().list(path);
+                    if (list == null || list.length == 0) {
+                        assetList.add(path);
+                    } else {
+                        for (String item : list) {
+                            String newPath = path.isEmpty() ? item : path + "/" + item;
+                            collectAssets(newPath);
+                        }
+                    }
+                } catch (IOException e) {
+                    Log.e("MainMenuActivity", "Erro ao contar assets: " + path, e);
+                }
+            }
+
+            private void extractAssets(String path) {
+                try {
+                    String[] list = getAssets().list(path);
+                    if (list == null || list.length == 0) {
+                        copyAsset(path, new File(CUSTOM_BASE_DIR, path));
+                        int progress = (assetList.indexOf(path) * 100) / totalFiles;
+                        publishProgress(progress);
+                    } else {
+                        File dir = new File(CUSTOM_BASE_DIR, path);
+                        if (!dir.exists()) dir.mkdirs();
+                        for (String item : list) {
+                            String newPath = path.isEmpty() ? item : path + "/" + item;
+                            extractAssets(newPath);
+                        }
+                    }
+                } catch (IOException e) {
+                    Log.e("MainMenuActivity", "Erro ao extrair asset: " + path, e);
+                }
+            }
+
+            private void copyAsset(String assetPath, File outFile) throws IOException {
+                if (outFile.exists()) return;
+                if (!outFile.getParentFile().exists()) outFile.getParentFile().mkdirs();
+                try (InputStream in = getAssets().open(assetPath); OutputStream out = new FileOutputStream(outFile)) {
+                    byte[] buffer = new byte[4096];
+                    int read;
+                    while ((read = in.read(buffer)) != -1) {
+                        out.write(buffer, 0, read);
+                    }
+                }
             }
         }.execute();
     }
 
-    private void copyAssetFolderWithProgress(String assetPath, File outDir) throws IOException {
-        String[] assets = getAssets().list(assetPath);
-        if (assets == null || assets.length == 0) {
-            copyAssetWithProgress(assetPath, outDir);
-        } else {
-            if (!outDir.exists()) outDir.mkdirs();
-            for (String asset : assets) {
-                String newAssetPath = assetPath.isEmpty() ? asset : assetPath + "/" + asset;
-                File newOutFile = new File(outDir, asset);
-                copyAssetFolderWithProgress(newAssetPath, newOutFile);
-            }
-        }
+    private void generateRetroarchConfig() {
+        UserPreferences.updateConfigFile(this); // cria retroarch.cfg no diretório padrão
     }
-
-    private void copyAssetWithProgress(String assetPath, File outFile) throws IOException {
-        if (outFile.exists()) return;
-        if (!outFile.getParentFile().exists()) outFile.getParentFile().mkdirs();
-
-        try (InputStream in = getAssets().open(assetPath);
-             OutputStream out = new FileOutputStream(outFile)) {
-            byte[] buffer = new byte[4096];
-            int read;
-            while ((read = in.read(buffer)) != -1) {
-                out.write(buffer, 0, read);
-            }
-            out.flush();
-        }
-
-        filesCopied++;
-        int percent = (int)((filesCopied / (float)totalFiles) * 100);
-        publishProgress(percent);
-    }
-
-    private void generateRetroArchConfigOnce() {
-        File configFile = new File(Environment.getExternalStorageDirectory().getAbsolutePath()
-                + "/Android/data/" + PACKAGE_NAME + "/files/retroarch.cfg");
-        if (!configFile.exists()) {
-            UserPreferences.updateConfigFile(this);
-        }
-    }
-
-    public static void startRetroActivity(Intent retro, String contentPath, String corePath,
-                                          String configFilePath, String imePath,
-                                          String dataDirPath, String dataSourcePath) {
-        if (contentPath != null) retro.putExtra("ROM", contentPath);
-        retro.putExtra("LIBRETRO", corePath);
-        retro.putExtra("CONFIGFILE", configFilePath);
-        retro.putExtra("IME", imePath);
-        retro.putExtra("DATADIR", dataDirPath);
-        retro.putExtra("APK", dataSourcePath);
-        retro.putExtra("SDCARD", Environment.getExternalStorageDirectory().getAbsolutePath());
-        String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
-        retro.putExtra("EXTERNAL", external);
-    }
-
-    @Override
-    public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        PACKAGE_NAME = getPackageName();
-        setVolumeControlStream(AudioManager.STREAM_MUSIC);
-        checkRuntimePermissions();
-    }
-}
+} 

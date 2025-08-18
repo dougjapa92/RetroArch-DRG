@@ -75,7 +75,9 @@ public class CoreSideloadActivity extends Activity {
         protected String doInBackground(Void... voids) {
             SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(CoreSideloadActivity.this);
             boolean alreadyExtracted = prefs.getBoolean("assets_extracted", false);
-            if (alreadyExtracted) return null; // não extrai novamente
+
+            // verifica se todas as pastas e cfg já existem
+            if (alreadyExtracted && verifyAllFilesExist()) return null;
 
             ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length, 4));
 
@@ -97,8 +99,23 @@ public class CoreSideloadActivity extends Activity {
 
             try { generateRetroarchCfg(); } catch (IOException e) { return e.getMessage(); }
 
-            prefs.edit().putBoolean("assets_extracted", true).apply(); // marca extração completa
+            // salva flag somente após sucesso
+            prefs.edit().putBoolean("assets_extracted", true).apply();
+
             return null;
+        }
+
+        private boolean verifyAllFilesExist() {
+            boolean allExist = true;
+            for (String folder : ASSET_FOLDERS) {
+                File dir = new File(BASE_DIR, folder);
+                if (!dir.exists() || dir.listFiles() == null || dir.listFiles().length == 0) {
+                    allExist = false;
+                    break;
+                }
+            }
+            File cfg = new File(BASE_DIR, "retroarch.cfg");
+            return allExist && cfg.exists();
         }
 
         private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {

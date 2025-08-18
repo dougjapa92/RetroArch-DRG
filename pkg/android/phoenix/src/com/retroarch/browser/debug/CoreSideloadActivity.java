@@ -10,15 +10,14 @@ import android.preference.PreferenceManager;
 import android.provider.Settings;
 
 import com.retroarch.browser.mainmenu.MainMenuActivity;
-import com.retroarch.browser.preferences.util.UserPreferences;
 import com.retroarch.browser.retroactivity.RetroActivityFuture;
+import com.retroarch.browser.preferences.util.UserPreferences;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -70,7 +69,9 @@ public class CoreSideloadActivity extends Activity {
                 int total = 0;
                 for (String asset : assets) total += countFilesRecursive(assetFolder + "/" + asset);
                 return total;
-            } catch (IOException e) { return 0; }
+            } catch (IOException e) {
+                return 0;
+            }
         }
 
         @Override
@@ -79,8 +80,11 @@ public class CoreSideloadActivity extends Activity {
 
             for (String folder : ASSET_FOLDERS) {
                 executor.submit(() -> {
-                    try { copyAssetFolder(folder, new File(BASE_DIR, folder)); }
-                    catch (IOException e) { e.printStackTrace(); }
+                    try {
+                        copyAssetFolder(folder, new File(BASE_DIR, folder));
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                 });
             }
 
@@ -91,7 +95,6 @@ public class CoreSideloadActivity extends Activity {
             }
 
             try { generateRetroarchCfg(); } catch (IOException e) { return e.getMessage(); }
-
             return null;
         }
 
@@ -158,7 +161,8 @@ public class CoreSideloadActivity extends Activity {
             );
 
             startActivity(retro);
-            finish();
+            finishAffinity(); // encerra todas as Activities anteriores
+            System.exit(0);   // garante encerramento do app
         }
     }
 }

@@ -44,7 +44,6 @@ public class MainMenuActivity extends Activity {
                     File newOutFile = new File(outDir, asset);
 
                     if (isUserDataFolder(outDir.getAbsolutePath())) {
-                        // Pasta do usuário → não sobrescreve arquivos existentes
                         copyAssetPreserveUserData(newAssetPath, newOutFile);
                     } else {
                         copyAssetFolder(newAssetPath, newOutFile);
@@ -63,8 +62,9 @@ public class MainMenuActivity extends Activity {
         return lower.contains("/save") || lower.contains("/states") || lower.contains("/savestates");
     }
 
+    // Copia arquivos do asset sem sobrescrever os existentes do usuário
     private void copyAssetPreserveUserData(String assetPath, File outFile) throws IOException {
-        if (outFile.exists()) return; // Não sobrescreve arquivos do usuário
+        if (outFile.exists()) return; // preserva arquivos existentes
         if (!outFile.getParentFile().exists()) outFile.getParentFile().mkdirs();
 
         InputStream in = getAssets().open(assetPath);
@@ -79,6 +79,7 @@ public class MainMenuActivity extends Activity {
         out.close();
     }
 
+    // Cópia normal para assets que podem ser sobrescritos
     private void copyAsset(String assetPath, File outFile) throws IOException {
         if (!outFile.getParentFile().exists()) outFile.getParentFile().mkdirs();
 
@@ -108,7 +109,7 @@ public class MainMenuActivity extends Activity {
 
         String configPath = CUSTOM_BASE_DIR + "/retroarch.cfg";
 
-        startRetroActivity(
+        startRetroActivity(this,
                 retro,
                 null,
                 CUSTOM_BASE_DIR + "/cores/",
@@ -121,9 +122,10 @@ public class MainMenuActivity extends Activity {
         finish();
     }
 
-    public void startRetroActivity(Intent retro, String rom, String corePath,
-                                   String configPath, String ime,
-                                   String externalFilesDir, String apkPath) {
+    // Método estático para chamadas externas sem instância
+    public static void startRetroActivity(Activity activity, Intent retro, String rom, String corePath,
+                                          String configPath, String ime,
+                                          String externalFilesDir, String apkPath) {
         retro.putExtra("ROM", rom);
         retro.putExtra("LIBRETRO", corePath);
         retro.putExtra("CONFIGFILE", configPath);

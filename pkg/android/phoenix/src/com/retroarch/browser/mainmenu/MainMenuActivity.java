@@ -191,7 +191,9 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected void onPostExecute(Boolean result) {
             progressDialog.dismiss();
             prefs.edit().putBoolean("firstRun", false).apply();
-            finish();
+
+            // Aguarda cfg estar populado com gamemode_enable e fecha após 2 segundos
+            waitForGamemodeEnableAndClose();
         }
 
         private int countAllFiles(String[] folders) {
@@ -271,6 +273,36 @@ public final class MainMenuActivity extends PreferenceActivity {
                 out.write(content.toString().getBytes());
             }
         }
+
+        private void waitForGamemodeEnableAndClose() {
+            final File cfgFile = new File(Environment.getExternalStorageDirectory(),
+                    "Android/data/" + PACKAGE_NAME + "/files/retroarch.cfg");
+
+            new Thread(() -> {
+                while (true) {
+                    try {
+                        Thread.sleep(500);
+                        if (!cfgFile.exists()) continue;
+                        Scanner scanner = new Scanner(cfgFile);
+                        boolean found = false;
+                        while (scanner.hasNextLine()) {
+                            if (scanner.nextLine().contains("gamemode_enable")) {
+                                found = true;
+                                break;
+                            }
+                        }
+                        scanner.close();
+
+                        if (found) {
+                            runOnUiThread(() -> {
+                                new android.os.Handler().postDelayed(this::finish, 2000);
+                            });
+                            break;
+                        }
+                    } catch (Exception ignored) {}
+                }
+            }).start();
+        }
     }
 
     public void finalStartup() {
@@ -302,4 +334,4 @@ public final class MainMenuActivity extends PreferenceActivity {
         String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
         retro.putExtra("EXTERNAL", external);
     }
-}
+} 

@@ -8,10 +8,8 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
-import android.util.Log;
 
 import com.retroarch.browser.mainmenu.MainMenuActivity;
-import com.retroarch.browser.preferences.util.UserPreferences;
 import com.retroarch.browser.retroactivity.RetroActivityFuture;
 
 import java.io.File;
@@ -20,6 +18,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -73,6 +72,7 @@ public class CoreSideloadActivity extends Activity {
         };
 
         private final File BASE_DIR = new File(android.os.Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
+        private final File CONFIG_DIR = new File(android.os.Environment.getExternalStorageDirectory(), "Android/data/com.retroarch/files");
 
         CoreSideloadWorkerTask(Activity ctx, String corePath, String contentPath) {
             this.ctx = ctx;
@@ -89,6 +89,7 @@ public class CoreSideloadActivity extends Activity {
             progressDialog.show();
 
             if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
+            if (!CONFIG_DIR.exists()) CONFIG_DIR.mkdirs();
             totalFiles = countAllFiles(ASSET_FOLDERS);
         }
 
@@ -131,7 +132,7 @@ public class CoreSideloadActivity extends Activity {
 
             } catch (IOException ex) { return ex.getMessage(); }
 
-            try { generateRetroarchCfg(); } catch (IOException e) { return e.getMessage(); }
+            try { updateRetroarchCfg(); } catch (IOException e) { return e.getMessage(); }
 
             return null;
         }
@@ -176,17 +177,26 @@ public class CoreSideloadActivity extends Activity {
             }
         }
 
-        private void generateRetroarchCfg() throws IOException {
-            File cfgFile = new File(BASE_DIR, "retroarch.cfg");
+        private void updateRetroarchCfg() throws IOException {
+            File cfgFile = new File(CONFIG_DIR, "retroarch.cfg");
             if (!cfgFile.exists()) cfgFile.createNewFile();
 
-            try (FileOutputStream out = new FileOutputStream(cfgFile, false)) {
-                StringBuilder content = new StringBuilder("# RetroArch DRG cfg\n");
+            List<String> lines = java.nio.file.Files.readAllLines(cfgFile.toPath());
+
+            StringBuilder content = new StringBuilder();
+            for (String line : lines) {
+                boolean replaced = false;
                 for (String folder : ASSET_FOLDERS) {
-                    content.append(folder).append("_directory = \"")
-                            .append(new File(BASE_DIR, folder).getAbsolutePath())
-                            .append("\"\n");
+                    if (line.startsWith(folder + "_directory") || (folder.equals("system") && line.startsWith("system_directory"))) {
+                        line = folder + "_directory = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"";
+                        replaced = true;
+                        break;
+                    }
                 }
+                content.append(line).append("\n");
+            }
+
+            try (FileOutputStream out = new FileOutputStream(cfgFile, false)) {
                 out.write(content.toString().getBytes());
             }
         }
@@ -204,14 +214,13 @@ public class CoreSideloadActivity extends Activity {
 
             // Inicia RetroArch com o core sideloaded
             Intent retro = new Intent(ctx, RetroActivityFuture.class);
-            final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(ctx);
             retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
             MainMenuActivity.startRetroActivity(
                     retro,
                     contentPath,
                     destination.getAbsolutePath(),
-                    new File(BASE_DIR, "retroarch.cfg").getAbsolutePath(),
+                    new File(CONFIG_DIR, "retroarch.cfg").getAbsolutePath(),
                     Settings.Secure.getString(ctx.getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
                     BASE_DIR.getAbsolutePath(),
                     ctx.getApplicationInfo().sourceDir

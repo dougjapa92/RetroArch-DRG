@@ -1,13 +1,18 @@
 package com.retroarch.browser.debug;
 
 import android.app.Activity;
-import android.app.ProgressDialog;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.provider.Settings;
+import android.util.Log;
+import android.widget.TextView;
 
 import com.retroarch.browser.mainmenu.MainMenuActivity;
+import com.retroarch.browser.preferences.util.UserPreferences;
 import com.retroarch.browser.retroactivity.RetroActivityFuture;
 
 import java.io.File;
@@ -16,171 +21,162 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
 
-public class CoreSideloadActivity extends Activity {
-
+/**
+ * This activity allows developers to sideload and run a core
+ * from their PC through adb
+ *
+ * Usage : see Phoenix Gradle Build README.md
+ */
+public class CoreSideloadActivity extends Activity
+{
     private static final String EXTRA_CORE = "LIBRETRO";
     private static final String EXTRA_CONTENT = "ROM";
 
-    private ProgressDialog progressDialog;
+    private TextView textView;
     private CoreSideloadWorkerTask workerThread;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        if (!getIntent().hasExtra(EXTRA_CORE)) {
-            finish();
+        // The most simple layout is no layout at all
+        textView = new TextView(this);
+        setContentView(textView);
+
+        // Check that we have at least the core extra
+        if (!getIntent().hasExtra(EXTRA_CORE))
+        {
+            textView.setText("Missing extra \"LIBRETRO\"");
             return;
         }
 
-        workerThread = new CoreSideloadWorkerTask(
-                getIntent().getStringExtra(EXTRA_CORE),
-                getIntent().getStringExtra(EXTRA_CONTENT)
-        );
+        // Start our worker thread
+        workerThread = new CoreSideloadWorkerTask(this, textView, getIntent().getStringExtra(EXTRA_CORE), getIntent().getStringExtra(EXTRA_CONTENT));
         workerThread.execute();
     }
 
     @Override
     protected void onDestroy() {
-        if (workerThread != null) {
+        if (workerThread != null)
+        {
             workerThread.cancel(true);
             workerThread = null;
         }
         super.onDestroy();
     }
 
-    private class CoreSideloadWorkerTask extends AsyncTask<Void, Integer, String> {
-
-        private final String corePath;
-        private final String contentPath;
+    private static class CoreSideloadWorkerTask extends AsyncTask<Void, Integer, String>
+    {
+        private TextView progressTextView;
+        private String core;
+        private String content;
+        private Activity ctx;
         private File destination;
-        private AtomicInteger processedFiles = new AtomicInteger(0);
-        private int totalFiles = 0;
 
-        private final String[] ASSET_FOLDERS = {
-                "assets", "autoconfig", "cores", "database",
-                "filters", "info", "overlays", "shaders", "system"
-        };
-
-        private final File BASE_DIR = new File(android.os.Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
-        private final File CONFIG_DIR = new File(android.os.Environment.getExternalStorageDirectory() + "/Android/data/com.retroarch/files");
-
-        CoreSideloadWorkerTask(String corePath, String contentPath) {
-            this.corePath = corePath;
-            this.contentPath = contentPath;
+        public CoreSideloadWorkerTask(Activity ctx, TextView progressTextView, String corePath, String contentPath)
+        {
+            this.progressTextView = progressTextView;
+            this.core = corePath;
+            this.ctx = ctx;
+            this.content = contentPath;
         }
 
         @Override
         protected void onPreExecute() {
-            progressDialog = new ProgressDialog(CoreSideloadActivity.this);
-            progressDialog.setMessage("Configurando RetroArch DRG...\n\nO aplicativo encerrará após configuração inicial.");
-            progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
-            progressDialog.setCancelable(false);
-            progressDialog.show();
-
-            if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
-            totalFiles = ASSET_FOLDERS.length; // apenas referência para progress
+            super.onPreExecute();
+            progressTextView.setText("Sideloading...");
         }
 
         @Override
         protected String doInBackground(Void... voids) {
-            ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length, 4));
+            File coreFile = new File(core);
+            File corePath = new File(UserPreferences.getPreferences(ctx).getString("libretro_path", ctx.getApplicationInfo().dataDir + "/cores/"));
 
-            for (String folder : ASSET_FOLDERS) {
-                executor.submit(() -> {
-                    try {
-                        copyAssetFolder(folder, new File(BASE_DIR, folder));
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
-                    processedFiles.incrementAndGet();
-                });
-            }
+            // Check that both files exist
+            if (!coreFile.exists())
+                return "Input file doesn't exist (" + core + ")";
 
-            executor.shutdown();
-            while (!executor.isTerminated()) {
-                publishProgress((processedFiles.get() * 100) / totalFiles);
-                try { Thread.sleep(100); } catch (InterruptedException ignored) {}
-            }
+            if (!corePath.exists())
+                return "Destination directory doesn't exist (" + corePath.getAbsolutePath() + ")";
 
-            // Copia o core para cores/
-            File coreFile = new File(corePath);
-            File coresDir = new File(BASE_DIR, "cores");
-            if (!coresDir.exists()) coresDir.mkdirs();
-            destination = new File(coresDir, coreFile.getName());
+            destination = new File(corePath, coreFile.getName());
 
-            try (InputStream in = new FileInputStream(coreFile);
-                 OutputStream out = new FileOutputStream(destination)) {
+            // Copy it
+            Log.d("sideload", "Copying " + coreFile.getAbsolutePath() + " to " + destination.getAbsolutePath());
+            long copied = 0;
+            long max = coreFile.length();
+            try
+            {
+                InputStream is = new FileInputStream(coreFile);
+                OutputStream os = new FileOutputStream(destination);
 
                 byte[] buf = new byte[1024];
                 int length;
-                while ((length = in.read(buf)) != -1) out.write(buf, 0, length);
 
-            } catch (IOException ex) { return ex.getMessage(); }
+                while ((length = is.read(buf)) > 0)
+                {
+                    os.write(buf, 0, length);
+
+                    copied += length;
+                    publishProgress((int)(copied / max * 100));
+                }
+
+                is.close();
+                os.close();
+            }
+            catch (IOException ex)
+            {
+                ex.printStackTrace();
+                return ex.getMessage();
+            }
 
             return null;
         }
 
-        private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
-            String[] assets = getAssets().list(assetFolder);
-            if (!targetFolder.exists()) targetFolder.mkdirs();
-
-            if (assets != null && assets.length > 0) {
-                for (String asset : assets) {
-                    String fullPath = assetFolder + "/" + asset;
-                    File outFile = new File(targetFolder, asset);
-
-                    if (getAssets().list(fullPath).length > 0) {
-                        copyAssetFolder(fullPath, outFile);
-                    } else {
-                        try (InputStream in = getAssets().open(fullPath);
-                             FileOutputStream out = new FileOutputStream(outFile)) {
-                            byte[] buffer = new byte[1024];
-                            int read;
-                            while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
-                        }
-                    }
-                }
-            }
-        }
-
         @Override
         protected void onProgressUpdate(Integer... values) {
-            if (values.length > 0) progressDialog.setProgress(values[0]);
+            super.onProgressUpdate(values);
+
+            if (values.length > 0)
+                progressTextView.setText("Sideloading: " + values[0] + "%");
         }
 
         @Override
         protected void onPostExecute(String s) {
-            progressDialog.dismiss();
+            super.onPostExecute(s);
 
-            if (s != null) progressDialog.setMessage("Erro: " + s);
+            // Everything went as expected
+            if (s == null)
+            {
+                progressTextView.setText("Done!");
 
-            // Inicia RetroArch com o core sideloaded usando o mesmo cfg do MainMenuActivity
-            File cfgFile = new File(CONFIG_DIR, "retroarch.cfg");
-            if (!cfgFile.exists()) {
-                // Caso o arquivo não exista, sinaliza erro
-                return;
-            }
+                // Run RA with our newly sideloaded core (and content)
+                Intent retro = new Intent(ctx, RetroActivityFuture.class);
 
-            Intent retro = new Intent(CoreSideloadActivity.this, RetroActivityFuture.class);
-            retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(ctx);
 
-            MainMenuActivity.startRetroActivity(
+                retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+                Log.d("sideload", "Running RetroArch with core " + destination.getAbsolutePath());
+
+                MainMenuActivity.startRetroActivity(
                     retro,
-                    contentPath,
+                    content,
                     destination.getAbsolutePath(),
-                    cfgFile.getAbsolutePath(),
-                    Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
-                    BASE_DIR.getAbsolutePath(),
-                    getApplicationInfo().sourceDir
-            );
+                    UserPreferences.getDefaultConfigPath(ctx),
+                    Settings.Secure.getString(ctx.getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
+                    ctx.getApplicationInfo().dataDir,
+                    ctx.getApplicationInfo().sourceDir);
 
-            startActivity(retro);
-            finish();
+                ctx.startActivity(retro);
+                ctx.finish();
+            }
+            // An error occured
+            else
+            {
+                progressTextView.setText("Error: " + s);
+            }
         }
     }
 }

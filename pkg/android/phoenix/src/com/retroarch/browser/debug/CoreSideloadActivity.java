@@ -6,7 +6,6 @@ import android.content.Intent;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.FileObserver;
-import android.preference.PreferenceManager;
 import android.provider.Settings;
 
 import com.retroarch.browser.mainmenu.MainMenuActivity;
@@ -104,8 +103,6 @@ public class CoreSideloadActivity extends Activity {
             progressDialog.dismiss();
 
             // Inicia RetroArch com o core sideloaded usando o cfg existente
-            File retroCfg = new File(BASE_DIR, "retroarch.cfg");
-
             Intent retro = new Intent(ctx, RetroActivityFuture.class);
             retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
@@ -113,37 +110,41 @@ public class CoreSideloadActivity extends Activity {
                     retro,
                     contentPath,
                     destination.getAbsolutePath(),
-                    retroCfg.getAbsolutePath(),
+                    new File(BASE_DIR, "retroarch.cfg").getAbsolutePath(),
                     Settings.Secure.getString(ctx.getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
                     BASE_DIR.getAbsolutePath(),
                     ctx.getApplicationInfo().sourceDir
             );
 
-            ctx.startActivity(retro);
-
-            // Monitora alterações no retroarch.cfg para saber quando ele estiver completo
+            // Monitora o retroarch.cfg para fechar o app apenas após estar completo
+            File retroCfg = new File(BASE_DIR, "retroarch.cfg");
             FileObserver cfgWatcher = new FileObserver(retroCfg.getAbsolutePath(), FileObserver.MODIFY) {
                 @Override
                 public void onEvent(int event, String path) {
                     if (event == FileObserver.MODIFY) {
                         if (isCfgComplete(retroCfg)) {
                             stopWatching();
-                            // Fecha o aplicativo de forma limpa quando cfg estiver completo
                             runOnUiThread(() -> ctx.finishAffinity());
                         }
                     }
                 }
             };
             cfgWatcher.startWatching();
+
+            ctx.startActivity(retro);
         }
 
+        // Verifica se o retroarch.cfg já foi totalmente populado
         private boolean isCfgComplete(File cfgFile) {
-            // Heurística: verifica se contém configurações essenciais
+            if (!cfgFile.exists()) return false;
             try {
-                String content = new String(java.nio.file.Files.readAllBytes(cfgFile.toPath()));
-                return content.contains("video_driver") &&
-                       content.contains("audio_driver") &&
-                       content.contains("input_driver");
+                byte[] content = new byte[(int) cfgFile.length()];
+                try (FileInputStream fis = new FileInputStream(cfgFile)) {
+                    fis.read(content);
+                }
+                String cfgText = new String(content);
+                // Exemplo de verificação: se contém todos os diretórios esperados
+                return cfgText.contains("system_directory") && cfgText.contains("cores_directory");
             } catch (IOException e) {
                 return false;
             }

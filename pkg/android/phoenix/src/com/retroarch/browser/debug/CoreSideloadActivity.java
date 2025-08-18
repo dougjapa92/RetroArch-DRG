@@ -8,7 +8,7 @@ import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.widget.Toast;
 
-import com.retroarch.browser.mainmenu.MainMenuActivity;
+import com.retroarch.browser.preferences.util.UserPreferences;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -79,7 +79,6 @@ public class CoreSideloadActivity extends Activity {
             SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(CoreSideloadActivity.this);
             boolean alreadyExtracted = prefs.getBoolean("assets_extracted", false);
 
-            // verifica se todas as pastas e cfg já existem
             if (alreadyExtracted && verifyAllFilesExist()) return null;
 
             ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length, 4));
@@ -102,9 +101,7 @@ public class CoreSideloadActivity extends Activity {
 
             try { generateRetroarchCfg(); } catch (IOException e) { return e.getMessage(); }
 
-            // salva flag somente após sucesso
             prefs.edit().putBoolean("assets_extracted", true).apply();
-
             return null;
         }
 
@@ -170,7 +167,6 @@ public class CoreSideloadActivity extends Activity {
             progressDialog.dismiss();
             if (s != null) Toast.makeText(CoreSideloadActivity.this, "Erro: " + s, Toast.LENGTH_LONG).show();
 
-            // encerra app após extração
             finishAffinity();
             System.exit(0);
         }

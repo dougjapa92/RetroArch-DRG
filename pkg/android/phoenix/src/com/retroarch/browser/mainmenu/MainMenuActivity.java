@@ -14,6 +14,7 @@ import android.os.Environment;
 import android.preference.PreferenceActivity;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
+import android.util.Log;
 import android.content.pm.PackageManager;
 import android.Manifest;
 
@@ -26,6 +27,7 @@ import java.util.ArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Scanner;
 
 public final class MainMenuActivity extends PreferenceActivity {
 
@@ -40,7 +42,6 @@ public final class MainMenuActivity extends PreferenceActivity {
     };
 
     private final File BASE_DIR = new File(Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
-    private final File CONFIG_DIR = new File(Environment.getExternalStorageDirectory() + "/Android/data/com.retroarch/files");
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -165,11 +166,8 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             for (String folder : ASSET_FOLDERS) {
                 executor.submit(() -> {
-                    try {
-                        copyAssetFolder(folder, new File(BASE_DIR, folder));
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
+                    try { copyAssetFolder(folder, new File(BASE_DIR, folder)); }
+                    catch (IOException e) { e.printStackTrace(); }
                 });
             }
 
@@ -239,16 +237,37 @@ public final class MainMenuActivity extends PreferenceActivity {
         }
 
         private void generateRetroarchCfg() throws IOException {
-            File cfgFile = new File(CONFIG_DIR, "retroarch.cfg");
-            if (!cfgFile.exists()) cfgFile.createNewFile();
+            File dataDirCfg = new File(Environment.getExternalStorageDirectory() + "/Android/data/" + PACKAGE_NAME + "/files/retroarch.cfg");
+            File cfgFile = new File(BASE_DIR, "retroarch.cfg");
 
-            try (FileOutputStream out = new FileOutputStream(cfgFile, false)) {
-                StringBuilder content = new StringBuilder("# RetroArch DRG cfg\n");
-                for (String folder : ASSET_FOLDERS) {
-                    content.append(folder).append("_directory = \"")
-                            .append(new File(BASE_DIR, folder).getAbsolutePath())
-                            .append("\"\n");
+            StringBuilder content = new StringBuilder();
+
+            // Se existir cfg padrão, lê e usa como base
+            if (dataDirCfg.exists()) {
+                try (Scanner scanner = new Scanner(dataDirCfg)) {
+                    while (scanner.hasNextLine()) {
+                        content.append(scanner.nextLine()).append("\n");
+                    }
                 }
+            }
+
+            // Substitui ou adiciona os diretórios de assets
+            for (String folder : ASSET_FOLDERS) {
+                String key = folder + "_directory";
+                String line = key + " = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"";
+
+                // Substituir linha existente se estiver presente
+                int index = content.indexOf(key + " =");
+                if (index >= 0) {
+                    int endIndex = content.indexOf("\n", index);
+                    content.replace(index, endIndex, line);
+                } else {
+                    content.append(line).append("\n");
+                }
+            }
+
+            // Salva cfg completo no diretório padrão
+            try (FileOutputStream out = new FileOutputStream(dataDirCfg, false)) {
                 out.write(content.toString().getBytes());
             }
         }
@@ -262,7 +281,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 retro,
                 null,
                 new File(BASE_DIR, "cores").getAbsolutePath(),
-                new File(CONFIG_DIR, "retroarch.cfg").getAbsolutePath(),
+                new File(Environment.getExternalStorageDirectory() + "/Android/data/" + PACKAGE_NAME + "/files/retroarch.cfg").getAbsolutePath(),
                 Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
                 BASE_DIR.getAbsolutePath(),
                 getApplicationInfo().sourceDir

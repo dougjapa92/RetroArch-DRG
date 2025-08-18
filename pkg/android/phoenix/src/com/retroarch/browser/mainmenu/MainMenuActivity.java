@@ -98,7 +98,7 @@ public class MainMenuActivity extends Activity {
             }
         }
 
-        private static void updateRetroarchCfg(File cfgFile) {
+        public static void updateRetroarchCfg(File cfgFile) {
             try (FileOutputStream fos = new FileOutputStream(cfgFile, false)) {
                 String cfg =
                         "audio_out_rate = \"48000\"\n" +

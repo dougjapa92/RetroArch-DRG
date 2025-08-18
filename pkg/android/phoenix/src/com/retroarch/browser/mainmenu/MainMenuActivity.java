@@ -137,7 +137,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         if (firstRun) {
             new UnifiedExtractionTask().execute();
         } else {
-            finalStartup();
+            finalStartup(false);
         }
     }
 
@@ -193,7 +193,9 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected void onPostExecute(Boolean result) {
             progressDialog.dismiss();
             prefs.edit().putBoolean("firstRun", false).apply();
-            finalStartup();
+
+            // Executa finalStartup com delay de encerramento
+            finalStartup(true);
         }
 
         private int countAllFiles(String[] folders) {
@@ -264,7 +266,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         }
     }
 
-    public void finalStartup() {
+    public void finalStartup(boolean finishAfterDelay) {
         Intent retro = new Intent(this, RetroActivityFuture.class);
         retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
@@ -277,13 +279,34 @@ public final class MainMenuActivity extends PreferenceActivity {
                 BASE_DIR.getAbsolutePath(),
                 getApplicationInfo().sourceDir
         );
+
         startActivity(retro);
 
-        // Encerra completamente o app 3 segundos depois
-        new android.os.Handler().postDelayed(() -> {
-            finishAffinity();  // finaliza todas as Activities
-            System.exit(0);    // finaliza o processo do app
-        }, 3000);
+        if (finishAfterDelay) {
+            ProgressDialog closingDialog = new ProgressDialog(this);
+            closingDialog.setMessage("Encerrando...");
+            closingDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+            closingDialog.setMax(8000); // 8 segundos
+            closingDialog.setCancelable(false);
+            closingDialog.show();
+
+            new Thread(() -> {
+                int progress = 0;
+                while (progress < 8000) {
+                    try {
+                        Thread.sleep(100);
+                        progress += 100;
+                        int finalProgress = progress;
+                        runOnUiThread(() -> closingDialog.setProgress(finalProgress));
+                    } catch (InterruptedException ignored) {}
+                }
+                runOnUiThread(() -> {
+                    closingDialog.dismiss();
+                    finish();
+                    overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+                });
+            }).start();
+        }
     }
 
     public static void startRetroActivity(Intent retro, String contentPath, String corePath,

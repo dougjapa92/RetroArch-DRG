@@ -1,18 +1,14 @@
 package com.retroarch.browser.mainmenu;
 
-import com.retroarch.browser.preferences.util.UserPreferences;
 import com.retroarch.browser.retroactivity.RetroActivityFuture;
 
-import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.media.AudioManager;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Environment;
 import android.preference.PreferenceActivity;
-import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.util.Log;
 import android.content.pm.PackageManager;
@@ -29,18 +25,16 @@ import java.io.OutputStream;
 public final class MainMenuActivity extends PreferenceActivity {
     private static final int REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS = 124;
     private static final String MEDIA_DIR = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/media/com.retroarch";
+    private static final String EXTRACT_FLAG = "extracted_assets";
     public static String PACKAGE_NAME;
     boolean checkPermissions = false;
-
     private ProgressDialog progressDialog;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
         PACKAGE_NAME = getPackageName();
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
-
         checkRuntimePermissions();
     }
 
@@ -68,7 +62,6 @@ public final class MainMenuActivity extends PreferenceActivity {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
             java.util.List<String> permissionsNeeded = new java.util.ArrayList<>();
             final java.util.List<String> permissionsList = new java.util.ArrayList<>();
-
             if (!addPermission(permissionsList, Manifest.permission.READ_EXTERNAL_STORAGE))
                 permissionsNeeded.add("Read External Storage");
             if (!addPermission(permissionsList, Manifest.permission.WRITE_EXTERNAL_STORAGE))
@@ -84,6 +77,8 @@ public final class MainMenuActivity extends PreferenceActivity {
                     showMessageOKCancel(message, (dialog, which) -> {
                         if (which == AlertDialog.BUTTON_POSITIVE) {
                             requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
+                        } else {
+                            finish();
                         }
                     });
                 } else {
@@ -91,10 +86,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 }
             }
         }
-
-        if (!checkPermissions) {
-            startExtraction();
-        }
+        if (!checkPermissions) startExtraction();
     }
 
     @Override
@@ -102,12 +94,12 @@ public final class MainMenuActivity extends PreferenceActivity {
         switch (requestCode) {
             case REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS:
                 boolean allGranted = true;
-                for (int i = 0; i < permissions.length; i++) {
+                for (int i = 0; i < permissions.length; i++)
                     if (grantResults[i] != PackageManager.PERMISSION_GRANTED) allGranted = false;
-                }
+
                 if (!allGranted) {
                     new AlertDialog.Builder(this)
-                            .setMessage("Permissões negadas. Por favor, habilite as permissões nas configurações ou reinstale o aplicativo.")
+                            .setMessage("Permissões negadas. Por favor, habilite nas configurações ou reinstale o aplicativo.")
                             .setCancelable(false)
                             .setPositiveButton("OK", (dialog, which) -> finish())
                             .create()
@@ -117,55 +109,82 @@ public final class MainMenuActivity extends PreferenceActivity {
                 break;
             default:
                 super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-                break;
         }
         startExtraction();
     }
 
     private void startExtraction() {
+        android.content.SharedPreferences prefs = android.preference.PreferenceManager.getDefaultSharedPreferences(this);
+        boolean alreadyExtracted = prefs.getBoolean(EXTRACT_FLAG, false);
+        if (alreadyExtracted) {
+            launchRetroActivity();
+            return;
+        }
+
         new AsyncTask<Void, Integer, Void>() {
+            long totalBytes = 0;
+            long copiedBytes = 0;
+
             @Override
             protected void onPreExecute() {
                 progressDialog = new ProgressDialog(MainMenuActivity.this);
                 progressDialog.setMessage("Configurando RetroArch DRG...\n\nO aplicativo encerrará após configuração inicial.");
                 progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
                 progressDialog.setCancelable(false);
+                progressDialog.setMax(100);
                 progressDialog.show();
             }
 
             @Override
             protected Void doInBackground(Void... voids) {
-                extractAssets("");
-                publishProgress(100);
+                try {
+                    totalBytes = calculateTotalSize("");
+                    extractAssets("");
+                } catch (IOException e) {
+                    Log.e("MainMenuActivity", "Erro na extração", e);
+                }
                 return null;
             }
 
-            private void extractAssets(String path) {
-                try {
-                    String[] assets = getAssets().list(path);
-                    if (assets == null || assets.length == 0) {
-                        copyAsset(path, new File(MEDIA_DIR, path));
-                        return;
-                    }
-                    for (String asset : assets) {
-                        String newPath = path.isEmpty() ? asset : path + "/" + asset;
-                        extractAssets(newPath);
-                    }
-                } catch (IOException e) {
-                    Log.e("MainMenuActivity", "Erro na extração: " + path, e);
+            private long calculateTotalSize(String path) throws IOException {
+                long size = 0;
+                String[] assets = getAssets().list(path);
+                if (assets == null || assets.length == 0) {
+                    InputStream in = getAssets().open(path);
+                    size += in.available();
+                    in.close();
+                    return size;
                 }
+                for (String asset : assets) {
+                    String newPath = path.isEmpty() ? asset : path + "/" + asset;
+                    size += calculateTotalSize(newPath);
+                }
+                return size;
             }
 
-            private void copyAsset(String assetPath, File outFile) throws IOException {
-                if (!outFile.getParentFile().exists()) outFile.getParentFile().mkdirs();
-                InputStream in = getAssets().open(assetPath);
-                OutputStream out = new FileOutputStream(outFile);
-                byte[] buffer = new byte[4096];
-                int read;
-                while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
-                in.close();
-                out.flush();
-                out.close();
+            private void extractAssets(String path) throws IOException {
+                String[] assets = getAssets().list(path);
+                if (assets == null || assets.length == 0) {
+                    File outFile = new File(MEDIA_DIR, path);
+                    if (!outFile.getParentFile().exists()) outFile.getParentFile().mkdirs();
+                    InputStream in = getAssets().open(path);
+                    OutputStream out = new FileOutputStream(outFile);
+                    byte[] buffer = new byte[32768];
+                    int read;
+                    while ((read = in.read(buffer)) != -1) {
+                        out.write(buffer, 0, read);
+                        copiedBytes += read;
+                        publishProgress((int) ((copiedBytes * 100L) / totalBytes));
+                    }
+                    in.close();
+                    out.flush();
+                    out.close();
+                    return;
+                }
+                for (String asset : assets) {
+                    String newPath = path.isEmpty() ? asset : path + "/" + asset;
+                    extractAssets(newPath);
+                }
             }
 
             @Override
@@ -177,6 +196,9 @@ public final class MainMenuActivity extends PreferenceActivity {
             protected void onPostExecute(Void aVoid) {
                 progressDialog.dismiss();
                 updateRetroarchCfg();
+                android.content.SharedPreferences.Editor editor = android.preference.PreferenceManager.getDefaultSharedPreferences(MainMenuActivity.this).edit();
+                editor.putBoolean(EXTRACT_FLAG, true);
+                editor.apply();
                 launchRetroActivity();
             }
         }.execute();
@@ -207,7 +229,6 @@ public final class MainMenuActivity extends PreferenceActivity {
     private void launchRetroActivity() {
         Intent retro = new Intent(this, RetroActivityFuture.class);
         retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-
         retro.putExtra("LIBRETRO", MEDIA_DIR + "/cores");
         retro.putExtra("CONFIGFILE", new File(getFilesDir(), "retroarch.cfg").getAbsolutePath());
         retro.putExtra("IME", Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD));
@@ -215,28 +236,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         retro.putExtra("APK", getApplicationInfo().sourceDir);
         retro.putExtra("SDCARD", Environment.getExternalStorageDirectory().getAbsolutePath());
         retro.putExtra("EXTERNAL", MEDIA_DIR);
-
         startActivity(retro);
         finish();
     }
-
-    // MÉTODO ESTÁTICO PARA COMPATIBILIDADE COM CoreSideloadActivity
-    public static void startRetroActivity(
-            Intent retro,
-            String contentPath,
-            String corePath,
-            String configFilePath,
-            String imePath,
-            String dataDirPath,
-            String dataSourcePath
-    ) {
-        if (contentPath != null) retro.putExtra("ROM", contentPath);
-        retro.putExtra("LIBRETRO", corePath);
-        retro.putExtra("CONFIGFILE", configFilePath);
-        retro.putExtra("IME", imePath);
-        retro.putExtra("DATADIR", dataDirPath);
-        retro.putExtra("APK", dataSourcePath);
-        retro.putExtra("SDCARD", Environment.getExternalStorageDirectory().getAbsolutePath());
-        retro.putExtra("EXTERNAL", MEDIA_DIR);
-    }
-} 
+}

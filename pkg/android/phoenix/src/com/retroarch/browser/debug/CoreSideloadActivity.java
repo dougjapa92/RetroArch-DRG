@@ -2,32 +2,24 @@ package com.retroarch.browser.debug;
 
 import android.app.Activity;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.AsyncTask;
-import android.os.Build;
 import android.os.Bundle;
-import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.util.Log;
 import android.widget.TextView;
 
-import com.retroarch.browser.mainmenu.MainMenuActivity;
 import com.retroarch.browser.preferences.util.UserPreferences;
 import com.retroarch.browser.retroactivity.RetroActivityFuture;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
+import java.io.RandomAccessFile;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
-/**
- * This activity allows developers to sideload and run a core
- * from their PC through adb
- *
- * Usage : see Phoenix Gradle Build README.md
- */
 public class CoreSideloadActivity extends Activity
 {
     private static final String EXTRA_CORE = "LIBRETRO";
@@ -40,26 +32,25 @@ public class CoreSideloadActivity extends Activity
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // The most simple layout is no layout at all
         textView = new TextView(this);
         setContentView(textView);
 
-        // Check that we have at least the core extra
-        if (!getIntent().hasExtra(EXTRA_CORE))
-        {
+        if (!getIntent().hasExtra(EXTRA_CORE)) {
             textView.setText("Missing extra \"LIBRETRO\"");
             return;
         }
 
-        // Start our worker thread
-        workerThread = new CoreSideloadWorkerTask(this, textView, getIntent().getStringExtra(EXTRA_CORE), getIntent().getStringExtra(EXTRA_CONTENT));
+        workerThread = new CoreSideloadWorkerTask(
+                this,
+                textView,
+                getIntent().getStringExtra(EXTRA_CORE),
+                getIntent().getStringExtra(EXTRA_CONTENT));
         workerThread.execute();
     }
 
     @Override
     protected void onDestroy() {
-        if (workerThread != null)
-        {
+        if (workerThread != null) {
             workerThread.cancel(true);
             workerThread = null;
         }
@@ -85,98 +76,102 @@ public class CoreSideloadActivity extends Activity
         @Override
         protected void onPreExecute() {
             super.onPreExecute();
-            progressTextView.setText("Sideloading...");
+            progressTextView.setText("Sideloading (multithread)...");
         }
 
         @Override
         protected String doInBackground(Void... voids) {
-            File coreFile = new File(core);
-            File corePath = new File(UserPreferences.getPreferences(ctx).getString("libretro_path", ctx.getApplicationInfo().dataDir + "/cores/"));
+            try {
+                File coreFile = new File(core);
+                File corePath = new File(UserPreferences.getPreferences(ctx)
+                        .getString("libretro_path", ctx.getApplicationInfo().dataDir + "/cores/"));
 
-            // Check that both files exist
-            if (!coreFile.exists())
-                return "Input file doesn't exist (" + core + ")";
+                if (!coreFile.exists())
+                    return "Input file doesn't exist (" + core + ")";
+                if (!corePath.exists())
+                    return "Destination directory doesn't exist (" + corePath.getAbsolutePath() + ")";
 
-            if (!corePath.exists())
-                return "Destination directory doesn't exist (" + corePath.getAbsolutePath() + ")";
+                destination = new File(corePath, coreFile.getName());
 
-            destination = new File(corePath, coreFile.getName());
+                long fileSize = coreFile.length();
+                int threads = Runtime.getRuntime().availableProcessors();
+                long chunkSize = fileSize / threads;
 
-            // Copy it
-            Log.d("sideload", "Copying " + coreFile.getAbsolutePath() + " to " + destination.getAbsolutePath());
-            long copied = 0;
-            long max = coreFile.length();
-            try
-            {
-                InputStream is = new FileInputStream(coreFile);
-                OutputStream os = new FileOutputStream(destination);
+                ExecutorService executor = Executors.newFixedThreadPool(threads);
+                List<Future<Boolean>> futures = new ArrayList<>();
 
-                byte[] buf = new byte[1024];
-                int length;
+                for (int i = 0; i < threads; i++) {
+                    final int index = i;
+                    futures.add(executor.submit(new Callable<Boolean>() {
+                        @Override
+                        public Boolean call() {
+                            try (RandomAccessFile in = new RandomAccessFile(coreFile, "r");
+                                 RandomAccessFile out = new RandomAccessFile(destination, "rw")) {
 
-                while ((length = is.read(buf)) > 0)
-                {
-                    os.write(buf, 0, length);
+                                long start = index * chunkSize;
+                                long end = (index == threads - 1) ? fileSize : (start + chunkSize);
 
-                    copied += length;
-                    publishProgress((int)(copied / max * 100));
+                                byte[] buffer = new byte[8192];
+                                in.seek(start);
+                                out.seek(start);
+
+                                long pos = start;
+                                while (pos < end) {
+                                    int toRead = (int) Math.min(buffer.length, end - pos);
+                                    int read = in.read(buffer, 0, toRead);
+                                    if (read == -1) break;
+                                    out.write(buffer, 0, read);
+                                    pos += read;
+                                }
+                                return true;
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                                return false;
+                            }
+                        }
+                    }));
                 }
 
-                is.close();
-                os.close();
+                // Aguarda todas as threads
+                for (Future<Boolean> f : futures) {
+                    if (!f.get()) {
+                        executor.shutdown();
+                        return "Erro em thread de cópia";
+                    }
+                }
+
+                executor.shutdown();
+
+                return null; // sucesso
+            } catch (Exception e) {
+                e.printStackTrace();
+                return e.getMessage();
             }
-            catch (IOException ex)
-            {
-                ex.printStackTrace();
-                return ex.getMessage();
-            }
-
-            return null;
-        }
-
-        @Override
-        protected void onProgressUpdate(Integer... values) {
-            super.onProgressUpdate(values);
-
-            if (values.length > 0)
-                progressTextView.setText("Sideloading: " + values[0] + "%");
         }
 
         @Override
         protected void onPostExecute(String s) {
             super.onPostExecute(s);
 
-            // Everything went as expected
-            if (s == null)
-            {
+            if (s == null) {
                 progressTextView.setText("Done!");
 
-                // Run RA with our newly sideloaded core (and content)
                 Intent retro = new Intent(ctx, RetroActivityFuture.class);
-
-                final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(ctx);
-
                 retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                retro.putExtra("ROM", content);
+                retro.putExtra("LIBRETRO", destination.getAbsolutePath());
+                retro.putExtra("CONFIGFILE", UserPreferences.getDefaultConfigPath(ctx));
+                retro.putExtra("IME", Settings.Secure.getString(ctx.getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD));
+                retro.putExtra("DATADIR", ctx.getApplicationInfo().dataDir);
+                retro.putExtra("APKPATH", ctx.getApplicationInfo().sourceDir);
 
                 Log.d("sideload", "Running RetroArch with core " + destination.getAbsolutePath());
 
-                MainMenuActivity.startRetroActivity(
-                    retro,
-                    content,
-                    destination.getAbsolutePath(),
-                    UserPreferences.getDefaultConfigPath(ctx),
-                    Settings.Secure.getString(ctx.getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
-                    ctx.getApplicationInfo().dataDir,
-                    ctx.getApplicationInfo().sourceDir);
-
                 ctx.startActivity(retro);
                 ctx.finish();
-            }
-            // An error occured
-            else
-            {
+            } else {
                 progressTextView.setText("Error: " + s);
             }
         }
     }
-}
+} 

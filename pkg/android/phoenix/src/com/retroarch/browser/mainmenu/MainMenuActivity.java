@@ -62,9 +62,8 @@ public class MainMenuActivity extends Activity {
         return lower.contains("/save") || lower.contains("/states") || lower.contains("/savestates");
     }
 
-    // Copia arquivos do asset sem sobrescrever os existentes do usuário
     private void copyAssetPreserveUserData(String assetPath, File outFile) throws IOException {
-        if (outFile.exists()) return; // preserva arquivos existentes
+        if (outFile.exists()) return; // preserva arquivos do usuário
         if (!outFile.getParentFile().exists()) outFile.getParentFile().mkdirs();
 
         InputStream in = getAssets().open(assetPath);
@@ -79,7 +78,6 @@ public class MainMenuActivity extends Activity {
         out.close();
     }
 
-    // Cópia normal para assets que podem ser sobrescritos
     private void copyAsset(String assetPath, File outFile) throws IOException {
         if (!outFile.getParentFile().exists()) outFile.getParentFile().mkdirs();
 
@@ -109,8 +107,8 @@ public class MainMenuActivity extends Activity {
 
         String configPath = CUSTOM_BASE_DIR + "/retroarch.cfg";
 
-        startRetroActivity(this,
-                retro,
+        // Usa a versão compatível com chamadas antigas (7 parâmetros)
+        startRetroActivity(retro,
                 null,
                 CUSTOM_BASE_DIR + "/cores/",
                 configPath,
@@ -122,8 +120,20 @@ public class MainMenuActivity extends Activity {
         finish();
     }
 
-    // Método estático para chamadas externas sem instância
+    // Versão nova (8 parâmetros) com Activity, para chamadas novas
     public static void startRetroActivity(Activity activity, Intent retro, String rom, String corePath,
+                                          String configPath, String ime,
+                                          String externalFilesDir, String apkPath) {
+        retro.putExtra("ROM", rom);
+        retro.putExtra("LIBRETRO", corePath);
+        retro.putExtra("CONFIGFILE", configPath);
+        retro.putExtra("IME", ime);
+        retro.putExtra("EXTERNAL_FILES_DIR", externalFilesDir);
+        retro.putExtra("APK_PATH", apkPath);
+    }
+
+    // Versão compatível com chamadas antigas (7 parâmetros)
+    public static void startRetroActivity(Intent retro, String rom, String corePath,
                                           String configPath, String ime,
                                           String externalFilesDir, String apkPath) {
         retro.putExtra("ROM", rom);

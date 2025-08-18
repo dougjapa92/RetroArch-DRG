@@ -5,7 +5,6 @@ import android.app.ProgressDialog;
 import android.content.Intent;
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.FileObserver;
 import android.provider.Settings;
 
 import com.retroarch.browser.mainmenu.MainMenuActivity;
@@ -116,38 +115,8 @@ public class CoreSideloadActivity extends Activity {
                     ctx.getApplicationInfo().sourceDir
             );
 
-            // Monitora o retroarch.cfg para fechar o app apenas após estar completo
-            File retroCfg = new File(BASE_DIR, "retroarch.cfg");
-            FileObserver cfgWatcher = new FileObserver(retroCfg.getAbsolutePath(), FileObserver.MODIFY) {
-                @Override
-                public void onEvent(int event, String path) {
-                    if (event == FileObserver.MODIFY) {
-                        if (isCfgComplete(retroCfg)) {
-                            stopWatching();
-                            runOnUiThread(() -> ctx.finishAffinity());
-                        }
-                    }
-                }
-            };
-            cfgWatcher.startWatching();
-
             ctx.startActivity(retro);
-        }
-
-        // Verifica se o retroarch.cfg já foi totalmente populado
-        private boolean isCfgComplete(File cfgFile) {
-            if (!cfgFile.exists()) return false;
-            try {
-                byte[] content = new byte[(int) cfgFile.length()];
-                try (FileInputStream fis = new FileInputStream(cfgFile)) {
-                    fis.read(content);
-                }
-                String cfgText = new String(content);
-                // Exemplo de verificação: se contém todos os diretórios esperados
-                return cfgText.contains("system_directory") && cfgText.contains("cores_directory");
-            } catch (IOException e) {
-                return false;
-            }
+            ctx.finish();
         }
     }
 } 

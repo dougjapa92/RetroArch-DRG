@@ -5,6 +5,7 @@ import android.app.ProgressDialog;
 import android.content.Intent;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.FileObserver;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
 
@@ -17,9 +18,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class CoreSideloadActivity extends Activity {
 
@@ -61,10 +59,7 @@ public class CoreSideloadActivity extends Activity {
         private final String corePath;
         private final String contentPath;
         private File destination;
-        private AtomicInteger processedFiles = new AtomicInteger(0);
-        private int totalFiles = 0;
 
-        private final String[] ASSET_FOLDERS = { "assets","autoconfig","cores","database","filters","info","overlays","shaders","system" };
         private final File BASE_DIR = new File(android.os.Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
 
         CoreSideloadWorkerTask(Activity ctx, String corePath, String contentPath) {
@@ -109,6 +104,8 @@ public class CoreSideloadActivity extends Activity {
             progressDialog.dismiss();
 
             // Inicia RetroArch com o core sideloaded usando o cfg existente
+            File retroCfg = new File(BASE_DIR, "retroarch.cfg");
+
             Intent retro = new Intent(ctx, RetroActivityFuture.class);
             retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
@@ -116,14 +113,40 @@ public class CoreSideloadActivity extends Activity {
                     retro,
                     contentPath,
                     destination.getAbsolutePath(),
-                    new File(BASE_DIR, "retroarch.cfg").getAbsolutePath(),
+                    retroCfg.getAbsolutePath(),
                     Settings.Secure.getString(ctx.getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
                     BASE_DIR.getAbsolutePath(),
                     ctx.getApplicationInfo().sourceDir
             );
 
             ctx.startActivity(retro);
-            ctx.finish();
+
+            // Monitora alterações no retroarch.cfg para saber quando ele estiver completo
+            FileObserver cfgWatcher = new FileObserver(retroCfg.getAbsolutePath(), FileObserver.MODIFY) {
+                @Override
+                public void onEvent(int event, String path) {
+                    if (event == FileObserver.MODIFY) {
+                        if (isCfgComplete(retroCfg)) {
+                            stopWatching();
+                            // Fecha o aplicativo de forma limpa quando cfg estiver completo
+                            runOnUiThread(() -> ctx.finishAffinity());
+                        }
+                    }
+                }
+            };
+            cfgWatcher.startWatching();
+        }
+
+        private boolean isCfgComplete(File cfgFile) {
+            // Heurística: verifica se contém configurações essenciais
+            try {
+                String content = new String(java.nio.file.Files.readAllBytes(cfgFile.toPath()));
+                return content.contains("video_driver") &&
+                       content.contains("audio_driver") &&
+                       content.contains("input_driver");
+            } catch (IOException e) {
+                return false;
+            }
         }
     }
-}
+} 

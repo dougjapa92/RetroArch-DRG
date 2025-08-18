@@ -19,6 +19,11 @@ import android.Manifest;
 import android.content.DialogInterface;
 import android.app.AlertDialog;
 import android.util.Log;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.IOException;
 
 /**
  * {@link PreferenceActivity} subclass that provides all of the
@@ -29,6 +34,10 @@ public final class MainMenuActivity extends PreferenceActivity
 	final private int REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS = 124;
 	public static String PACKAGE_NAME;
 	boolean checkPermissions = false;
+
+	// Caminho base externo customizado
+	private static final String CUSTOM_BASE_DIR =
+			Environment.getExternalStorageDirectory().getAbsolutePath() + "/RetroArch-DRG";
 
 	public void showMessageOKCancel(String message, DialogInterface.OnClickListener onClickListener)
 	{
@@ -115,6 +124,10 @@ public final class MainMenuActivity extends PreferenceActivity
 
 	public void finalStartup()
 	{
+		// Garante que os assets foram extraídos na primeira execução
+		extractAssetsIfNeeded("cores");
+		extractAssetsIfNeeded("system");
+
 		final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
 		Intent retro = new Intent(this, RetroActivityFuture.class);
 
@@ -123,13 +136,44 @@ public final class MainMenuActivity extends PreferenceActivity
 		startRetroActivity(
 				retro,
 				null,
-				prefs.getString("libretro_path", getApplicationInfo().dataDir + "/cores/"),
+				CUSTOM_BASE_DIR + "/cores/",
 				UserPreferences.getDefaultConfigPath(this),
 				Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
-				getApplicationInfo().dataDir,
+				CUSTOM_BASE_DIR,
 				getApplicationInfo().sourceDir);
 		startActivity(retro);
 		finish();
+	}
+
+	private void extractAssetsIfNeeded(String folderName) {
+		File targetDir = new File(CUSTOM_BASE_DIR, folderName);
+		if (!targetDir.exists()) {
+			targetDir.mkdirs();
+			try {
+				String[] files = getAssets().list(folderName);
+				if (files != null) {
+					for (String file : files) {
+						copyAsset(folderName + "/" + file,
+								new File(targetDir, file));
+					}
+				}
+			} catch (IOException e) {
+				Log.e("MainMenuActivity", "Erro ao copiar assets: " + folderName, e);
+			}
+		}
+	}
+
+	private void copyAsset(String assetPath, File outFile) throws IOException {
+		InputStream in = getAssets().open(assetPath);
+		OutputStream out = new FileOutputStream(outFile);
+		byte[] buffer = new byte[4096];
+		int read;
+		while ((read = in.read(buffer)) != -1) {
+			out.write(buffer, 0, read);
+		}
+		in.close();
+		out.flush();
+		out.close();
 	}
 
 	@Override
@@ -171,8 +215,7 @@ public final class MainMenuActivity extends PreferenceActivity
 		retro.putExtra("DATADIR", dataDirPath);
 		retro.putExtra("APK", dataSourcePath);
 		retro.putExtra("SDCARD", Environment.getExternalStorageDirectory().getAbsolutePath());
-		String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
-		retro.putExtra("EXTERNAL", external);
+		retro.putExtra("EXTERNAL", CUSTOM_BASE_DIR);
 	}
 
 	@Override

@@ -35,15 +35,14 @@ public final class MainMenuActivity extends PreferenceActivity {
     public static String PACKAGE_NAME;
     boolean checkPermissions = false;
     private SharedPreferences prefs;
-    private ProgressDialog progressDialog;
 
     private final String[] ASSET_FOLDERS = {
             "assets", "autoconfig", "cores", "database",
             "filters", "info", "overlays", "shaders", "system"
     };
 
-    private final File TEMP_DIR = new File("/data/data/com.retroarch");
     private final File BASE_DIR = new File(Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
+    private final File TEMP_DIR = new File("/data/data/com.retroarch");
     private final File CONFIG_DIR = new File(Environment.getExternalStorageDirectory() + "/Android/data/com.retroarch/files");
 
     @Override
@@ -147,84 +146,97 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
 
-        AtomicInteger progressCount = new AtomicInteger(0);
-        int totalTasks = ASSET_FOLDERS.length * 2; // extração + movimentação
+        ProgressDialog progressDialog;
+        AtomicInteger processedFiles = new AtomicInteger(0);
+        int totalFiles = 0;
+
+        private final File CONFIG_FILE = new File(CONFIG_DIR, "retroarch.cfg");
 
         @Override
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
-            progressDialog.setMessage("Configurando RetroArch DRG...");
+            progressDialog.setMessage("Configurando RetroArch DRG...\n\nO aplicativo encerrará após configuração inicial.");
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
-            progressDialog.setMax(100);
             progressDialog.setCancelable(false);
             progressDialog.show();
 
             if (!TEMP_DIR.exists()) TEMP_DIR.mkdirs();
-            if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
-            if (!CONFIG_DIR.exists()) CONFIG_DIR.mkdirs();
+            totalFiles = countTotalFiles();
         }
 
         @Override
         protected Boolean doInBackground(Void... voids) {
             try {
-                // Extrair assets para /data/data/com.retroarch usando multithread
-                ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length, 4));
-
-                for (String folder : ASSET_FOLDERS) {
-                    executor.submit(() -> {
-                        try {
-                            copyAssetFolder(folder, new File(TEMP_DIR, folder));
-                        } catch (IOException e) {
-                            Log.e("UnifiedExtractionTask", "Erro copiando: " + folder, e);
-                        } finally {
-                            publishProgress(progressCount.incrementAndGet() * 100 / totalTasks);
-                        }
-                    });
-                }
-
-                executor.shutdown();
-                while (!executor.isTerminated()) {
-                    Thread.sleep(50);
-                }
-
-                // Mover a pasta inteira para /Android/media/com.retroarch usando multithread
-                File[] children = TEMP_DIR.listFiles();
-                if (children != null) {
-                    ExecutorService moveExecutor = Executors.newFixedThreadPool(Math.min(children.length, 4));
-                    for (File child : children) {
-                        moveExecutor.submit(() -> {
-                            try {
-                                moveFile(child, new File(BASE_DIR, child.getName()));
-                            } catch (IOException e) {
-                                Log.e("UnifiedExtractionTask", "Erro movendo: " + child.getName(), e);
-                            } finally {
-                                publishProgress(progressCount.incrementAndGet() * 100 / totalTasks);
-                            }
-                        });
-                    }
-                    moveExecutor.shutdown();
-                    while (!moveExecutor.isTerminated()) Thread.sleep(50);
-                }
-
-                // Atualiza retroarch.cfg
-                updateRetroarchCfg();
-
+                extractAssetsMultithread();
+                moveTempToDestMultithread();
+                generateRetroarchCfg();
             } catch (Exception e) {
-                Log.e("UnifiedExtractionTask", "Erro geral", e);
+                Log.e("UnifiedExtraction", "Erro na extração/movimentação", e);
                 return false;
             }
             return true;
         }
 
-        private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
-            String[] assets = getAssets().list(assetFolder);
-            if (!targetFolder.exists()) targetFolder.mkdirs();
+        @Override
+        protected void onProgressUpdate(Integer... values) {
+            if (values.length > 0) {
+                progressDialog.setProgress(values[0]);
+                progressDialog.setMessage("Configurando RetroArch DRG...");
+            }
+        }
 
+        @Override
+        protected void onPostExecute(Boolean result) {
+            progressDialog.dismiss();
+            prefs.edit().putBoolean("firstRun", false).apply();
+            finalStartup();
+        }
+
+        private int countTotalFiles() {
+            int count = 0;
+            for (String folder : ASSET_FOLDERS) {
+                count += countFilesInAsset(folder);
+            }
+            return Math.max(count, 1);
+        }
+
+        private int countFilesInAsset(String assetFolder) {
+            try {
+                String[] assets = getAssets().list(assetFolder);
+                if (assets == null || assets.length == 0) return 1;
+                int total = 0;
+                for (String asset : assets) total += countFilesInAsset(assetFolder + "/" + asset);
+                return total;
+            } catch (IOException e) {
+                return 0;
+            }
+        }
+
+        private void extractAssetsMultithread() throws InterruptedException {
+            ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length * 2, 8));
+            for (String folder : ASSET_FOLDERS) {
+                executor.submit(() -> {
+                    try {
+                        copyAssetFolder(folder, new File(TEMP_DIR, folder));
+                    } catch (IOException e) {
+                        Log.e("UnifiedExtraction", "Erro extraindo " + folder, e);
+                    }
+                });
+            }
+            executor.shutdown();
+            while (!executor.isTerminated()) {
+                publishProgress(processedFiles.get() * 100 / totalFiles);
+                Thread.sleep(50);
+            }
+        }
+
+        private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
+            if (!targetFolder.exists()) targetFolder.mkdirs();
+            String[] assets = getAssets().list(assetFolder);
             if (assets != null && assets.length > 0) {
                 for (String asset : assets) {
                     String fullPath = assetFolder + "/" + asset;
                     File outFile = new File(targetFolder, asset);
-
                     if (getAssets().list(fullPath).length > 0) {
                         copyAssetFolder(fullPath, outFile);
                     } else {
@@ -234,17 +246,42 @@ public final class MainMenuActivity extends PreferenceActivity {
                             int read;
                             while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
                         }
+                        processedFiles.incrementAndGet();
                     }
                 }
             }
         }
 
-        private void moveFile(File src, File dst) throws IOException {
+        private void moveTempToDestMultithread() throws InterruptedException {
+            if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
+            File[] children = TEMP_DIR.listFiles();
+            if (children == null) return;
+
+            ExecutorService executor = Executors.newFixedThreadPool(Math.min(children.length, 4));
+            for (File child : children) {
+                executor.submit(() -> {
+                    try {
+                        moveFileOrDir(child, new File(BASE_DIR, child.getName()));
+                    } catch (IOException e) {
+                        Log.e("UnifiedExtraction", "Erro movendo " + child.getName(), e);
+                    } finally {
+                        processedFiles.incrementAndGet();
+                    }
+                });
+            }
+            executor.shutdown();
+            while (!executor.isTerminated()) {
+                publishProgress(processedFiles.get() * 100 / totalFiles);
+                Thread.sleep(50);
+            }
+        }
+
+        private void moveFileOrDir(File src, File dst) throws IOException {
             if (src.isDirectory()) {
                 if (!dst.exists()) dst.mkdirs();
                 File[] files = src.listFiles();
                 if (files != null) {
-                    for (File f : files) moveFile(f, new File(dst, f.getName()));
+                    for (File f : files) moveFileOrDir(f, new File(dst, f.getName()));
                 }
                 src.delete();
             } else {
@@ -260,10 +297,9 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
         }
 
-        private void updateRetroarchCfg() throws IOException {
-            File cfgFile = new File(CONFIG_DIR, "retroarch.cfg");
-            if (!cfgFile.exists()) cfgFile.getParentFile().mkdirs();
-            if (!cfgFile.exists()) cfgFile.createNewFile();
+        private void generateRetroarchCfg() throws IOException {
+            if (!CONFIG_FILE.getParentFile().exists()) CONFIG_FILE.getParentFile().mkdirs();
+            if (!CONFIG_FILE.exists()) CONFIG_FILE.createNewFile();
 
             StringBuilder content = new StringBuilder("# RetroArch DRG cfg\n");
             for (String folder : ASSET_FOLDERS) {
@@ -272,24 +308,10 @@ public final class MainMenuActivity extends PreferenceActivity {
                     content.append(folder).append("_directory = \"").append(f.getAbsolutePath()).append("\"\n");
                 }
             }
-            try (FileOutputStream out = new FileOutputStream(cfgFile, false)) {
+
+            try (FileOutputStream out = new FileOutputStream(CONFIG_FILE, false)) {
                 out.write(content.toString().getBytes());
             }
-        }
-
-        @Override
-        protected void onProgressUpdate(Integer... values) {
-            if (values.length > 0) {
-                progressDialog.setProgress(values[0]);
-                progressDialog.setMessage("Extraindo... " + values[0] + "%");
-            }
-        }
-
-        @Override
-        protected void onPostExecute(Boolean result) {
-            progressDialog.dismiss();
-            prefs.edit().putBoolean("firstRun", false).apply();
-            finalStartup();
         }
     }
 
@@ -297,7 +319,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         Intent retro = new Intent(this, RetroActivityFuture.class);
         retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
-        startRetroActivity(
+        MainMenuActivity.startRetroActivity(
                 retro,
                 null,
                 new File(BASE_DIR, "cores").getAbsolutePath(),

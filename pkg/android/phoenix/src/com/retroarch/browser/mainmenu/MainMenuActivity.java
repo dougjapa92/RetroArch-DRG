@@ -40,9 +40,8 @@ public final class MainMenuActivity extends PreferenceActivity {
             "filters", "info", "overlays", "shaders", "system"
     };
 
-    private final File EXTRACT_DIR = new File(Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
-    private final File CFG_DIR = new File(Environment.getExternalStorageDirectory(),
-            "Android/data/" + getPackageName() + "/files");
+    private final File BASE_DIR = new File(Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
+    private final File CONFIG_DIR = new File(Environment.getExternalStorageDirectory() + "/Android/data/com.retroarch/files");
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -157,8 +156,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             progressDialog.setCancelable(false);
             progressDialog.show();
 
-            if (!EXTRACT_DIR.exists()) EXTRACT_DIR.mkdirs();
-            if (!CFG_DIR.exists()) CFG_DIR.mkdirs();
+            if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
             totalFiles = countAllFiles(ASSET_FOLDERS);
         }
 
@@ -168,8 +166,11 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             for (String folder : ASSET_FOLDERS) {
                 executor.submit(() -> {
-                    try { copyAssetFolder(folder, new File(EXTRACT_DIR, folder)); }
-                    catch (IOException e) { e.printStackTrace(); }
+                    try {
+                        copyAssetFolder(folder, new File(BASE_DIR, folder));
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                 });
             }
 
@@ -179,7 +180,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 try { Thread.sleep(100); } catch (InterruptedException ignored) {}
             }
 
-            try { generateRetroarchCfg(); } catch (IOException e) { return false; }
+            try { updateRetroarchCfg(); } catch (IOException e) { return false; }
 
             return true;
         }
@@ -238,17 +239,27 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
         }
 
-        private void generateRetroarchCfg() throws IOException {
-            File cfgFile = new File(CFG_DIR, "retroarch.cfg");
-            if (!cfgFile.exists()) cfgFile.createNewFile();
+        private void updateRetroarchCfg() throws IOException {
+            File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
+            if (!originalCfg.exists()) originalCfg.createNewFile();
 
-            try (FileOutputStream out = new FileOutputStream(cfgFile, false)) {
-                StringBuilder content = new StringBuilder("# RetroArch DRG cfg\n");
+            // Lê o cfg original
+            List<String> lines = java.nio.file.Files.readAllLines(originalCfg.toPath());
+
+            StringBuilder content = new StringBuilder();
+            for (String line : lines) {
+                boolean replaced = false;
                 for (String folder : ASSET_FOLDERS) {
-                    content.append(folder).append("_directory = \"")
-                            .append(new File(EXTRACT_DIR, folder).getAbsolutePath())
-                            .append("\"\n");
+                    if (line.startsWith(folder + "_directory")) {
+                        line = folder + "_directory = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"";
+                        replaced = true;
+                        break;
+                    }
                 }
+                content.append(line).append("\n");
+            }
+
+            try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
                 out.write(content.toString().getBytes());
             }
         }
@@ -261,10 +272,10 @@ public final class MainMenuActivity extends PreferenceActivity {
         MainMenuActivity.startRetroActivity(
                 retro,
                 null,
-                new File(EXTRACT_DIR, "cores").getAbsolutePath(),
-                new File(CFG_DIR, "retroarch.cfg").getAbsolutePath(),
+                new File(BASE_DIR, "cores").getAbsolutePath(),
+                new File(CONFIG_DIR, "retroarch.cfg").getAbsolutePath(),
                 Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
-                EXTRACT_DIR.getAbsolutePath(),
+                BASE_DIR.getAbsolutePath(),
                 getApplicationInfo().sourceDir
         );
         startActivity(retro);

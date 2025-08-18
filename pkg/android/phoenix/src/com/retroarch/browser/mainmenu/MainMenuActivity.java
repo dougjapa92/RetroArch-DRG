@@ -3,9 +3,7 @@ package com.retroarch.browser.mainmenu;
 import com.retroarch.browser.preferences.util.UserPreferences;
 import com.retroarch.browser.retroactivity.RetroActivityFuture;
 
-import android.app.AlertDialog;
 import android.app.ProgressDialog;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.media.AudioManager;
@@ -15,10 +13,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.preference.PreferenceActivity;
 import android.preference.PreferenceManager;
-import android.provider.Settings;
 import android.util.Log;
-import android.content.pm.PackageManager;
-import android.Manifest;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -30,11 +25,9 @@ import java.util.concurrent.Executors;
 public class MainMenuActivity extends PreferenceActivity {
 
     private static final String TAG = "MainMenuActivity";
-
     private ProgressDialog progressDialog;
     private SharedPreferences prefs;
 
-    // Apenas as pastas do pacote assets
     private final String[] ASSET_FOLDERS = {
             "assets", "autoconfig", "cores", "database",
             "filters", "info", "overlays", "shaders", "system"
@@ -51,7 +44,7 @@ public class MainMenuActivity extends PreferenceActivity {
         if (firstRun) {
             new UnifiedExtractionTask().execute();
         } else {
-            launchRetroArch();
+            launchRetroArchWithClosing();
         }
     }
 
@@ -112,20 +105,18 @@ public class MainMenuActivity extends PreferenceActivity {
         @Override
         protected void onPostExecute(Void aVoid) {
             progressDialog.dismiss();
-
             prefs.edit().putBoolean("firstRun", false).apply();
 
-            // Agora abre RetroArch
-            launchRetroArch();
+            // Após extração e retroarch.cfg, inicia RetroArch e o encerramento
+            launchRetroArchWithClosing();
         }
     }
 
     private void copyAssetFolder(String assetFolder, File destDir) {
         try {
             String[] files = getAssets().list(assetFolder);
-            if (files == null || files.length == 0) return;
-
             if (!destDir.exists()) destDir.mkdirs();
+            if (files == null || files.length == 0) return;
 
             for (String filename : files) {
                 try (InputStream in = getAssets().open(assetFolder + "/" + filename);
@@ -162,25 +153,25 @@ public class MainMenuActivity extends PreferenceActivity {
         }
     }
 
-    private void launchRetroArch() {
+    private void launchRetroArchWithClosing() {
+        // Inicia RetroArch normalmente
         Intent intent = new Intent(this, RetroActivityFuture.class);
         startActivity(intent);
-    
-        // ProgressDialog "Encerrando..."
-        ProgressDialog closingDialog = new ProgressDialog(MainMenuActivity.this);
-        closingDialog.setMessage("Encerrando...");
-        closingDialog.setProgressStyle(ProgressDialog.STYLE_SPINNER);
-        closingDialog.setIndeterminate(true);
-        closingDialog.setCancelable(false);
-        closingDialog.show();
-    
+
+        // ProgressDialog "Encerrando..." após 5s
         new Handler().postDelayed(() -> {
-            closingDialog.dismiss();
-            finishAffinity(); // Fecha totalmente o app
-    
-            // Animação fade ao encerrar
-            overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
-    
-        }, 5000); // 5 segundos
+            ProgressDialog closingDialog = new ProgressDialog(MainMenuActivity.this);
+            closingDialog.setMessage("Encerrando...");
+            closingDialog.setProgressStyle(ProgressDialog.STYLE_SPINNER);
+            closingDialog.setIndeterminate(true);
+            closingDialog.setCancelable(false);
+            closingDialog.show();
+
+            new Handler().postDelayed(() -> {
+                closingDialog.dismiss();
+                finishAffinity(); // Fecha totalmente o app
+                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+            }, 5000); // 5 segundos
+        }, 5000); // 5 segundos de delay para garantir que RetroArch iniciou
     }
-}
+} 

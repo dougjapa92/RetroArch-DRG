@@ -26,16 +26,14 @@ import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.util.Log;
 
+/**
+ * MainMenuActivity com extração/movimentação multithread e cfg automático.
+ */
 public final class MainMenuActivity extends PreferenceActivity {
     final private int REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS = 124;
     public static String PACKAGE_NAME;
     boolean checkPermissions = false;
     private ProgressDialog progressDialog;
-
-    private final String[] ASSET_FOLDERS = {
-            "assets", "autoconfig", "cores", "database",
-            "filters", "info", "overlays", "shaders", "system"
-    };
 
     public void showMessageOKCancel(String message, DialogInterface.OnClickListener onClickListener) {
         new AlertDialog.Builder(this).setMessage(message)
@@ -56,8 +54,8 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     public void checkRuntimePermissions() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            List<String> permissionsNeeded = new ArrayList<>();
-            final List<String> permissionsList = new ArrayList<>();
+            List<String> permissionsNeeded = new ArrayList<String>();
+            final List<String> permissionsList = new ArrayList<String>();
 
             if (!addPermission(permissionsList, Manifest.permission.READ_EXTERNAL_STORAGE))
                 permissionsNeeded.add("Read External Storage");
@@ -112,7 +110,10 @@ public final class MainMenuActivity extends PreferenceActivity {
         switch (requestCode) {
             case REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS:
                 for (int i = 0; i < permissions.length; i++) {
-                    if (grantResults[i] != PackageManager.PERMISSION_GRANTED) {
+                    if (grantResults[i] == PackageManager.PERMISSION_GRANTED) {
+                        Log.i("MainMenuActivity", "Permission: " + permissions[i] + " was granted.");
+                    } else {
+                        Log.i("MainMenuActivity", "Permission: " + permissions[i] + " was not granted.");
                         checkPermissions = true;
                         showMessageOKCancel("Permissions are required to continue.",
                                 (dialog, which) -> checkRuntimePermissions());
@@ -129,7 +130,9 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     public static void startRetroActivity(Intent retro, String contentPath, String corePath,
                                           String configFilePath, String imePath, String dataDirPath, String dataSourcePath) {
-        if (contentPath != null) retro.putExtra("ROM", contentPath);
+        if (contentPath != null) {
+            retro.putExtra("ROM", contentPath);
+        }
         retro.putExtra("LIBRETRO", corePath);
         retro.putExtra("CONFIGFILE", configFilePath);
         retro.putExtra("IME", imePath);
@@ -143,15 +146,19 @@ public final class MainMenuActivity extends PreferenceActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
         PACKAGE_NAME = getPackageName();
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
+
         UserPreferences.updateConfigFile(this);
+
         checkRuntimePermissions();
     }
 
     private class AssetTask extends AsyncTask<Void, Integer, Void> {
         private final File srcDir = new File("/data/data/com.retroarch");
         private final File destDir = new File(Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
+        private final AtomicInteger progressCount = new AtomicInteger(0);
 
         @Override
         protected void onPreExecute() {
@@ -167,16 +174,12 @@ public final class MainMenuActivity extends PreferenceActivity {
         @Override
         protected Void doInBackground(Void... voids) {
             try {
+                if (!destDir.getParentFile().exists()) destDir.getParentFile().mkdirs();
                 if (!srcDir.exists()) return null;
 
-                // Multithread para mover subpastas
-                if (destDir.exists()) deleteRecursively(destDir);
-                if (!destDir.getParentFile().exists()) destDir.getParentFile().mkdirs();
                 File[] children = srcDir.listFiles();
                 if (children != null) {
-                    AtomicInteger progress = new AtomicInteger(0);
                     ExecutorService executor = Executors.newFixedThreadPool(Math.min(children.length, 4));
-
                     for (File child : children) {
                         executor.submit(() -> {
                             try {
@@ -184,28 +187,26 @@ public final class MainMenuActivity extends PreferenceActivity {
                             } catch (Exception e) {
                                 Log.e("AssetTask", "Erro movendo " + child.getName(), e);
                             } finally {
-                                int prog = progress.incrementAndGet() * 100 / children.length;
+                                int prog = progressCount.incrementAndGet() * 100 / children.length;
                                 publishProgress(prog);
                             }
                         });
                     }
-
                     executor.shutdown();
                     while (!executor.isTerminated()) Thread.sleep(50);
                 }
 
-                // Cria retroarch.cfg no diretório padrão
-                File cfgDir = new File(Environment.getExternalStorageDirectory(),
-                        "Android/data/com.retroarch/files");
-                if (!cfgDir.exists()) cfgDir.mkdirs();
-                File cfgFile = new File(cfgDir, "retroarch.cfg");
+                // Atualiza retroarch.cfg com diretórios absolutos
+                File cfgFile = new File(destDir, "retroarch.cfg");
                 if (!cfgFile.exists()) cfgFile.createNewFile();
-
                 try (FileOutputStream out = new FileOutputStream(cfgFile, false)) {
+                    String[] folders = {"assets", "autoconfig", "cores", "database", "filters", "info", "overlays", "shaders", "system"};
                     StringBuilder content = new StringBuilder("# RetroArch DRG cfg\n");
-                    for (String folder : ASSET_FOLDERS) {
+                    for (String folder : folders) {
                         File f = new File(destDir, folder);
-                        if (f.exists()) content.append(folder).append("_directory = \"").append(f.getAbsolutePath()).append("\"\n");
+                        if (f.exists()) {
+                            content.append(folder).append("_directory = \"").append(f.getAbsolutePath()).append("\"\n");
+                        }
                     }
                     out.write(content.toString().getBytes());
                 }
@@ -235,14 +236,6 @@ public final class MainMenuActivity extends PreferenceActivity {
                     src.delete();
                 }
             }
-        }
-
-        private void deleteRecursively(File file) {
-            if (file.isDirectory()) {
-                File[] children = file.listFiles();
-                if (children != null) for (File child : children) deleteRecursively(child);
-            }
-            file.delete();
         }
 
         @Override

@@ -39,7 +39,10 @@ public final class MainMenuActivity extends PreferenceActivity {
             "filters", "info", "overlays", "shaders", "system"
     };
 
+    // Diretório onde os assets serão extraídos
     private final File BASE_DIR = new File(Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
+
+    // Diretório do retroarch.cfg que o RetroArch lê
     private final File CONFIG_DIR = new File(Environment.getExternalStorageDirectory() + "/Android/data/com.retroarch/files");
 
     @Override
@@ -156,6 +159,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             progressDialog.show();
 
             if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
+            if (!CONFIG_DIR.exists()) CONFIG_DIR.mkdirs();
             totalFiles = countAllFiles(ASSET_FOLDERS);
         }
 
@@ -239,24 +243,25 @@ public final class MainMenuActivity extends PreferenceActivity {
         }
 
         private void updateRetroarchCfg() throws IOException {
-            File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
-            if (!originalCfg.exists()) originalCfg.createNewFile();
+            File cfgFile = new File(CONFIG_DIR, "retroarch.cfg");
+            if (!cfgFile.exists()) cfgFile.createNewFile();
 
-            List<String> lines = java.nio.file.Files.readAllLines(originalCfg.toPath());
+            List<String> lines = java.nio.file.Files.readAllLines(cfgFile.toPath());
+
             StringBuilder content = new StringBuilder();
-
             for (String line : lines) {
+                boolean replaced = false;
                 for (String folder : ASSET_FOLDERS) {
-                    String cfgKey = folder.equals("system") ? "system_directory" : folder + "_directory";
-                    if (line.startsWith(cfgKey)) {
-                        line = cfgKey + " = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"";
+                    if (line.startsWith(folder + "_directory") || (folder.equals("system") && line.startsWith("system_directory"))) {
+                        line = folder + "_directory = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"";
+                        replaced = true;
                         break;
                     }
                 }
                 content.append(line).append("\n");
             }
 
-            try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
+            try (FileOutputStream out = new FileOutputStream(cfgFile, false)) {
                 out.write(content.toString().getBytes());
             }
         }

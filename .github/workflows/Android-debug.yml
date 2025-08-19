@@ -23,11 +23,12 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y unzip zip curl openjdk-17-jdk
-
-      - name: Set JAVA_HOME
-        run: |
-          echo "JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))" >> $GITHUB_ENV
+          sudo apt-get install -y unzip zip curl
+          sudo apt-get install -y openjdk-17-jdk
+          sudo update-alternatives --install /usr/bin/java java /usr/lib/jvm/java-17-openjdk-amd64/bin/java 1
+          sudo update-alternatives --install /usr/bin/javac javac /usr/lib/jvm/java-17-openjdk-amd64/bin/javac 1
+          sudo update-alternatives --set java /usr/lib/jvm/java-17-openjdk-amd64/bin/java
+          sudo update-alternatives --set javac /usr/lib/jvm/java-17-openjdk-amd64/bin/javac
 
       - name: Set execute permissions recursively
         run: |
@@ -60,4 +61,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: retroarch-phoenix-debug-${{ steps.slug_phoenix.outputs.sha8 }}
-          path: pkg/android/phoenix/build/outputs/apk/normal/debug/phoenix-normal-debug.apk 
+          path: |
+            pkg/android/phoenix/build/outputs/apk/normal/debug/phoenix-normal-debug.apk
+            pkg/android/phoenix/build/outputs/apk/aarch64/debug/phoenix64-aarch64-debug.apk

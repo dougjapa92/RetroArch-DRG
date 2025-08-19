@@ -12,8 +12,6 @@ permissions:
 
 env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-  JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
-  PATH: /usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH:$PATH
 
 jobs:
   build-phoenix:
@@ -26,6 +24,15 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y unzip zip curl openjdk-17-jdk
+          sudo update-alternatives --install /usr/bin/java java /usr/lib/jvm/java-17-openjdk-amd64/bin/java 1
+          sudo update-alternatives --install /usr/bin/javac javac /usr/lib/jvm/java-17-openjdk-amd64/bin/javac 1
+          sudo update-alternatives --set java /usr/lib/jvm/java-17-openjdk-amd64/bin/java
+          sudo update-alternatives --set javac /usr/lib/jvm/java-17-openjdk-amd64/bin/javac
+
+      - name: Set JAVA_HOME and PATH
+        run: |
+          echo "JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64" >> $GITHUB_ENV
+          echo "PATH=/usr/lib/jvm/java-17-openjdk-amd64/bin:$PATH" >> $GITHUB_ENV
 
       - name: Set execute permissions recursively
         run: |
@@ -58,4 +65,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: retroarch-phoenix-debug-${{ steps.slug_phoenix.outputs.sha8 }}
-          path: pkg/android/phoenix/build/outputs/apk/normal/debug/phoenix-normal-debug.apk
+          path: pkg/android/phoenix/build/outputs/apk/normal/debug/phoenix-normal-debug.apk 

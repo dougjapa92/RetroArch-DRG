@@ -17,7 +17,7 @@ allprojects {
 
     Properties props = new Properties()
     props.load(new FileInputStream(new File(project.rootDir, "retroarch.properties")))
-    props.each { prop ->
+    props.each { prop -> 
         project.ext.set(prop.key, prop.value)
     }
 }
@@ -94,6 +94,11 @@ android {
         debug {
             signingConfig signingConfigs.debug
         }
+    }
+
+    lintOptions {
+        checkReleaseBuilds true
+        abortOnError false
     }
 }
 

@@ -1,4 +1,4 @@
-name: CI Android Lint - Phoenix & Phoenix64
+name: Lint CI Android - Phoenix & Phoenix64
 
 on:
   push:
@@ -34,6 +34,10 @@ jobs:
         run: |
           cd pkg/android/phoenix
           ./gradlew lintNormalRelease || true
+          
+      - name: List lint report directory
+        run: |
+          ls -R pkg/android/phoenix/build/reports/lint
 
       - name: Upload Lint Report
         uses: actions/upload-artifact@v4

@@ -68,38 +68,43 @@ public final class MainMenuActivity extends PreferenceActivity {
         return true;
     }
 
-    public void checkRuntimePermissions() {
+    private void checkRuntimePermissions() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
             List<String> permissionsNeeded = new ArrayList<>();
             final List<String> permissionsList = new ArrayList<>();
-
+    
             if (!addPermission(permissionsList, Manifest.permission.READ_EXTERNAL_STORAGE))
                 permissionsNeeded.add("Read External Storage");
             if (!addPermission(permissionsList, Manifest.permission.WRITE_EXTERNAL_STORAGE))
                 permissionsNeeded.add("Write External Storage");
-
+    
             if (permissionsList.size() > 0) {
                 checkPermissions = true;
                 if (permissionsNeeded.size() > 0) {
                     String message = "Você precisa conceder acesso a " + permissionsNeeded.get(0);
                     for (int i = 1; i < permissionsNeeded.size(); i++)
                         message += ", " + permissionsNeeded.get(i);
-
+    
                     new AlertDialog.Builder(this)
                             .setMessage(message)
                             .setCancelable(false)
-                            .setPositiveButton("OK", (dialog, which) ->
+                            .setPositiveButton("OK", (dialog, which) -> {
+                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
                                     requestPermissions(permissionsList.toArray(new String[0]),
-                                            REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
+                                            REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
+                                }
+                            })
                             .setNegativeButton("Sair", (dialog, which) -> finish())
                             .show();
                 } else {
-                    requestPermissions(permissionsList.toArray(new String[0]),
-                            REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                        requestPermissions(permissionsList.toArray(new String[0]),
+                                REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
+                    }
                 }
             }
         }
-
+    
         if (!checkPermissions) {
             startExtractionOrRetro();
         }
@@ -261,7 +266,13 @@ public final class MainMenuActivity extends PreferenceActivity {
             if (!originalCfg.exists()) originalCfg.getParentFile().mkdirs();
             if (!originalCfg.exists()) originalCfg.createNewFile();
 
-            List<String> lines = java.nio.file.Files.readAllLines(originalCfg.toPath());
+            List<String> lines = new ArrayList<>();
+            try (BufferedReader reader = new BufferedReader(new FileReader(originalCfg))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    lines.add(line);
+                }
+            }
             StringBuilder content = new StringBuilder();
 
             for (String line : lines) {

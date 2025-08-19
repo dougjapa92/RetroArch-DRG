@@ -24,6 +24,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -36,8 +38,20 @@ public final class MainMenuActivity extends PreferenceActivity {
     private SharedPreferences prefs;
 
     private final String[] ASSET_FOLDERS = {
-            "assets", "database", "filters", "info", "overlays", "shaders", "system"
+            "assets", "database", "filters", "info", "overlays", "shaders", "system", "config", "remaps"
     };
+
+    private final Map<String, String> ASSET_FLAGS = new HashMap<String, String>() {{
+        put("assets", "assets_directory");
+        put("database", "database_directory");
+        put("filters", "filters_directory");
+        put("info", "info_directory");
+        put("overlays", "overlays_directory");
+        put("shaders", "shaders_directory");
+        put("system", "system_directory");
+        put("config", "rgui_config_directory");
+        put("remaps", "input_remapping_directory");
+    }};
 
     private final File BASE_DIR = new File(Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
     private final File CONFIG_DIR = new File(Environment.getExternalStorageDirectory() + "/Android/data/com.retroarch/files");
@@ -55,7 +69,6 @@ public final class MainMenuActivity extends PreferenceActivity {
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
         UserPreferences.updateConfigFile(this);
 
-        // Determina arquitetura
         String arch = System.getProperty("os.arch");
         if (arch.contains("64")) {
             archCores = "cores64";
@@ -149,7 +162,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     private void startExtractionOrRetro() {
         boolean firstRun = prefs.getBoolean("firstRun", true);
         if (firstRun) new UnifiedExtractionTask().execute();
-        else finalStartup();  // Sempre inicia RetroActivityFuture
+        else finalStartup();
     }
 
     private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
@@ -287,9 +300,12 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             StringBuilder content = new StringBuilder();
             for (String line : lines) {
-                for (String folder : ASSET_FOLDERS) {
-                    if (line.startsWith(folder + "_directory")) {
-                        line = folder + "_directory = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"";
+                for (Map.Entry<String, String> entry : ASSET_FLAGS.entrySet()) {
+                    String folder = entry.getKey();
+                    String flag = entry.getValue();
+
+                    if (line.startsWith(flag)) {
+                        line = flag + " = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"";
                         break;
                     }
                 }

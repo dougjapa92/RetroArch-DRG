@@ -48,6 +48,10 @@ android {
         }
     }
 
+    buildFeatures {
+        buildConfig = true // Ativa campos customizados
+    }
+
     productFlavors {
         normal {
             resValue "string", "app_name", "RetroArch DRG"

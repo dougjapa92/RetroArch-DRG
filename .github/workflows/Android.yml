@@ -42,11 +42,7 @@ jobs:
       - name: Compile Phoenix - release
         run: |
           cd pkg/android/phoenix
-          ./gradlew assembleRelease \
-            -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/my-release-key.keystore \
-            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
-            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
-            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
+          ./gradlew assembleRelease
           find . -iname "*.apk" -exec ls -l "{}" \;
 
       - name: Get short SHA
@@ -86,11 +82,7 @@ jobs:
       - name: Compile Phoenix64 - release (aarch64)
         run: |
           cd pkg/android/phoenix64
-          ./gradlew assembleAarch64Release \
-            -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/my-release-key.keystore \
-            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
-            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
-            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
+          ./gradlew assembleAarch64Release
           find . -iname "*.apk" -exec ls -l "{}" \;
 
       - name: Get short SHA

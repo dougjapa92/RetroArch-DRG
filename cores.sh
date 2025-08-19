@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# Lista única de núcleos usados
 CORES_LIST=(
   "81_libretro_android.so.zip"
   "a5200_libretro_android.so.zip"
@@ -44,45 +43,45 @@ CORES_LIST=(
   "vice_x64_libretro_android.so.zip"
 )
 
-# Função para baixar e atualizar núcleos com retry
 baixar_cores() {
   local ARCH=$1
   local CORES_DIR=$2
   local TEMP_DIR=$3
-  local BASE_URL="https://buildbot.libretro.com/nightly/android/latest/$ARCH/"
+
+  BASE_URL="https://buildbot.libretro.com/nightly/android/latest/$ARCH/"
 
   mkdir -p "$CORES_DIR" "$TEMP_DIR"
 
-  for CORE_FILE in "${CORES_LIST[@]}"; do
-    local RETRY=0
-    local SUCCESS=false
-    local WAIT=2
+  total=${#CORES_LIST[@]}
+  current=0
 
-    while [[ $RETRY -lt 3 && $SUCCESS == false ]]; do
-      echo "[$ARCH] Baixando $CORE_FILE (tentativa $((RETRY+1)))..."
-      if curl -L --fail "${BASE_URL}${CORE_FILE}" -o "$TEMP_DIR/$CORE_FILE"; then
-        unzip -o "$TEMP_DIR/$CORE_FILE" -d "$TEMP_DIR"
+  for CORE_FILE in "${CORES_LIST[@]}"; do
+    attempt=1
+    success=false
+    while [ $attempt -le 3 ]; do
+      echo "[$ARCH] Baixando $CORE_FILE (tentativa $attempt)..."
+      if curl -s -L "$BASE_URL$CORE_FILE" -o "$TEMP_DIR/$CORE_FILE"; then
+        unzip -o "$TEMP_DIR/$CORE_FILE" -d "$TEMP_DIR" >/dev/null
         for SO_FILE in "$TEMP_DIR"/*.so; do
           cp -f "$SO_FILE" "$CORES_DIR/" || true
           echo "[$ARCH] Atualizado $(basename "$SO_FILE")"
         done
-        SUCCESS=true
+        rm -f "$TEMP_DIR/$CORE_FILE"
+        success=true
+        break
       else
-        echo "[$ARCH] Falha no download de $CORE_FILE. Tentativa $((RETRY+1)) de 3."
-        ((RETRY++))
-        if [[ $RETRY -lt 3 ]]; then
-          echo "[$ARCH] Aguardando $WAIT segundos antes da próxima tentativa..."
-          sleep $WAIT
-          WAIT=$((WAIT * 2))
-        fi
+        echo "[$ARCH] Falha ao baixar $CORE_FILE"
+        ((attempt++))
       fi
     done
 
-    if [[ $SUCCESS == false ]]; then
-      echo "[$ARCH] Erro crítico: não foi possível baixar $CORE_FILE após 3 tentativas."
+    if [ "$success" = false ]; then
+      echo "[$ARCH] Erro: não foi possível baixar $CORE_FILE após 3 tentativas"
     fi
 
-    rm -f "$TEMP_DIR/$CORE_FILE"
+    ((current++))
+    percent=$((current * 100 / total))
+    echo "[$ARCH] Progresso: $current/$total ($percent%)"
   done
 
   rm -rf "$TEMP_DIR"

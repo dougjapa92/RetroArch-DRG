@@ -78,7 +78,8 @@ android {
 
     signingConfigs {
         release {
-            storeFile file("my-release-key.keystore")
+            def keystorePath = System.getenv("GITHUB_WORKSPACE") + "/pkg/android/phoenix/my-release-key.keystore"
+            storeFile file(keystorePath)
             storePassword "123456"
             keyAlias "phoenixkey"
             keyPassword "123456"

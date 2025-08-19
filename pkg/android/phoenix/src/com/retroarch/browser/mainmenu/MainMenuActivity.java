@@ -90,20 +90,14 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             if (!permissionsList.isEmpty()) {
                 checkPermissions = true;
-                if (!permissionsNeeded.isEmpty()) {
-                    String message = "Você precisa conceder acesso a " + permissionsNeeded.get(0);
-                    for (int i = 1; i < permissionsNeeded.size(); i++) message += ", " + permissionsNeeded.get(i);
+                String message = "Você precisa conceder acesso a " + String.join(", ", permissionsNeeded);
 
-                    new AlertDialog.Builder(this)
-                            .setMessage(message)
-                            .setCancelable(false)
-                            .setPositiveButton("OK", (dialog, which) ->
-                                    requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
-                            .setNegativeButton("Sair", (dialog, which) -> finish())
-                            .show();
-                } else {
-                    requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
-                }
+                new AlertDialog.Builder(this)
+                        .setMessage(message)
+                        .setCancelable(false)
+                        .setPositiveButton("OK", (dialog, which) -> requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
+                        .setNegativeButton("Sair", (dialog, which) -> finish())
+                        .show();
             }
         }
 
@@ -114,9 +108,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS) {
             boolean allGranted = true;
-            for (int result : grantResults) {
-                if (result != PackageManager.PERMISSION_GRANTED) allGranted = false;
-            }
+            for (int result : grantResults) if (result != PackageManager.PERMISSION_GRANTED) allGranted = false;
 
             if (allGranted) {
                 prefs.edit().putInt("deniedCount", 0).apply();
@@ -157,7 +149,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     private void startExtractionOrRetro() {
         boolean firstRun = prefs.getBoolean("firstRun", true);
         if (firstRun) new UnifiedExtractionTask().execute();
-        else finalStartup();
+        else finalStartup();  // Sempre inicia RetroActivityFuture
     }
 
     private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
@@ -311,19 +303,10 @@ public final class MainMenuActivity extends PreferenceActivity {
     }
 
     public void finalStartup() {
-        // Verifica se as permissões ainda estão concedidas
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-            if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED ||
-                checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                checkRuntimePermissions();
-                return;
-            }
-        }
-
         Intent retro = new Intent(this, RetroActivityFuture.class);
         retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
-        MainMenuActivity.startRetroActivity(
+        startRetroActivity(
                 retro,
                 null,
                 new File(BASE_DIR, "cores").getAbsolutePath(),

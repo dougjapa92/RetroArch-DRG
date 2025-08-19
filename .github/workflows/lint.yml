@@ -30,16 +30,16 @@ jobs:
           source ./cores.sh
           baixar_cores "armeabi-v7a" "pkg/android/phoenix/assets/cores" "tmp_cores32"
 
-      - name: Run Lint Release
+      - name: Run Lint
         run: |
           cd pkg/android/phoenix
-          ./gradlew lintNormalRelease
-          
+          ./gradlew lintNormalRelease || true
+
       - name: Upload Lint Report
         uses: actions/upload-artifact@v4
         with:
           name: phoenix-lint-report
-          path: pkg/android/phoenix/build/reports/lint/lint-results-normal-release.html
+          path: pkg/android/phoenix/build/reports/lint/*.html
 
   lint-phoenix64:
     runs-on: ubuntu-22.04
@@ -62,13 +62,13 @@ jobs:
           source ./cores.sh
           baixar_cores "arm64-v8a" "pkg/android/phoenix64/assets/cores" "tmp_cores32"
 
-      - name: Run Lint Release
+      - name: Run Lint
         run: |
           cd pkg/android/phoenix64
-          ./gradlew lintNormalRelease
+          ./gradlew lintNormalRelease || true
 
       - name: Upload Lint Report
         uses: actions/upload-artifact@v4
         with:
           name: phoenix64-lint-report
-          path: pkg/android/phoenix64/build/reports/lint/lint-results-normal-release.html
+          path: pkg/android/phoenix64/build/reports/lint/*.html

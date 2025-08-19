@@ -168,7 +168,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
             progressDialog.setTitle("Configurando RetroArch DRG...");
-            progressDialog.setMessage("Clique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo.");
+            progressDialog.setMessage("\nClique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo.");
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);
             progressDialog.show();

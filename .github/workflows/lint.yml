@@ -1,8 +1,6 @@
 name: (Lint) CI Android - Phoenix & Phoenix64
 
 on:
-  push:
-  pull_request:
   workflow_dispatch:
 
 permissions:

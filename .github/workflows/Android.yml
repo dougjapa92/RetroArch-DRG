@@ -60,4 +60,4 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: retroarch-phoenix-${{ steps.slug_phoenix.outputs.sha8 }}
-          path: pkg/android/phoenix/build/outputs/apk/normal/release/phoenix-normal-release.apk        path: pkg/android/phoenix64/build/outputs/apk/aarch64/release/phoenix64-aarch64-release.apk
+          path: pkg/android/phoenix/build/outputs/apk/normal/release/phoenix-normal-release.apk

@@ -37,7 +37,7 @@ jobs:
       - name: Download and update cores (64-bit)
         run: |
           source ./cores.sh
-          baixar_cores "arm64-v8a" "pkg/android/phoenix64/assets/cores64" "tmp_cores64"
+          baixar_cores "arm64-v8a" "pkg/android/phoenix/assets/cores64" "tmp_cores64"
 
       - name: Compile Phoenix - debug
         run: |

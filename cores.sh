@@ -64,7 +64,7 @@ baixar_cores() {
           cp -f "$SO_FILE" "$CORES_DIR/"
         done
         echo "[$ARCH] $CORE_FILE atualizado com sucesso."
-        echo "------------------------------------------------------------------------"
+        echo "-------------------------------------------------------------------------------------------------"
         SUCCESS=true
       else
         echo "[$ARCH] Falha ao baixar $CORE_FILE (tentativa $((RETRY+1)))."

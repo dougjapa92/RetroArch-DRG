@@ -1,0 +1,87 @@
+name: Debug CI Android - Phoenix & Phoenix64
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [run_build]
+
+permissions:
+  contents: read
+
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+
+jobs:
+  build-phoenix:
+    runs-on: ubuntu-22.04
+    name: Build Phoenix (armeabi-v7a)
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip zip curl
+
+      - name: Set execute permissions recursively
+        run: |
+          chmod -R 775 pkg/android/phoenix
+          chmod -R 775 pkg/android/phoenix64
+
+      - name: Download and update cores (32-bit)
+        run: |
+          source ./cores.sh
+          baixar_cores "armeabi-v7a" "pkg/android/phoenix/assets/cores" "tmp_cores32"
+
+      - name: Compile Phoenix - debug
+        run: |
+          cd pkg/android/phoenix
+          ./gradlew assembleDebug
+          find . -iname "*.apk" -exec ls -l "{}" \;
+
+      - name: Get short SHA
+        id: slug_phoenix
+        run: echo "sha8=$(echo ${GITHUB_SHA} | cut -c1-8)" >> $GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: retroarch-phoenix-debug-${{ steps.slug_phoenix.outputs.sha8 }}
+          path: pkg/android/phoenix/build/outputs/apk/debug/phoenix-normal-debug.apk
+
+  build-phoenix64:
+    runs-on: ubuntu-22.04
+    name: Build Phoenix64 (arm64-v8a, flavor aarch64)
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip zip curl
+
+      - name: Set execute permissions recursively
+        run: |
+          chmod -R 775 pkg/android/phoenix
+          chmod -R 775 pkg/android/phoenix64
+
+      - name: Download and update cores (64-bit)
+        run: |
+          source ./cores.sh
+          baixar_cores "arm64-v8a" "pkg/android/phoenix64/assets/cores" "tmp_cores32"
+
+      - name: Compile Phoenix64 - debug (aarch64)
+        run: |
+          cd pkg/android/phoenix64
+          ./gradlew assembleAarch64Debug
+          find . -iname "*.apk" -exec ls -l "{}" \;
+
+      - name: Get short SHA
+        id: slug_phoenix64
+        run: echo "sha8=$(echo ${GITHUB_SHA} | cut -c1-8)" >> $GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: retroarch-phoenix64-debug-${{ steps.slug_phoenix64.outputs.sha8 }}
+          path: pkg/android/phoenix64/build/outputs/apk/aarch64/debug/phoenix64-aarch64-debug.apk

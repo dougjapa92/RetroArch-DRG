@@ -18,10 +18,8 @@ import android.content.pm.PackageManager;
 import android.Manifest;
 
 import java.io.File;
-import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.FileOutputStream;
 import java.io.InputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.ArrayList;
@@ -33,16 +31,18 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     private final int REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS = 124;
     public static String PACKAGE_NAME;
-    boolean checkPermissions = false;
+    private boolean checkPermissions = false;
     private SharedPreferences prefs;
 
     private final String[] ASSET_FOLDERS = {
-            "assets", "autoconfig", "cores", "database",
-            "filters", "info", "overlays", "shaders", "system"
+            "assets", "database", "filters", "info", "overlays", "shaders", "system"
     };
 
     private final File BASE_DIR = new File(Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
     private final File CONFIG_DIR = new File(Environment.getExternalStorageDirectory() + "/Android/data/com.retroarch/files");
+
+    private String archCores;       // cores32 ou cores64
+    private String archAutoconfig;  // autoconfig32 ou autoconfig64
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -53,9 +53,17 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
         UserPreferences.updateConfigFile(this);
-
-        // Zera o contador de negações sempre que o app inicia
         prefs.edit().putInt("deniedCount", 0).apply();
+
+        // Determina arquitetura
+        String arch = System.getProperty("os.arch");
+        if (arch.contains("64")) {
+            archCores = "cores64";
+            archAutoconfig = "autoconfig64";
+        } else {
+            archCores = "cores32";
+            archAutoconfig = "autoconfig32";
+        }
 
         checkRuntimePermissions();
     }
@@ -74,58 +82,40 @@ public final class MainMenuActivity extends PreferenceActivity {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
             List<String> permissionsNeeded = new ArrayList<>();
             final List<String> permissionsList = new ArrayList<>();
-    
+
             if (!addPermission(permissionsList, Manifest.permission.READ_EXTERNAL_STORAGE))
                 permissionsNeeded.add("Read External Storage");
             if (!addPermission(permissionsList, Manifest.permission.WRITE_EXTERNAL_STORAGE))
                 permissionsNeeded.add("Write External Storage");
-    
+
             if (permissionsList.size() > 0) {
                 checkPermissions = true;
-                if (permissionsNeeded.size() > 0) {
+                if (!permissionsNeeded.isEmpty()) {
                     String message = "Você precisa conceder acesso a " + permissionsNeeded.get(0);
-                    for (int i = 1; i < permissionsNeeded.size(); i++)
-                        message += ", " + permissionsNeeded.get(i);
-    
+                    for (int i = 1; i < permissionsNeeded.size(); i++) message += ", " + permissionsNeeded.get(i);
+
                     new AlertDialog.Builder(this)
                             .setMessage(message)
                             .setCancelable(false)
-                            .setPositiveButton("OK", (dialog, which) -> {
-                                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                                    requestPermissions(permissionsList.toArray(new String[0]),
-                                            REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
-                                }
-                            })
+                            .setPositiveButton("OK", (dialog, which) -> requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
                             .setNegativeButton("Sair", (dialog, which) -> finish())
                             .show();
                 } else {
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                        requestPermissions(permissionsList.toArray(new String[0]),
-                                REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
-                    }
+                    requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
                 }
             }
         }
-    
-        if (!checkPermissions) {
-            startExtractionOrRetro();
-        }
+
+        if (!checkPermissions) startExtractionOrRetro();
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS) {
             boolean allGranted = true;
-
-            for (int i = 0; i < permissions.length; i++) {
-                if (grantResults[i] != PackageManager.PERMISSION_GRANTED) {
-                    allGranted = false;
-                    break;
-                }
-            }
+            for (int result : grantResults) if (result != PackageManager.PERMISSION_GRANTED) allGranted = false;
 
             if (allGranted) {
-                // Reset contador se usuário concedeu
                 prefs.edit().putInt("deniedCount", 0).apply();
                 startExtractionOrRetro();
             } else {
@@ -144,25 +134,18 @@ public final class MainMenuActivity extends PreferenceActivity {
                             .setTitle("Permissões Necessárias!")
                             .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
                             .setCancelable(false)
-                            .setPositiveButton("Conceder", (dialog, which) -> {
-                                requestPermissions(permissions, REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
-                            })
+                            .setPositiveButton("Conceder", (dialog, which) -> requestPermissions(permissions, REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
                             .setNegativeButton("Sair", (dialog, which) -> finish())
                             .show();
                 }
             }
-        } else {
-            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        }
+        } else super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     }
 
     private void startExtractionOrRetro() {
         boolean firstRun = prefs.getBoolean("firstRun", true);
-        if (firstRun) {
-            new UnifiedExtractionTask().execute();
-        } else {
-            finalStartup();
-        }
+        if (firstRun) new UnifiedExtractionTask().execute();
+        else finalStartup();
     }
 
     private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
@@ -175,28 +158,61 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
             progressDialog.setTitle("Configurando RetroArch DRG...");
-            progressDialog.setMessage("\nClique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo.");
+            String archMessage = archCores.equals("cores64") ? "Arquitetura: arm64-v8a (64-bit)" : "Arquitetura: armeabi-v7a (32-bit)";
+            progressDialog.setMessage(archMessage + "\nClique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo.");
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);
             progressDialog.show();
 
             if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
-            totalFiles = countAllFiles(ASSET_FOLDERS);
+
+            // Remove pastas não utilizadas
+            removeUnusedArchFolders();
+
+            totalFiles = countAllFiles(ASSET_FOLDERS) + countAllFiles(new String[]{archCores, archAutoconfig});
+        }
+
+        private void removeUnusedArchFolders() {
+            String[] coresFolders = {"cores32", "cores64"};
+            String[] autoconfigFolders = {"autoconfig32", "autoconfig64"};
+
+            for (String folder : coresFolders) if (!folder.equals(archCores)) deleteFolder(new File(BASE_DIR, folder));
+            for (String folder : autoconfigFolders) if (!folder.equals(archAutoconfig)) deleteFolder(new File(BASE_DIR, folder));
+        }
+
+        private void deleteFolder(File folder) {
+            if (folder.exists()) {
+                File[] files = folder.listFiles();
+                if (files != null) {
+                    for (File file : files) {
+                        if (file.isDirectory()) deleteFolder(file);
+                        else file.delete();
+                    }
+                }
+                folder.delete();
+            }
         }
 
         @Override
         protected Boolean doInBackground(Void... voids) {
-            ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length, 4));
+            ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length + 2, 4));
 
             for (String folder : ASSET_FOLDERS) {
                 executor.submit(() -> {
-                    try {
-                        copyAssetFolder(folder, new File(BASE_DIR, folder));
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
+                    try { copyAssetFolder(folder, new File(BASE_DIR, folder)); }
+                    catch (IOException e) { e.printStackTrace(); }
                 });
             }
+
+            executor.submit(() -> {
+                try { copyAssetFolder(archCores, new File(BASE_DIR, "cores")); }
+                catch (IOException e) { e.printStackTrace(); }
+            });
+
+            executor.submit(() -> {
+                try { copyAssetFolder(archAutoconfig, new File(BASE_DIR, "autoconfig")); }
+                catch (IOException e) { e.printStackTrace(); }
+            });
 
             executor.shutdown();
             while (!executor.isTerminated()) {
@@ -210,9 +226,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         }
 
         @Override
-        protected void onProgressUpdate(Integer... values) {
-            progressDialog.setProgress(values[0]);
-        }
+        protected void onProgressUpdate(Integer... values) { progressDialog.setProgress(values[0]); }
 
         @Override
         protected void onPostExecute(Boolean result) {
@@ -234,9 +248,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 int total = 0;
                 for (String asset : assets) total += countFilesRecursive(assetFolder + "/" + asset);
                 return total;
-            } catch (IOException e) {
-                return 0;
-            }
+            } catch (IOException e) { return 0; }
         }
 
         private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
@@ -269,14 +281,12 @@ public final class MainMenuActivity extends PreferenceActivity {
             if (!originalCfg.exists()) originalCfg.createNewFile();
 
             List<String> lines = new ArrayList<>();
-            try (BufferedReader reader = new BufferedReader(new FileReader(originalCfg))) {
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(originalCfg))) {
                 String line;
-                while ((line = reader.readLine()) != null) {
-                    lines.add(line);
-                }
+                while ((line = reader.readLine()) != null) lines.add(line);
             }
-            StringBuilder content = new StringBuilder();
 
+            StringBuilder content = new StringBuilder();
             for (String line : lines) {
                 boolean replaced = false;
                 for (String folder : ASSET_FOLDERS) {

@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.media.AudioManager;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.preference.PreferenceActivity;
@@ -70,19 +71,13 @@ public final class MainMenuActivity extends PreferenceActivity {
         UserPreferences.updateConfigFile(this);
 
         String arch = System.getProperty("os.arch");
-        if (arch.contains("64")) {
-            archCores = "cores64";
-            archAutoconfig = "autoconfig64";
-        } else {
-            archCores = "cores32";
-            archAutoconfig = "autoconfig32";
-        }
+        archCores = arch.contains("64") ? "cores64" : "cores32";
 
         checkRuntimePermissions();
     }
 
     private boolean addPermission(List<String> permissionsList, String permission) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
                 permissionsList.add(permission);
                 return !shouldShowRequestPermissionRationale(permission);
@@ -92,7 +87,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     }
 
     private void checkRuntimePermissions() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             List<String> permissionsNeeded = new ArrayList<>();
             final List<String> permissionsList = new ArrayList<>();
 
@@ -182,12 +177,20 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
             removeUnusedArchFolders();
+
+            // Definir archAutoconfig de acordo com a versão do Android
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) { // ≤ 7.1.2
+                archAutoconfig = "autoconfig-legacy";
+            } else {
+                archAutoconfig = "autoconfig";
+            }
+
             totalFiles = countAllFiles(ASSET_FOLDERS) + countAllFiles(new String[]{archCores, archAutoconfig});
         }
 
         private void removeUnusedArchFolders() {
             String[] coresFolders = {"cores32", "cores64"};
-            String[] autoconfigFolders = {"autoconfig32", "autoconfig64"};
+            String[] autoconfigFolders = {"autoconfig-legacy", "autoconfig"};
 
             for (String folder : coresFolders) if (!folder.equals(archCores)) deleteFolder(new File(BASE_DIR, folder));
             for (String folder : autoconfigFolders) if (!folder.equals(archAutoconfig)) deleteFolder(new File(BASE_DIR, folder));
@@ -347,4 +350,4 @@ public final class MainMenuActivity extends PreferenceActivity {
         String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
         retro.putExtra("EXTERNAL", external);
     }
-} 
+}

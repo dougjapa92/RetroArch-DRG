@@ -25,6 +25,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y unzip zip curl
 
+      - name: Restore keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > my-release-key.keystore
+
       - name: Set execute permissions recursively
         run: |
           chmod -R 775 pkg/android/phoenix
@@ -38,17 +42,21 @@ jobs:
       - name: Compile Phoenix - release
         run: |
           cd pkg/android/phoenix
-          ./gradlew assembleRelease
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/my-release-key.keystore \
+            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
           find . -iname "*.apk" -exec ls -l "{}" \;
 
       - name: Get short SHA
         id: slug_phoenix
-        run: echo "::set-output name=sha8::$(echo ${GITHUB_SHA} | cut -c1-8)"
+        run: echo "sha8=$(echo ${GITHUB_SHA} | cut -c1-8)" >> $GITHUB_OUTPUT
 
       - uses: actions/upload-artifact@v4
         with:
           name: retroarch-phoenix-${{ steps.slug_phoenix.outputs.sha8 }}
-          path: pkg/android/phoenix/release/outputs/apk/normal/debug/phoenix-normal-release.apk
+          path: pkg/android/phoenix/build/outputs/apk/release/phoenix-release.apk
 
   build-phoenix64:
     runs-on: ubuntu-22.04
@@ -60,6 +68,10 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y unzip zip curl
+
+      - name: Restore keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > my-release-key.keystore
 
       - name: Set execute permissions recursively
         run: |
@@ -74,12 +86,16 @@ jobs:
       - name: Compile Phoenix64 - release (aarch64)
         run: |
           cd pkg/android/phoenix64
-          ./gradlew assembleAarch64Release
+          ./gradlew assembleAarch64Release \
+            -Pandroid.injected.signing.store.file=$GITHUB_WORKSPACE/my-release-key.keystore \
+            -Pandroid.injected.signing.store.password=${{ secrets.KEYSTORE_PASSWORD }} \
+            -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
+            -Pandroid.injected.signing.key.password=${{ secrets.KEY_PASSWORD }}
           find . -iname "*.apk" -exec ls -l "{}" \;
 
       - name: Get short SHA
         id: slug_phoenix64
-        run: echo "::set-output name=sha8::$(echo ${GITHUB_SHA} | cut -c1-8)"
+        run: echo "sha8=$(echo ${GITHUB_SHA} | cut -c1-8)" >> $GITHUB_OUTPUT
 
       - uses: actions/upload-artifact@v4
         with:

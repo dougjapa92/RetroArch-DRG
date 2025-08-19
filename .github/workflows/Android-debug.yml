@@ -16,7 +16,7 @@ env:
 jobs:
   build-phoenix:
     runs-on: ubuntu-22.04
-    name: Build Phoenix (armeabi-v7a)
+    name: Build Phoenix
     steps:
       - uses: actions/checkout@v3
 

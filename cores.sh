@@ -63,7 +63,8 @@ baixar_cores() {
         for SO_FILE in "$TEMP_DIR"/*.so; do
           cp -f "$SO_FILE" "$CORES_DIR/"
         done
-        echo -e "[$ARCH] $CORE_FILE atualizado com sucesso.\n"
+        echo "[$ARCH] $CORE_FILE atualizado com sucesso."
+        echo "------------------------------------------------------------------------"
         SUCCESS=true
       else
         echo "[$ARCH] Falha ao baixar $CORE_FILE (tentativa $((RETRY+1)))."

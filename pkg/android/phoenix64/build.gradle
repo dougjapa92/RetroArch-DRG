@@ -17,7 +17,7 @@ allprojects {
 
     Properties props = new Properties()
     props.load(new FileInputStream(new File(project.rootDir, "retroarch.properties")))
-    props.each { prop ->
+    props.each { prop -> 
         project.ext.set(prop.key, prop.value)
     }
 }
@@ -89,25 +89,20 @@ android {
     }
 
     signingConfigs {
-        if (project.hasProperty("RELEASE_STORE_FILE")) {
-            release {
-                storeFile file(RELEASE_STORE_FILE)
-                storePassword RELEASE_STORE_PASSWORD
-                keyAlias RELEASE_KEY_ALIAS
-                keyPassword RELEASE_KEY_PASSWORD
-            }
+        release {
+            storeFile file("my-release-key.keystore")
+            storePassword "123456"
+            keyAlias "phoenixkey"
+            keyPassword "123456"
         }
     }
 
     buildTypes {
-        if (project.hasProperty("RELEASE_STORE_FILE")) {
-            release {
-                signingConfig signingConfigs.release
-            }
-        } else {
-            release {
-                signingConfig signingConfigs.debug
-            }
+        release {
+            signingConfig signingConfigs.release
+        }
+        debug {
+            signingConfig signingConfigs.debug
         }
     }
 
@@ -117,7 +112,7 @@ android {
             if (variant.flavorName == "aarch64") {
                 def apkDir = new File("${project.rootDir}/pkg/android/phoenix64/build/outputs/apk/aarch64/${variant.buildType.name}")
                 apkDir.mkdirs()
-                output.outputFileName = "phoenix64-aarch64-debug.apk"
+                output.outputFileName = "phoenix64-aarch64-release.apk"
             }
         }
     }
@@ -135,6 +130,6 @@ String getManifestAttribute(String attribute) {
 // Tarefa de verificação de APK
 tasks.register("printAarch64Apk") {
     doLast {
-        println "APK aarch64 será gerado em: ${buildDir}/outputs/apk/aarch64/debug/phoenix64-aarch64-debug.apk"
+        println "APK aarch64 será gerado em: ${buildDir}/outputs/apk/aarch64/release/phoenix64-aarch64-release.apk"
     }
 }

@@ -167,7 +167,8 @@ public final class MainMenuActivity extends PreferenceActivity {
         @Override
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
-            progressDialog.setMessage("Configurando RetroArch DRG...\n\nClique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo.");
+            progressDialog.setTitle("Permissão negada!")
+            progressDialog.setMessage("Clique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo.");
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);
             progressDialog.show();

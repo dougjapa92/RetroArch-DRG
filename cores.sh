@@ -47,41 +47,35 @@ baixar_cores() {
   local ARCH=$1
   local CORES_DIR=$2
   local TEMP_DIR=$3
-
-  BASE_URL="https://buildbot.libretro.com/nightly/android/latest/$ARCH/"
+  local BASE_URL="https://buildbot.libretro.com/nightly/android/latest/$ARCH/"
 
   mkdir -p "$CORES_DIR" "$TEMP_DIR"
 
-  total=${#CORES_LIST[@]}
-  current=0
-
   for CORE_FILE in "${CORES_LIST[@]}"; do
-    attempt=1
-    success=false
-    while [ $attempt -le 3 ]; do
-      echo "[$ARCH] Baixando $CORE_FILE (tentativa $attempt)..."
-      if curl -s -L "$BASE_URL$CORE_FILE" -o "$TEMP_DIR/$CORE_FILE"; then
-        unzip -o "$TEMP_DIR/$CORE_FILE" -d "$TEMP_DIR" >/dev/null
+    local RETRY=0
+    local SUCCESS=false
+    local WAIT=2
+
+    while [[ $RETRY -lt 3 && $SUCCESS == false ]]; do
+      echo "[$ARCH] Baixando $CORE_FILE (tentativa $((RETRY+1)))..."
+      if curl -sS -fL "${BASE_URL}${CORE_FILE}" -o "$TEMP_DIR/$CORE_FILE"; then
+        unzip -oq "$TEMP_DIR/$CORE_FILE" -d "$TEMP_DIR"
         for SO_FILE in "$TEMP_DIR"/*.so; do
-          cp -f "$SO_FILE" "$CORES_DIR/" || true
-          echo "[$ARCH] Atualizado $(basename "$SO_FILE")"
+          cp -f "$SO_FILE" "$CORES_DIR/"
         done
-        rm -f "$TEMP_DIR/$CORE_FILE"
-        success=true
-        break
+        echo "[$ARCH] $CORE_FILE atualizado com sucesso."
+        SUCCESS=true
       else
-        echo "[$ARCH] Falha ao baixar $CORE_FILE"
-        ((attempt++))
+        echo "[$ARCH] Falha ao baixar $CORE_FILE (tentativa $((RETRY+1)))."
+        ((RETRY++))
+        [[ $RETRY -lt 3 ]] && sleep $WAIT
+        WAIT=$((WAIT * 2))
       fi
     done
 
-    if [ "$success" = false ]; then
-      echo "[$ARCH] Erro: não foi possível baixar $CORE_FILE após 3 tentativas"
-    fi
+    [[ $SUCCESS == false ]] && echo "[$ARCH] Erro crítico: não foi possível baixar $CORE_FILE após 3 tentativas."
 
-    ((current++))
-    percent=$((current * 100 / total))
-    echo "[$ARCH] Progresso: $current/$total ($percent%)"
+    rm -f "$TEMP_DIR/$CORE_FILE"
   done
 
   rm -rf "$TEMP_DIR"

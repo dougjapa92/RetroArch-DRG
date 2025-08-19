@@ -1,0 +1,74 @@
+name: CI Android Lint - Phoenix & Phoenix64
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint-phoenix:
+    runs-on: ubuntu-22.04
+    name: Lint Phoenix (armeabi-v7a)
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip zip curl openjdk-11-jdk
+
+      - name: Set execute permissions recursively
+        run: |
+          chmod -R 775 pkg/android/phoenix
+          chmod -R 775 pkg/android/phoenix64
+
+      - name: Download and update cores (32-bit)
+        run: |
+          source ./cores.sh
+          baixar_cores "armeabi-v7a" "pkg/android/phoenix/assets/cores" "tmp_cores32"
+
+      - name: Run Lint Release
+        run: |
+          cd pkg/android/phoenix
+          ./gradlew lintRelease
+          
+      - name: Upload Lint Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix-lint-report
+          path: pkg/android/phoenix/build/reports/lint/lint-results-release.html
+
+  lint-phoenix64:
+    runs-on: ubuntu-22.04
+    name: Lint Phoenix64 (arm64-v8a)
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip zip curl openjdk-11-jdk
+
+      - name: Set execute permissions recursively
+        run: |
+          chmod -R 775 pkg/android/phoenix
+          chmod -R 775 pkg/android/phoenix64
+
+      - name: Download and update cores (64-bit)
+        run: |
+          source ./cores.sh
+          baixar_cores "arm64-v8a" "pkg/android/phoenix64/assets/cores" "tmp_cores32"
+
+      - name: Run Lint Release
+        run: |
+          cd pkg/android/phoenix64
+          ./gradlew lintRelease
+
+      - name: Upload Lint Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: phoenix64-lint-report
+          path: pkg/android/phoenix64/build/reports/lint/lint-results-release.html

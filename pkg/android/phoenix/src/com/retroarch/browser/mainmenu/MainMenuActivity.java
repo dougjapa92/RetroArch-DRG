@@ -16,6 +16,7 @@ import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.content.pm.PackageManager;
 import android.Manifest;
+import android.net.Uri;
 
 import java.io.File;
 import java.io.InputStream;
@@ -53,7 +54,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
         UserPreferences.updateConfigFile(this);
-        prefs.edit().putInt("deniedCount", 0).apply();
+        // Removido: não zerar o deniedCount aqui
 
         // Determina arquitetura
         String arch = System.getProperty("os.arch");
@@ -116,14 +117,14 @@ public final class MainMenuActivity extends PreferenceActivity {
             for (int result : grantResults) {
                 if (result != PackageManager.PERMISSION_GRANTED) allGranted = false;
             }
-    
+
             if (allGranted) {
                 prefs.edit().putInt("deniedCount", 0).apply();
                 startExtractionOrRetro();
             } else {
                 int deniedCount = prefs.getInt("deniedCount", 0) + 1;
                 prefs.edit().putInt("deniedCount", deniedCount).apply();
-    
+
                 if (deniedCount >= 2) {
                     new AlertDialog.Builder(this)
                             .setTitle("Permissão Negada!")
@@ -160,7 +161,6 @@ public final class MainMenuActivity extends PreferenceActivity {
     }
 
     private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
-
         ProgressDialog progressDialog;
         AtomicInteger processedFiles = new AtomicInteger(0);
         int totalFiles = 0;
@@ -176,10 +176,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             progressDialog.show();
 
             if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
-
-            // Remove pastas não utilizadas
             removeUnusedArchFolders();
-
             totalFiles = countAllFiles(ASSET_FOLDERS) + countAllFiles(new String[]{archCores, archAutoconfig});
         }
 
@@ -232,7 +229,6 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
 
             try { updateRetroarchCfg(); } catch (IOException e) { return false; }
-
             return true;
         }
 
@@ -299,11 +295,9 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             StringBuilder content = new StringBuilder();
             for (String line : lines) {
-                boolean replaced = false;
                 for (String folder : ASSET_FOLDERS) {
                     if (line.startsWith(folder + "_directory")) {
                         line = folder + "_directory = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"";
-                        replaced = true;
                         break;
                     }
                 }

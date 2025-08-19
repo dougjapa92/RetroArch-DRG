@@ -42,8 +42,8 @@ public final class MainMenuActivity extends PreferenceActivity {
     private final File BASE_DIR = new File(Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
     private final File CONFIG_DIR = new File(Environment.getExternalStorageDirectory() + "/Android/data/com.retroarch/files");
 
-    private String archCores;       // cores32 ou cores64
-    private String archAutoconfig;  // autoconfig32 ou autoconfig64
+    private String archCores;
+    private String archAutoconfig;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -54,7 +54,6 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
         UserPreferences.updateConfigFile(this);
-        // Removido: não zerar o deniedCount aqui
 
         // Determina arquitetura
         String arch = System.getProperty("os.arch");
@@ -89,7 +88,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             if (!addPermission(permissionsList, Manifest.permission.WRITE_EXTERNAL_STORAGE))
                 permissionsNeeded.add("Write External Storage");
 
-            if (permissionsList.size() > 0) {
+            if (!permissionsList.isEmpty()) {
                 checkPermissions = true;
                 if (!permissionsNeeded.isEmpty()) {
                     String message = "Você precisa conceder acesso a " + permissionsNeeded.get(0);
@@ -98,7 +97,8 @@ public final class MainMenuActivity extends PreferenceActivity {
                     new AlertDialog.Builder(this)
                             .setMessage(message)
                             .setCancelable(false)
-                            .setPositiveButton("OK", (dialog, which) -> requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
+                            .setPositiveButton("OK", (dialog, which) ->
+                                    requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
                             .setNegativeButton("Sair", (dialog, which) -> finish())
                             .show();
                 } else {
@@ -311,6 +311,15 @@ public final class MainMenuActivity extends PreferenceActivity {
     }
 
     public void finalStartup() {
+        // Verifica se as permissões ainda estão concedidas
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+            if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED ||
+                checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                checkRuntimePermissions();
+                return;
+            }
+        }
+
         Intent retro = new Intent(this, RetroActivityFuture.class);
         retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
@@ -339,4 +348,4 @@ public final class MainMenuActivity extends PreferenceActivity {
         String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
         retro.putExtra("EXTERNAL", external);
     }
-}
+} 

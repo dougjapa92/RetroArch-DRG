@@ -33,13 +33,13 @@ jobs:
       - name: Run Lint Release
         run: |
           cd pkg/android/phoenix
-          ./gradlew lintRelease
+          ./gradlew lintNormalRelease
           
       - name: Upload Lint Report
         uses: actions/upload-artifact@v4
         with:
           name: phoenix-lint-report
-          path: pkg/android/phoenix/build/reports/lint/lint-results-release.html
+          path: pkg/android/phoenix/build/reports/lint/lint-results-normal-release.html
 
   lint-phoenix64:
     runs-on: ubuntu-22.04
@@ -65,10 +65,10 @@ jobs:
       - name: Run Lint Release
         run: |
           cd pkg/android/phoenix64
-          ./gradlew lintRelease
+          ./gradlew lintNormalRelease
 
       - name: Upload Lint Report
         uses: actions/upload-artifact@v4
         with:
           name: phoenix64-lint-report
-          path: pkg/android/phoenix64/build/reports/lint/lint-results-release.html
+          path: pkg/android/phoenix64/build/reports/lint/lint-results-normal-release.html

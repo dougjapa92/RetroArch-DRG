@@ -127,14 +127,14 @@ public final class MainMenuActivity extends PreferenceActivity {
 
                 if (deniedCount >= 2) {
                     new AlertDialog.Builder(this)
-                            .setTitle("Permissão negada!")
+                            .setTitle("Permissão Negada!")
                             .setMessage("Ative as permissões manualmente ou reinstale o aplicativo.")
                             .setCancelable(false)
                             .setPositiveButton("OK", (dialog, which) -> finish())
                             .show();
                 } else {
                     new AlertDialog.Builder(this)
-                            .setTitle("Permissões necessárias")
+                            .setTitle("Permissões Necessárias!")
                             .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
                             .setCancelable(false)
                             .setPositiveButton("Conceder", (dialog, which) -> {
@@ -167,7 +167,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         @Override
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
-            progressDialog.setTitle("Configurando RetroArch DRG...")
+            progressDialog.setTitle("Configurando RetroArch DRG...");
             progressDialog.setMessage("Clique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo.");
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);

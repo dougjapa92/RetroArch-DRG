@@ -63,7 +63,7 @@ baixar_cores() {
         for SO_FILE in "$TEMP_DIR"/*.so; do
           cp -f "$SO_FILE" "$CORES_DIR/"
         done
-        echo "[$ARCH] $CORE_FILE atualizado com sucesso."
+        echo -e "[$ARCH] $CORE_FILE atualizado com sucesso.\n"
         SUCCESS=true
       else
         echo "[$ARCH] Falha ao baixar $CORE_FILE (tentativa $((RETRY+1)))."
@@ -73,7 +73,7 @@ baixar_cores() {
       fi
     done
 
-    [[ $SUCCESS == false ]] && echo "[$ARCH] Erro crítico: não foi possível baixar $CORE_FILE após 3 tentativas."
+    [[ $SUCCESS == false ]] && { echo "[$ARCH] Erro crítico: não foi possível baixar $CORE_FILE após 3 tentativas."; exit 1; }
 
     rm -f "$TEMP_DIR/$CORE_FILE"
   done

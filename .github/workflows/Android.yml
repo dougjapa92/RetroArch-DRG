@@ -52,7 +52,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: retroarch-phoenix-${{ steps.slug_phoenix.outputs.sha8 }}
-          path: pkg/android/phoenix/build/outputs/apk/release/phoenix-release.apk
+          path: pkg/android/phoenix/build/outputs/apk/release/phoenix-normal-release.apk
 
   build-phoenix64:
     runs-on: ubuntu-22.04

@@ -158,7 +158,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
             progressDialog.setTitle("Configurando RetroArch DRG...");
-            String archMessage = archCores.equals("cores64") ? "\nArquitetura: arm64-v8a (64-bit)" : "\nArquitetura: armeabi-v7a (32-bit)";
+            String archMessage = archCores.equals("cores64") ? "\nArquitetura do Processador:\n- arm64-v8a (64-bit)" : "\nArquitetura do Processador:\n- armeabi-v7a (32-bit)";
             progressDialog.setMessage(archMessage + "\n\nClique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo.");
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);

@@ -1,4 +1,4 @@
-name: CI Android - Phoenix & Phoenix64
+name: Release CI Android - Phoenix & Phoenix64
 
 on:
   push:

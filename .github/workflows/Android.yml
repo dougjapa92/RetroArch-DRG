@@ -16,7 +16,7 @@ env:
 jobs:
   build-phoenix:
     runs-on: ubuntu-22.04
-    name: Build Phoenix (armeabi-v7a)
+    name: Build Phoenix
     steps:
       - uses: actions/checkout@v3
 
@@ -32,7 +32,6 @@ jobs:
       - name: Set execute permissions recursively
         run: |
           chmod -R 775 pkg/android/phoenix
-          chmod -R 775 pkg/android/phoenix64
 
       - name: Download and update cores (32-bit)
         run: |

@@ -25,6 +25,7 @@ allprojects {
 apply plugin: 'com.android.application'
 
 android {
+    namespace "com.retroarch"
     compileSdkVersion 30
     buildToolsVersion "30.0.3"
     ndkVersion "22.0.7026061"

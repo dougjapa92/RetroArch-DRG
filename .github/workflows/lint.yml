@@ -67,6 +67,10 @@ jobs:
           cd pkg/android/phoenix64
           ./gradlew lintNormalRelease || true
 
+      - name: List lint report directory
+        run: |
+          ls -R pkg/android/phoenix/build/reports/lint
+
       - name: Upload Lint Report
         uses: actions/upload-artifact@v4
         with:

@@ -230,7 +230,24 @@ public final class MainMenuActivity extends PreferenceActivity {
                 folder.delete();
             }
         }
-    
+        
+        private int countAllFiles(String[] folders) {
+            int count = 0;
+            for (String folder : folders) count += countFilesRecursive(folder);
+            return count;
+        }
+        
+        private int countFilesRecursive(String assetFolder) {
+            try {
+                String[] assets = getAssets().list(assetFolder);
+                if (assets == null || assets.length == 0) return 1;
+                int total = 0;
+                for (String asset : assets) total += countFilesRecursive(assetFolder + "/" + asset);
+                return total;
+            } catch (IOException e) {
+                return 0;
+            }
+        }
         @Override
         protected Boolean doInBackground(Void... voids) {
             ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length + 2, 4));

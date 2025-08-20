@@ -38,8 +38,6 @@ public final class MainMenuActivity extends PreferenceActivity {
     private final int REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS = 124;
     public static String PACKAGE_NAME;
     private SharedPreferences prefs;
-    private boolean wentToSettings = false;
-    private boolean firstDenialHandled = false;
 
     private final String[] ASSET_FOLDERS = {
             "assets", "database", "filters", "info", "overlays", "shaders", "system", "config", "remaps", "cheats"

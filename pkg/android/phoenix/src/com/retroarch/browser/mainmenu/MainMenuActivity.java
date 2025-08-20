@@ -289,10 +289,21 @@ public final class MainMenuActivity extends PreferenceActivity {
             String[] assets = getAssets().list(assetFolder);
             if (!targetFolder.exists()) targetFolder.mkdirs();
 
+            if ((assetFolder.startsWith("assets/") && !assetFolder.equals("assets")) ||
+                (assetFolder.startsWith("overlays/") && !assetFolder.equals("overlays"))) {
+                File noMedia = new File(targetFolder, ".nomedia");
+                if (!noMedia.exists()) noMedia.createNewFile();
+            }
+
             if (assets != null && assets.length > 0) {
                 for (String asset : assets) {
                     String fullPath = assetFolder + "/" + asset;
                     File outFile = new File(targetFolder, asset);
+
+                    if ("cores32".equals(archCores) && fullPath.equals("config/global.glslp")) {
+                        processedFiles.incrementAndGet();
+                        continue;
+                    }
 
                     if (getAssets().list(fullPath).length > 0) {
                         copyAssetFolder(fullPath, outFile);

@@ -32,8 +32,8 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -45,7 +45,6 @@ public final class MainMenuActivity extends PreferenceActivity {
     public static String PACKAGE_NAME;
     private SharedPreferences prefs;
 
-    // Apenas assets e overlays
     private final String[] ASSET_FOLDERS = { "assets", "overlays" };
 
     private final Map<String, String> ASSET_FLAGS = new HashMap<String, String>() {{
@@ -176,19 +175,22 @@ public final class MainMenuActivity extends PreferenceActivity {
     private void startExtractionTask() {
         ProgressDialog progressDialog = new ProgressDialog(MainMenuActivity.this);
         progressDialog.setTitle("Configurando RetroArch DRG...");
-        String archMessage = archCores.equals("cores64") ? "\nArquitetura dos Cores:\n   - arm64-v8a (64-bit)"
-                                                          : "\nArquitetura dos Cores:\n   - armeabi-v7a (32-bit)";
-        progressDialog.setMessage(archMessage + "\n\nClique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo.");
+        String archMessage = archCores.equals("cores64") ?
+                "\nArquitetura dos Cores:\n   - arm64-v8a (64-bit)" :
+                "\nArquitetura dos Cores:\n   - armeabi-v7a (32-bit)";
+        progressDialog.setMessage(archMessage +
+                "\n\nClique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo.");
         progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
         progressDialog.setCancelable(false);
         progressDialog.show();
 
-        Executors.newSingleThreadExecutor().submit(() -> {
+        new Thread(() -> {
             try {
                 if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
                 removeUnusedArchFolders();
 
-                archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
+                archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ?
+                        "autoconfig-legacy" : "autoconfig";
 
                 AssetManager am = getAssets();
                 List<String> roots = new ArrayList<>();
@@ -200,18 +202,27 @@ public final class MainMenuActivity extends PreferenceActivity {
                 totalFiles = 0;
                 for (String root : roots) totalFiles += countFilesRecursive(root);
 
-                ExecutorService executor = buildSafeExecutor();
+                List<ExecutorService> executors = new ArrayList<>();
                 for (String folder : ASSET_FOLDERS) {
+                    ExecutorService exec = Executors.newSingleThreadExecutor();
+                    executors.add(exec);
                     File target = new File(BASE_DIR, folder);
-                    executor.submit(() -> copyAssetFolderOptimized(am, folder, target, executor));
+                    exec.submit(() -> copyAssetFolderOptimized(am, folder, target, exec));
                 }
-                executor.submit(() -> copyAssetFolderOptimized(am, archCores, new File(BASE_DIR, "cores"), executor));
-                executor.submit(() -> copyAssetFolderOptimized(am, archAutoconfig, new File(BASE_DIR, "autoconfig"), executor));
+                ExecutorService coresExec = Executors.newSingleThreadExecutor();
+                executors.add(coresExec);
+                coresExec.submit(() -> copyAssetFolderOptimized(am, archCores, new File(BASE_DIR, "cores"), coresExec));
 
-                executor.shutdown();
-                while (!executor.awaitTermination(120, TimeUnit.MILLISECONDS)) {
-                    int progress = (totalFiles == 0) ? 0 : (processedFiles.get() * 100) / totalFiles;
-                    uiHandler.post(() -> progressDialog.setProgress(progress));
+                ExecutorService autoExec = Executors.newSingleThreadExecutor();
+                executors.add(autoExec);
+                autoExec.submit(() -> copyAssetFolderOptimized(am, archAutoconfig, new File(BASE_DIR, "autoconfig"), autoExec));
+
+                for (ExecutorService exec : executors) {
+                    exec.shutdown();
+                    while (!exec.awaitTermination(100, TimeUnit.MILLISECONDS)) {
+                        int progress = (totalFiles == 0) ? 0 : (processedFiles.get() * 100) / totalFiles;
+                        uiHandler.post(() -> progressDialog.setProgress(progress));
+                    }
                 }
 
                 updateRetroarchCfg();
@@ -220,16 +231,12 @@ public final class MainMenuActivity extends PreferenceActivity {
                     progressDialog.dismiss();
                     finalStartup();
                 });
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                uiHandler.post(progressDialog::dismiss);
-                finish();
             } catch (Exception e) {
                 e.printStackTrace();
                 uiHandler.post(progressDialog::dismiss);
                 finish();
             }
-        });
+        }).start();
     }
 
     private void preloadAssets(AssetManager am, String path) throws IOException {

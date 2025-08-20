@@ -104,46 +104,57 @@ public final class MainMenuActivity extends PreferenceActivity {
         if (!checkPermissions) startExtractionOrRetro();
     }
 
+    private void handlePermissionStatus() {
+        int deniedCount = prefs.getInt("deniedCount", 0);
+        String[] permissions = {Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE};
+
+        boolean allGranted = true;
+        for (String permission : permissions)
+            if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) allGranted = false;
+
+        if (allGranted) {
+            prefs.edit().putInt("deniedCount", 0).apply();
+            startExtractionOrRetro();
+        } else if (deniedCount >= 2) {
+            new AlertDialog.Builder(this)
+                .setTitle("Permissão Negada!")
+                .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
+                .setCancelable(false)
+                .setPositiveButton("Abrir Configurações", (dialog, which) -> {
+                    Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                    Uri uri = Uri.fromParts("package", getPackageName(), null);
+                    intent.setData(uri);
+                    startActivity(intent);
+                })
+                .setNegativeButton("Sair", (dialog, which) -> finish())
+                .show();
+        } else {
+            new AlertDialog.Builder(this)
+                .setTitle("Permissões Necessárias!")
+                .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
+                .setCancelable(false)
+                .setPositiveButton("Conceder", (dialog, which) ->
+                    requestPermissions(permissions, REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
+                .setNegativeButton("Sair", (dialog, which) -> finish())
+                .show();
+        }
+    }
+
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS) {
-            boolean allGranted = true;
-            for (int result : grantResults) if (result != PackageManager.PERMISSION_GRANTED) allGranted = false;
-
-            if (allGranted) {
-                prefs.edit().putInt("deniedCount", 0).apply();
-                startExtractionOrRetro();
-            } else {
-                int deniedCount = prefs.getInt("deniedCount", 0) + 1;
-                prefs.edit().putInt("deniedCount", deniedCount).apply();
-
-                if (deniedCount >= 2) {
-                    new AlertDialog.Builder(this)
-                            .setTitle("Permissão Negada!")
-                            .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
-                            .setCancelable(false)
-                            .setPositiveButton("Abrir Configurações", (dialog, which) -> {
-                                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                                Uri uri = Uri.fromParts("package", getPackageName(), null);
-                                intent.setData(uri);
-                                startActivity(intent);
-                            })
-                            .setNegativeButton("Sair", (dialog, which) -> finish())
-                            .show();
-                } else {
-                    new AlertDialog.Builder(this)
-                            .setTitle("Permissões Necessárias!")
-                            .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
-                            .setCancelable(false)
-                            .setPositiveButton("Conceder", (dialog, which) ->
-                                    requestPermissions(permissions, REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
-                            .setNegativeButton("Sair", (dialog, which) -> finish())
-                            .show();
-                }
-            }
+            int deniedCount = prefs.getInt("deniedCount", 0) + 1;
+            prefs.edit().putInt("deniedCount", deniedCount).apply();
+            handlePermissionStatus();
         } else {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        handlePermissionStatus();
     }
 
     private void startExtractionOrRetro() {

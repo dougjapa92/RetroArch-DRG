@@ -42,7 +42,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class MainMenuActivity extends PreferenceActivity {
 
     private final int REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS = 124;
-    private final int REQUEST_CODE_OPEN_SETTINGS = 125;
     public static String PACKAGE_NAME;
     private SharedPreferences prefs;
 
@@ -120,47 +119,35 @@ public final class MainMenuActivity extends PreferenceActivity {
                 prefs.edit().putInt("deniedCount", 0).apply();
                 startExtractionOrRetro();
             } else {
-                showPermissionAlert();
+                int deniedCount = prefs.getInt("deniedCount", 0) + 1;
+                prefs.edit().putInt("deniedCount", deniedCount).apply();
+
+                if (deniedCount >= 2) {
+                    new AlertDialog.Builder(this)
+                            .setTitle("Permissão Negada!")
+                            .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
+                            .setCancelable(false)
+                            .setPositiveButton("Abrir Configurações", (dialog, which) -> {
+                                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                                Uri uri = Uri.fromParts("package", getPackageName(), null);
+                                intent.setData(uri);
+                                startActivity(intent);
+                            })
+                            .setNegativeButton("Sair", (dialog, which) -> finish())
+                            .show();
+                } else {
+                    new AlertDialog.Builder(this)
+                            .setTitle("Permissões Necessárias!")
+                            .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
+                            .setCancelable(false)
+                            .setPositiveButton("Conceder", (dialog, which) ->
+                                    requestPermissions(permissions, REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
+                            .setNegativeButton("Sair", (dialog, which) -> finish())
+                            .show();
+                }
             }
         } else {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        }
-    }
-
-    private void showPermissionAlert() {
-        int deniedCount = prefs.getInt("deniedCount", 0) + 1;
-        prefs.edit().putInt("deniedCount", deniedCount).apply();
-
-        if (deniedCount >= 2) {
-            new AlertDialog.Builder(this)
-                    .setTitle("Permissão Negada!")
-                    .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
-                    .setCancelable(false)
-                    .setPositiveButton("Abrir Configurações", (dialog, which) -> {
-                        Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                        Uri uri = Uri.fromParts("package", getPackageName(), null);
-                        intent.setData(uri);
-                        startActivityForResult(intent, REQUEST_CODE_OPEN_SETTINGS);
-                    })
-                    .setNegativeButton("Sair", (dialog, which) -> finish())
-                    .show();
-        } else {
-            new AlertDialog.Builder(this)
-                    .setTitle("Permissões Necessárias!")
-                    .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
-                    .setCancelable(false)
-                    .setPositiveButton("Conceder", (dialog, which) ->
-                            checkRuntimePermissions())
-                    .setNegativeButton("Sair", (dialog, which) -> finish())
-                    .show();
-        }
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == REQUEST_CODE_OPEN_SETTINGS) {
-            checkRuntimePermissions();
         }
     }
 
@@ -261,7 +248,12 @@ public final class MainMenuActivity extends PreferenceActivity {
         for (String name : list) {
             String full = path + "/" + name;
             if (assetCache.containsKey(full)) {
-                count += countFilesRecursive(full);
+                if (path.startsWith("assets") || path.startsWith("overlays")) {
+                    count += countFilesRecursive(full);
+                } else {
+                    count += list.length;
+                    break;
+                }
             } else {
                 count += 1;
             }
@@ -276,6 +268,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             if (!outDir.exists()) outDir.mkdirs();
 
             boolean nomediaCreated = false;
+            boolean checkMedia = assetDir.startsWith("assets") || assetDir.startsWith("overlays");
 
             for (String entry : assets) {
                 String fullPath = assetDir + "/" + entry;
@@ -297,8 +290,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                         while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
                     }
 
-                    // Cria .nomedia somente em assets e overlays
-                    if (!nomediaCreated && ("assets".equals(assetDir) || "overlays".equals(assetDir)) && isMedia(entry)) {
+                    if (checkMedia && !nomediaCreated && isMedia(entry)) {
                         File nomedia = new File(outDir, ".nomedia");
                         if (!nomedia.exists()) {
                             try { nomedia.createNewFile(); } catch (IOException ignored) {}

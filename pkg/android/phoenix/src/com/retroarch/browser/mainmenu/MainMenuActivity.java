@@ -107,8 +107,10 @@ public final class MainMenuActivity extends PreferenceActivity {
         startExtractionOrRetro();
     }
 
+    // Flags necessárias
     private boolean permissionsHandled = false;
     private boolean wentToSettings = false;
+    private boolean firstDenialHandled = false;
     
     private void handlePermissionStatus(String[] permissions) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || permissionsHandled) return;
@@ -127,7 +129,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             int deniedCount = prefs.getInt("deniedCount", 0);
     
             if (deniedCount >= 2 || wentToSettings) {
-                // Segunda mensagem: Abrir Configurações
+                // Segunda mensagem: abrir configurações
                 new AlertDialog.Builder(this)
                     .setTitle("Permissão Negada!")
                     .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
@@ -141,10 +143,11 @@ public final class MainMenuActivity extends PreferenceActivity {
                     })
                     .setNegativeButton("Sair", (dialog, which) -> finish())
                     .show();
-            } else {
-                // Primeira mensagem: Conceder Permissões
+            } else if (!firstDenialHandled) {
+                // Primeira mensagem: conceder permissões
                 deniedCount++;
                 prefs.edit().putInt("deniedCount", deniedCount).apply();
+                firstDenialHandled = true;
     
                 new AlertDialog.Builder(this)
                     .setTitle("Permissões Necessárias!")

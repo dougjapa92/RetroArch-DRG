@@ -110,10 +110,9 @@ public final class MainMenuActivity extends PreferenceActivity {
     // Flags necessárias
     private boolean permissionsHandled = false;
     private boolean wentToSettings = false;
-    private boolean firstDenialHandled = false;
     
     private void handlePermissionStatus(String[] permissions) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || permissionsHandled) return;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
     
         List<String> missingPermissions = new ArrayList<>();
         addPermission(missingPermissions, Manifest.permission.READ_EXTERNAL_STORAGE);
@@ -124,16 +123,13 @@ public final class MainMenuActivity extends PreferenceActivity {
         if (allGranted) {
             prefs.edit().putInt("deniedCount", 0).apply();
             permissionsHandled = true;
+    
+            // Chama a extração/executa RetroArch mesmo na primeira execução
             startExtractionOrRetro();
         } else {
             int deniedCount = prefs.getInt("deniedCount", 0);
     
-            // Incrementar deniedCount somente se vier de onRequestPermissionsResult
-            if (permissions != null) deniedCount++;
-            prefs.edit().putInt("deniedCount", deniedCount).apply();
-    
             if (deniedCount >= 2 || wentToSettings) {
-                // Segunda mensagem: abrir configurações
                 new AlertDialog.Builder(this)
                     .setTitle("Permissão Negada!")
                     .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
@@ -147,9 +143,9 @@ public final class MainMenuActivity extends PreferenceActivity {
                     })
                     .setNegativeButton("Sair", (dialog, which) -> finish())
                     .show();
-            } else if (!firstDenialHandled) {
-                // Primeira mensagem: conceder permissões
-                firstDenialHandled = true;
+            } else {
+                deniedCount++;
+                prefs.edit().putInt("deniedCount", deniedCount).apply();
     
                 new AlertDialog.Builder(this)
                     .setTitle("Permissões Necessárias!")
@@ -172,7 +168,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         super.onResume();
         if (wentToSettings) {
             handlePermissionStatus(null);
-            wentToSettings = false;
+            wentToSettings = false; // reseta a flag
         }
     }
     

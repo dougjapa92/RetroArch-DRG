@@ -238,7 +238,8 @@ public final class MainMenuActivity extends PreferenceActivity {
             if (assets != null && assets.length > 0) {
                 for (String asset : assets) {
                     // Ignorar global.glslp se cores32 e pasta config
-                    if ("config".equals(assetFolder) && "global.glslp".equals(asset) && "cores32".equals(archCores)) {
+                    if ("cores32".equals(archCores) && fullPath.equals("config/global.glslp")) {
+                        processedFiles.incrementAndGet();
                         continue;
                     }
                     String fullPath = assetFolder + "/" + asset;

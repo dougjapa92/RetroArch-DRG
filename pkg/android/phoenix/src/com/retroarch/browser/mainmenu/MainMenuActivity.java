@@ -117,12 +117,14 @@ public final class MainMenuActivity extends PreferenceActivity {
         addPermission(permissionsList, Manifest.permission.WRITE_EXTERNAL_STORAGE);
     
         boolean allGranted = permissionsList.isEmpty();
+    
         if (allGranted) {
             prefs.edit().putInt("deniedCount", 0).apply();
             permissionsHandled = true;
             startExtractionOrRetro();
         } else {
             int deniedCount = prefs.getInt("deniedCount", 0);
+    
             if (deniedCount >= 2) {
                 new AlertDialog.Builder(this)
                         .setTitle("Permissão Negada!")
@@ -133,6 +135,23 @@ public final class MainMenuActivity extends PreferenceActivity {
                             Uri uri = Uri.fromParts("package", getPackageName(), null);
                             intent.setData(uri);
                             startActivity(intent);
+                        })
+                        .setNegativeButton("Sair", (dialog, which) -> finish())
+                        .show();
+            } else {
+                // Primeira negação ou ainda não chegou a 2, solicita permissão novamente
+                deniedCount++;
+                prefs.edit().putInt("deniedCount", deniedCount).apply();
+    
+                new AlertDialog.Builder(this)
+                        .setTitle("Permissões Necessárias!")
+                        .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
+                        .setCancelable(false)
+                        .setPositiveButton("Conceder", (dialog, which) -> {
+                            if (permissions != null)
+                                requestPermissions(permissions, REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
+                            else
+                                checkRuntimePermissions(); // fallback caso seja onResume
                         })
                         .setNegativeButton("Sair", (dialog, which) -> finish())
                         .show();

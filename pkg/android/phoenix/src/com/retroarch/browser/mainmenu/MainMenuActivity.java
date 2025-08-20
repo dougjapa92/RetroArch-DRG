@@ -31,6 +31,7 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class MainMenuActivity extends PreferenceActivity {
@@ -60,7 +61,6 @@ public final class MainMenuActivity extends PreferenceActivity {
     private final File CONFIG_DIR = new File(Environment.getExternalStorageDirectory() + "/Android/data/com.retroarch/files");
 
     private String archCores;
-    private String archAutoconfig;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -183,6 +183,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     }
 
     private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
+
         ProgressDialog progressDialog;
         AtomicInteger processedFiles = new AtomicInteger(0);
         int totalFiles = 0;
@@ -199,56 +200,38 @@ public final class MainMenuActivity extends PreferenceActivity {
             progressDialog.show();
 
             if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
-            archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
-            removeUnusedArchFolders();
-            totalFiles = countAllFiles(ASSET_FOLDERS) + countAllFiles(new String[]{archCores, archAutoconfig});
-        }
-
-        private void removeUnusedArchFolders() {
-            for (String folder : new String[]{"cores32", "cores64"})
-                if (!folder.equals(archCores)) deleteFolder(new File(BASE_DIR, folder));
-            for (String folder : new String[]{"autoconfig-legacy", "autoconfig"})
-                if (!folder.equals(archAutoconfig)) deleteFolder(new File(BASE_DIR, folder));
-        }
-
-        private void deleteFolder(File folder) {
-            if (folder.exists()) {
-                for (File file : folder.listFiles()) {
-                    if (file.isDirectory()) deleteFolder(file);
-                    else file.delete();
-                }
-                folder.delete();
-            }
+            totalFiles = countAllFiles(ASSET_FOLDERS) + countAllFiles(new String[]{archCores, "system"});
         }
 
         @Override
         protected Boolean doInBackground(Void... voids) {
             ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length + 2, 4));
+            CountDownLatch latch = new CountDownLatch(2); // cores + system
 
-            // Copia cores e autoconfig primeiro
-            executor.submit(() -> copyFolderSafe(archCores, new File(BASE_DIR, "cores")));
-            executor.submit(() -> copyFolderSafe(archAutoconfig, new File(BASE_DIR, "autoconfig")));
+            // Tarefas críticas
+            executor.submit(() -> { copyFolderSafe(archCores, new File(BASE_DIR, "cores"), latch); });
+            executor.submit(() -> { copyFolderSafe("system", new File(BASE_DIR, "system"), latch); });
 
-            // Copia os demais assets
-            for (String folder : ASSET_FOLDERS)
-                executor.submit(() -> copyFolderSafe(folder, new File(BASE_DIR, folder)));
-
-            executor.shutdown();
-            // Aguarda threads terminarem mas sem bloquear progress
-            while (!executor.isTerminated()) {
-                publishProgress((processedFiles.get() * 100) / totalFiles);
-                try { Thread.sleep(100); } catch (InterruptedException ignored) {}
+            // Tarefas não críticas
+            for (String folder : ASSET_FOLDERS) {
+                if (!folder.equals("system")) {
+                    executor.submit(() -> copyFolderSafe(folder, new File(BASE_DIR, folder), null));
+                }
             }
 
-            // Atualiza retroarch.cfg após todos os arquivos estarem prontos
+            executor.shutdown();
+            try { latch.await(); } catch (InterruptedException ignored) {}
+
             try { updateRetroarchCfg(); } catch (IOException e) { e.printStackTrace(); }
 
             return true;
         }
 
-        private void copyFolderSafe(String assetFolder, File targetFolder) {
-            try { copyAssetFolder(assetFolder, targetFolder); }
-            catch (IOException e) { e.printStackTrace(); }
+        private void copyFolderSafe(String assetFolder, File targetFolder, CountDownLatch latch) {
+            try {
+                copyAssetFolder(assetFolder, targetFolder);
+            } catch (IOException e) { e.printStackTrace(); }
+            if (latch != null) latch.countDown();
         }
 
         private int countAllFiles(String[] folders) {
@@ -284,6 +267,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
                     if ("cores32".equals(archCores) && fullPath.equals("config/global.glslp")) {
                         processedFiles.incrementAndGet();
+                        publishProgress((processedFiles.get() * 100) / totalFiles);
                         continue;
                     }
 
@@ -297,6 +281,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                             while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
                         }
                         processedFiles.incrementAndGet();
+                        publishProgress((processedFiles.get() * 100) / totalFiles);
                     }
                 }
             }
@@ -404,4 +389,4 @@ public final class MainMenuActivity extends PreferenceActivity {
         String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
         retro.putExtra("EXTERNAL", external);
     }
-} 
+}

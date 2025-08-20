@@ -45,21 +45,12 @@ public final class MainMenuActivity extends PreferenceActivity {
     public static String PACKAGE_NAME;
     private SharedPreferences prefs;
 
-    private final String[] ASSET_FOLDERS = {
-            "assets", "database", "filters", "info", "overlays", "shaders", "system", "config", "remaps", "cheats"
-    };
+    // Apenas assets e overlays
+    private final String[] ASSET_FOLDERS = { "assets", "overlays" };
 
     private final Map<String, String> ASSET_FLAGS = new HashMap<String, String>() {{
         put("assets", "assets_directory");
-        put("database", "database_directory");
-        put("filters", "filters_directory");
-        put("info", "info_directory");
         put("overlays", "overlays_directory");
-        put("shaders", "shaders_directory");
-        put("system", "system_directory");
-        put("config", "rgui_config_directory");
-        put("remaps", "input_remapping_directory");
-        put("cheats", "cheat_database_path");
     }};
 
     private final File BASE_DIR = new File(Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
@@ -173,7 +164,8 @@ public final class MainMenuActivity extends PreferenceActivity {
     private void startExtractionTask() {
         ProgressDialog progressDialog = new ProgressDialog(MainMenuActivity.this);
         progressDialog.setTitle("Configurando RetroArch DRG...");
-        String archMessage = archCores.equals("cores64") ? "\nArquitetura dos Cores:\n   - arm64-v8a (64-bit)" : "\nArquitetura dos Cores:\n   - armeabi-v7a (32-bit)";
+        String archMessage = archCores.equals("cores64") ? "\nArquitetura dos Cores:\n   - arm64-v8a (64-bit)"
+                                                          : "\nArquitetura dos Cores:\n   - armeabi-v7a (32-bit)";
         progressDialog.setMessage(archMessage + "\n\nClique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo.");
         progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
         progressDialog.setCancelable(false);
@@ -196,15 +188,16 @@ public final class MainMenuActivity extends PreferenceActivity {
                 totalFiles = 0;
                 for (String root : roots) totalFiles += countFilesRecursive(root);
 
+                // Executor único compartilhado
                 ExecutorService executor = buildSafeExecutor();
-
                 for (String folder : ASSET_FOLDERS) {
                     File target = new File(BASE_DIR, folder);
-                    executor.submit(() -> copyAssetFolder(am, folder, target));
+                    executor.submit(() -> copyAssetFolderOptimized(am, folder, target, executor));
                 }
-                executor.submit(() -> copyAssetFolder(am, archCores, new File(BASE_DIR, "cores")));
-                executor.submit(() -> copyAssetFolder(am, archAutoconfig, new File(BASE_DIR, "autoconfig")));
+                executor.submit(() -> copyAssetFolderOptimized(am, archCores, new File(BASE_DIR, "cores"), executor));
+                executor.submit(() -> copyAssetFolderOptimized(am, archAutoconfig, new File(BASE_DIR, "autoconfig"), executor));
 
+                executor.shutdown();
                 while (!executor.awaitTermination(120, TimeUnit.MILLISECONDS)) {
                     int progress = (totalFiles == 0) ? 0 : (processedFiles.get() * 100) / totalFiles;
                     uiHandler.post(() -> progressDialog.setProgress(progress));
@@ -261,7 +254,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         return count;
     }
 
-    private void copyAssetFolder(AssetManager am, String assetDir, File outDir) {
+    private void copyAssetFolderOptimized(AssetManager am, String assetDir, File outDir, ExecutorService executor) {
         try {
             String[] assets = assetCache.get(assetDir);
             if (assets == null) return;
@@ -275,9 +268,8 @@ public final class MainMenuActivity extends PreferenceActivity {
                 File outFile = new File(outDir, entry);
 
                 if (assetCache.containsKey(fullPath)) {
-                    buildSafeExecutor().submit(() -> copyAssetFolder(am, fullPath, outFile));
+                    executor.submit(() -> copyAssetFolderOptimized(am, fullPath, outFile, executor));
                 } else {
-                    // Ignora global.glslp se for armeabi-v7a
                     if ("config".equals(assetDir) && "global.glslp".equals(entry) && "cores32".equals(archCores)) {
                         processedFiles.incrementAndGet();
                         continue;

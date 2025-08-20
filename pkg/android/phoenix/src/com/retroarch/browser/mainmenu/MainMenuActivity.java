@@ -92,44 +92,38 @@ public final class MainMenuActivity extends PreferenceActivity {
     private void checkRuntimePermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             List<String> permissionsList = new ArrayList<>();
-            List<String> permissionsNeeded = new ArrayList<>();
-
-            if (!addPermission(permissionsList, Manifest.permission.READ_EXTERNAL_STORAGE))
-                permissionsNeeded.add("Read External Storage");
-            if (!addPermission(permissionsList, Manifest.permission.WRITE_EXTERNAL_STORAGE))
-                permissionsNeeded.add("Write External Storage");
-
+            addPermission(permissionsList, Manifest.permission.READ_EXTERNAL_STORAGE);
+            addPermission(permissionsList, Manifest.permission.WRITE_EXTERNAL_STORAGE);
             if (!permissionsList.isEmpty()) {
-                String message = "Você precisa conceder acesso a " + String.join(", ", permissionsNeeded);
-                new AlertDialog.Builder(this)
-                        .setMessage(message)
-                        .setCancelable(false)
-                        .setPositiveButton("OK", (dialog, which) ->
-                                requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
-                        .setNegativeButton("Sair", (dialog, which) -> finish())
-                        .show();
+                requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
                 return;
             }
         }
         startExtractionOrRetro();
     }
-
+    
+    private boolean permissionsHandled = false;
+    private boolean wentToSettings = false;
+    private boolean firstDenialHandled = false;
+    
     private void handlePermissionStatus(String[] permissions) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
-
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || permissionsHandled) return;
+    
         List<String> missingPermissions = new ArrayList<>();
         addPermission(missingPermissions, Manifest.permission.READ_EXTERNAL_STORAGE);
         addPermission(missingPermissions, Manifest.permission.WRITE_EXTERNAL_STORAGE);
-
+    
         boolean allGranted = missingPermissions.isEmpty();
-
+    
         if (allGranted) {
             prefs.edit().putInt("deniedCount", 0).apply();
+            permissionsHandled = true;
             startExtractionOrRetro();
         } else {
-            int deniedCount = prefs.getInt("deniedCount", 0) + 1;
+            int deniedCount = prefs.getInt("deniedCount", 0);
+            if (permissions != null) deniedCount++;
             prefs.edit().putInt("deniedCount", deniedCount).apply();
-
+    
             if (deniedCount >= 2 || wentToSettings) {
                 new AlertDialog.Builder(this)
                         .setTitle("Permissão Negada!")
@@ -161,7 +155,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
         }
     }
-
+    
     @Override
     protected void onResume() {
         super.onResume();
@@ -170,12 +164,14 @@ public final class MainMenuActivity extends PreferenceActivity {
             wentToSettings = false;
         }
     }
-
+    
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS) {
             handlePermissionStatus(permissions);
-        } else super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        } else {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        }
     }
 
     private void startExtractionOrRetro() {

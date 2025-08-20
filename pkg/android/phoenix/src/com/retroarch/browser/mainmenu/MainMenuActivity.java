@@ -288,12 +288,6 @@ public final class MainMenuActivity extends PreferenceActivity {
             String[] assets = getAssets().list(assetFolder);
             if (!targetFolder.exists()) targetFolder.mkdirs();
 
-            if ((assetFolder.startsWith("assets/") && !assetFolder.equals("assets")) ||
-                (assetFolder.startsWith("overlays/") && !assetFolder.equals("overlays"))) {
-                File noMedia = new File(targetFolder, ".nomedia");
-                if (!noMedia.exists()) noMedia.createNewFile();
-            }
-
             if (assets != null && assets.length > 0) {
                 for (String asset : assets) {
                     String fullPath = assetFolder + "/" + asset;
@@ -325,6 +319,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             if (!originalCfg.exists()) originalCfg.createNewFile();
 
             Map<String, String> cfgFlags = new HashMap<>();
+            
             // Flags Globais
             cfgFlags.put("menu_scale_factor", "0.600000");
             cfgFlags.put("ozone_menu_color_theme", "10");
@@ -374,6 +369,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 cfgFlags.put("input_state_slot_increase_btn", "195");
             }
 
+            // Populando retroarch.cfg
             List<String> lines = new ArrayList<>();
             try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(originalCfg))) {
                 String line;

@@ -3,6 +3,7 @@ package com.retroarch.browser.mainmenu;
 import com.retroarch.browser.preferences.util.UserPreferences;
 import com.retroarch.browser.retroactivity.RetroActivityFuture;
 
+import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -15,6 +16,8 @@ import android.preference.PreferenceActivity;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.content.pm.PackageManager;
+import android.Manifest;
+import android.net.Uri;
 
 import java.io.File;
 import java.io.InputStream;
@@ -55,9 +58,10 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     private String archCores;
     private String archAutoconfig;
-
     private AtomicInteger processedFiles = new AtomicInteger(0);
     private ExecutorService executor;
+
+    private final int REQUEST_CODE_PERMISSIONS = 124;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -72,7 +76,84 @@ public final class MainMenuActivity extends PreferenceActivity {
         String arch = System.getProperty("os.arch");
         archCores = arch.contains("64") ? "cores64" : "cores32";
 
+        requestPermissionsIfNeeded();
+    }
+
+    private void requestPermissionsIfNeeded() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            String[] permissions = {
+                    Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+            };
+
+            boolean granted = true;
+            for (String p : permissions) {
+                if (checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED) {
+                    granted = false;
+                    break;
+                }
+            }
+
+            if (!granted) {
+                requestPermissions(permissions, REQUEST_CODE_PERMISSIONS);
+                return;
+            }
+        }
+
         startExtractionOrRetro();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        if (requestCode == REQUEST_CODE_PERMISSIONS) {
+            boolean allGranted = true;
+            for (int r : grantResults) if (r != PackageManager.PERMISSION_GRANTED) allGranted = false;
+
+            if (allGranted) {
+                prefs.edit().putInt("deniedCount", 0).apply();
+                startExtractionOrRetro();
+            } else {
+                int deniedCount = prefs.getInt("deniedCount", 0) + 1;
+                prefs.edit().putInt("deniedCount", deniedCount).apply();
+
+                if (deniedCount >= 2) {
+                    // Segunda negação → abrir configurações ou sair
+                    new AlertDialog.Builder(this)
+                            .setTitle("Permissão Negada!")
+                            .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
+                            .setCancelable(false)
+                            .setPositiveButton("Abrir Configurações", (dialog, which) -> {
+                                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                                Uri uri = Uri.fromParts("package", getPackageName(), null);
+                                intent.setData(uri);
+                                startActivity(intent);
+                            })
+                            .setNegativeButton("Sair", (dialog, which) -> finish())
+                            .show();
+                } else {
+                    // Primeira negação → tentar novamente
+                    requestPermissions(permissions, REQUEST_CODE_PERMISSIONS);
+                }
+            }
+        } else {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Caso o usuário volte das configurações, verifica permissões
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            String[] permissions = {
+                    Manifest.permission.READ_EXTERNAL_STORAGE,
+                    Manifest.permission.WRITE_EXTERNAL_STORAGE
+            };
+            boolean granted = true;
+            for (String p : permissions) if (checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED) granted = false;
+
+            if (granted) startExtractionOrRetro();
+        }
     }
 
     private void startExtractionOrRetro() {
@@ -89,7 +170,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
             progressDialog.setTitle("Configurando RetroArch DRG...");
-            String archMessage = archCores.equals("cores64") ? "\nArquitetura do Processador:\n  - arm64-v8a (64-bit)" : "\nArquitetura do Processador:\n  - armeabi-v7a (32-bit)";
+            String archMessage = archCores.equals("cores64") ? "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)" : "\nArquitetura dos Cores:\n   - armeabi-v7a (32-bit)";
             progressDialog.setMessage(archMessage + "\n\nClique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo.");
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);
@@ -348,4 +429,4 @@ public final class MainMenuActivity extends PreferenceActivity {
         String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
         retro.putExtra("EXTERNAL", external);
     }
-}
+} 

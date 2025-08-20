@@ -31,7 +31,6 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -43,14 +42,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class MainMenuActivity extends PreferenceActivity {
 
     private final int REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS = 124;
+    private final int REQUEST_CODE_OPEN_SETTINGS = 125;
     public static String PACKAGE_NAME;
     private SharedPreferences prefs;
 
     private final String[] ASSET_FOLDERS = {
             "assets", "database", "filters", "info", "overlays", "shaders", "system", "config", "remaps", "cheats"
     };
-
-    private final Set<String> MEDIA_ROOTS = Set.of("assets", "overlays");
 
     private final Map<String, String> ASSET_FLAGS = new HashMap<String, String>() {{
         put("assets", "assets_directory");
@@ -75,7 +73,6 @@ public final class MainMenuActivity extends PreferenceActivity {
     private final AtomicInteger processedFiles = new AtomicInteger(0);
     private volatile int totalFiles = 0;
     private final Map<String, String[]> assetCache = new ConcurrentHashMap<>();
-    private ExecutorService executor;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -123,35 +120,47 @@ public final class MainMenuActivity extends PreferenceActivity {
                 prefs.edit().putInt("deniedCount", 0).apply();
                 startExtractionOrRetro();
             } else {
-                int deniedCount = prefs.getInt("deniedCount", 0) + 1;
-                prefs.edit().putInt("deniedCount", deniedCount).apply();
-
-                if (deniedCount >= 2) {
-                    new AlertDialog.Builder(this)
-                            .setTitle("Permissão Negada!")
-                            .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
-                            .setCancelable(false)
-                            .setPositiveButton("Abrir Configurações", (dialog, which) -> {
-                                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                                Uri uri = Uri.fromParts("package", getPackageName(), null);
-                                intent.setData(uri);
-                                startActivity(intent);
-                            })
-                            .setNegativeButton("Sair", (dialog, which) -> finish())
-                            .show();
-                } else {
-                    new AlertDialog.Builder(this)
-                            .setTitle("Permissões Necessárias!")
-                            .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
-                            .setCancelable(false)
-                            .setPositiveButton("Conceder", (dialog, which) ->
-                                    requestPermissions(permissions, REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
-                            .setNegativeButton("Sair", (dialog, which) -> finish())
-                            .show();
-                }
+                showPermissionAlert();
             }
         } else {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        }
+    }
+
+    private void showPermissionAlert() {
+        int deniedCount = prefs.getInt("deniedCount", 0) + 1;
+        prefs.edit().putInt("deniedCount", deniedCount).apply();
+
+        if (deniedCount >= 2) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Permissão Negada!")
+                    .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
+                    .setCancelable(false)
+                    .setPositiveButton("Abrir Configurações", (dialog, which) -> {
+                        Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                        Uri uri = Uri.fromParts("package", getPackageName(), null);
+                        intent.setData(uri);
+                        startActivityForResult(intent, REQUEST_CODE_OPEN_SETTINGS);
+                    })
+                    .setNegativeButton("Sair", (dialog, which) -> finish())
+                    .show();
+        } else {
+            new AlertDialog.Builder(this)
+                    .setTitle("Permissões Necessárias!")
+                    .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
+                    .setCancelable(false)
+                    .setPositiveButton("Conceder", (dialog, which) ->
+                            checkRuntimePermissions())
+                    .setNegativeButton("Sair", (dialog, which) -> finish())
+                    .show();
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_CODE_OPEN_SETTINGS) {
+            checkRuntimePermissions();
         }
     }
 
@@ -200,7 +209,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 totalFiles = 0;
                 for (String root : roots) totalFiles += countFilesRecursive(root);
 
-                executor = buildSafeExecutor(); // Executor único
+                ExecutorService executor = buildSafeExecutor();
 
                 for (String folder : ASSET_FOLDERS) {
                     File target = new File(BASE_DIR, folder);
@@ -209,7 +218,6 @@ public final class MainMenuActivity extends PreferenceActivity {
                 executor.submit(() -> copyAssetFolder(am, archCores, new File(BASE_DIR, "cores")));
                 executor.submit(() -> copyAssetFolder(am, archAutoconfig, new File(BASE_DIR, "autoconfig")));
 
-                executor.shutdown();
                 while (!executor.awaitTermination(120, TimeUnit.MILLISECONDS)) {
                     int progress = (totalFiles == 0) ? 0 : (processedFiles.get() * 100) / totalFiles;
                     uiHandler.post(() -> progressDialog.setProgress(progress));
@@ -267,19 +275,14 @@ public final class MainMenuActivity extends PreferenceActivity {
             if (assets == null) return;
             if (!outDir.exists()) outDir.mkdirs();
 
-            // Cria .nomedia apenas em assets e overlays
-            if (MEDIA_ROOTS.contains(assetDir)) {
-                File nomedia = new File(outDir, ".nomedia");
-                if (!nomedia.exists()) nomedia.createNewFile();
-            }
+            boolean nomediaCreated = false;
 
             for (String entry : assets) {
                 String fullPath = assetDir + "/" + entry;
                 File outFile = new File(outDir, entry);
 
                 if (assetCache.containsKey(fullPath)) {
-                    // Recursivo usando o mesmo executor
-                    executor.submit(() -> copyAssetFolder(am, fullPath, outFile));
+                    buildSafeExecutor().submit(() -> copyAssetFolder(am, fullPath, outFile));
                 } else {
                     // Ignora global.glslp se for armeabi-v7a
                     if ("config".equals(assetDir) && "global.glslp".equals(entry) && "cores32".equals(archCores)) {
@@ -294,12 +297,29 @@ public final class MainMenuActivity extends PreferenceActivity {
                         while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
                     }
 
+                    // Cria .nomedia somente em assets e overlays
+                    if (!nomediaCreated && ("assets".equals(assetDir) || "overlays".equals(assetDir)) && isMedia(entry)) {
+                        File nomedia = new File(outDir, ".nomedia");
+                        if (!nomedia.exists()) {
+                            try { nomedia.createNewFile(); } catch (IOException ignored) {}
+                        }
+                        nomediaCreated = true;
+                    }
+
                     processedFiles.incrementAndGet();
                 }
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    private boolean isMedia(String name) {
+        String lower = name.toLowerCase();
+        return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
+               lower.endsWith(".gif") || lower.endsWith(".webp") ||
+               lower.endsWith(".mp4") || lower.endsWith(".mkv") ||
+               lower.endsWith(".avi") || lower.endsWith(".mov");
     }
 
     private void removeUnusedArchFolders() {

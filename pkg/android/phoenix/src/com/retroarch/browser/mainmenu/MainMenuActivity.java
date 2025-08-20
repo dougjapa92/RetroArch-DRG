@@ -39,7 +39,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     private SharedPreferences prefs;
 
     private final String[] ASSET_FOLDERS = {
-            "assets", "database", "filters", "info", "overlays", "shaders", "system", "config", "remaps"
+            "assets", "database", "filters", "info", "overlays", "shaders", "system", "config", "remaps", "cheats"
     };
 
     private final Map<String, String> ASSET_FLAGS = new HashMap<String, String>() {{
@@ -52,6 +52,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         put("system", "system_directory");
         put("config", "rgui_config_directory");
         put("remaps", "input_remapping_directory");
+        put("cheats", "cheat_database_path")
     }};
 
     private final File BASE_DIR = new File(Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
@@ -164,7 +165,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
             progressDialog.setTitle("Configurando RetroArch DRG...");
-            String archMessage = archCores.equals("cores64") ? "\nArquitetura do Processador:\n  - arm64-v8a (64-bit)" : "\nArquitetura do Processador:\n  - armeabi-v7a (32-bit)";
+            String archMessage = archCores.equals("cores64") ? "\nArquitetura dos Cores:\n   - arm64-v8a (64-bit)" : "\nArquitetura dos Cores:\n   - armeabi-v7a (32-bit)";
             progressDialog.setMessage(archMessage + "\n\nClique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo.");
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);

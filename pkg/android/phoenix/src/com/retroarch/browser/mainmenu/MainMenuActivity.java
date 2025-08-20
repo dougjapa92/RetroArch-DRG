@@ -50,6 +50,8 @@ public final class MainMenuActivity extends PreferenceActivity {
             "assets", "database", "filters", "info", "overlays", "shaders", "system", "config", "remaps", "cheats"
     };
 
+    private final Set<String> MEDIA_ROOTS = Set.of("assets", "overlays");
+
     private final Map<String, String> ASSET_FLAGS = new HashMap<String, String>() {{
         put("assets", "assets_directory");
         put("database", "database_directory");
@@ -73,7 +75,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     private final AtomicInteger processedFiles = new AtomicInteger(0);
     private volatile int totalFiles = 0;
     private final Map<String, String[]> assetCache = new ConcurrentHashMap<>();
-    private final Set<String> MEDIA_ROOTS = Set.of("assets", "overlays");
+    private ExecutorService executor;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -95,10 +97,12 @@ public final class MainMenuActivity extends PreferenceActivity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             List<String> permissionsList = new ArrayList<>();
 
-            if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)
+            if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                 permissionsList.add(Manifest.permission.READ_EXTERNAL_STORAGE);
-            if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)
+            }
+            if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                 permissionsList.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+            }
 
             if (!permissionsList.isEmpty()) {
                 requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
@@ -196,7 +200,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 totalFiles = 0;
                 for (String root : roots) totalFiles += countFilesRecursive(root);
 
-                ExecutorService executor = buildSafeExecutor();
+                executor = buildSafeExecutor(); // Executor único
 
                 for (String folder : ASSET_FOLDERS) {
                     File target = new File(BASE_DIR, folder);
@@ -205,6 +209,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 executor.submit(() -> copyAssetFolder(am, archCores, new File(BASE_DIR, "cores")));
                 executor.submit(() -> copyAssetFolder(am, archAutoconfig, new File(BASE_DIR, "autoconfig")));
 
+                executor.shutdown();
                 while (!executor.awaitTermination(120, TimeUnit.MILLISECONDS)) {
                     int progress = (totalFiles == 0) ? 0 : (processedFiles.get() * 100) / totalFiles;
                     uiHandler.post(() -> progressDialog.setProgress(progress));
@@ -273,7 +278,8 @@ public final class MainMenuActivity extends PreferenceActivity {
                 File outFile = new File(outDir, entry);
 
                 if (assetCache.containsKey(fullPath)) {
-                    buildSafeExecutor().submit(() -> copyAssetFolder(am, fullPath, outFile));
+                    // Recursivo usando o mesmo executor
+                    executor.submit(() -> copyAssetFolder(am, fullPath, outFile));
                 } else {
                     // Ignora global.glslp se for armeabi-v7a
                     if ("config".equals(assetDir) && "global.glslp".equals(entry) && "cores32".equals(archCores)) {

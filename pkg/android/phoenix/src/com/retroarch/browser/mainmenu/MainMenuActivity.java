@@ -91,70 +91,78 @@ public final class MainMenuActivity extends PreferenceActivity {
     private void checkRuntimePermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             List<String> permissionsList = new ArrayList<>();
-
+    
             addPermission(permissionsList, Manifest.permission.READ_EXTERNAL_STORAGE);
             addPermission(permissionsList, Manifest.permission.WRITE_EXTERNAL_STORAGE);
-
+    
             if (!permissionsList.isEmpty()) {
                 checkPermissions = true;
+                // Solicita permissões
                 requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
+                return; // IMPORTANTE: sai do método, não chama startExtractionOrRetro ainda
             }
         }
-
-        if (!checkPermissions) startExtractionOrRetro();
+    
+        // Somente se todas já estiverem concedidas
+        startExtractionOrRetro();
     }
 
-    private void handlePermissionStatus() {
-        int deniedCount = prefs.getInt("deniedCount", 0);
-        String[] permissions = {Manifest.permission.READ_EXTERNAL_STORAGE, Manifest.permission.WRITE_EXTERNAL_STORAGE};
-
-        boolean allGranted = true;
-        for (String permission : permissions)
-            if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) allGranted = false;
-
+    private boolean permissionsHandled = false;
+    
+    private void handlePermissionStatus(String[] permissions) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || permissionsHandled) return;
+    
+        List<String> permissionsList = new ArrayList<>();
+        addPermission(permissionsList, Manifest.permission.READ_EXTERNAL_STORAGE);
+        addPermission(permissionsList, Manifest.permission.WRITE_EXTERNAL_STORAGE);
+    
+        boolean allGranted = permissionsList.isEmpty();
         if (allGranted) {
             prefs.edit().putInt("deniedCount", 0).apply();
+            permissionsHandled = true;
             startExtractionOrRetro();
-        } else if (deniedCount >= 2) {
-            new AlertDialog.Builder(this)
-                .setTitle("Permissão Negada!")
-                .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
-                .setCancelable(false)
-                .setPositiveButton("Abrir Configurações", (dialog, which) -> {
-                    Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                    Uri uri = Uri.fromParts("package", getPackageName(), null);
-                    intent.setData(uri);
-                    startActivity(intent);
-                })
-                .setNegativeButton("Sair", (dialog, which) -> finish())
-                .show();
         } else {
-            new AlertDialog.Builder(this)
-                .setTitle("Permissões Necessárias!")
-                .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
-                .setCancelable(false)
-                .setPositiveButton("Conceder", (dialog, which) ->
-                    requestPermissions(permissions, REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
-                .setNegativeButton("Sair", (dialog, which) -> finish())
-                .show();
+            int deniedCount = prefs.getInt("deniedCount", 0);
+            if (deniedCount >= 2) {
+                new AlertDialog.Builder(this)
+                        .setTitle("Permissão Negada!")
+                        .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
+                        .setCancelable(false)
+                        .setPositiveButton("Abrir Configurações", (dialog, which) -> {
+                            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                            Uri uri = Uri.fromParts("package", getPackageName(), null);
+                            intent.setData(uri);
+                            startActivity(intent);
+                        })
+                        .setNegativeButton("Sair", (dialog, which) -> finish())
+                        .show();
+            }
         }
     }
-
+    
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS) {
-            int deniedCount = prefs.getInt("deniedCount", 0) + 1;
-            prefs.edit().putInt("deniedCount", deniedCount).apply();
-            handlePermissionStatus();
+            boolean allGranted = true;
+            for (int result : grantResults) if (result != PackageManager.PERMISSION_GRANTED) allGranted = false;
+    
+            if (allGranted) {
+                prefs.edit().putInt("deniedCount", 0).apply();
+            } else {
+                int deniedCount = prefs.getInt("deniedCount", 0) + 1;
+                prefs.edit().putInt("deniedCount", deniedCount).apply();
+            }
+    
+            handlePermissionStatus(permissions);
         } else {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
     }
-
+    
     @Override
     protected void onResume() {
         super.onResume();
-        handlePermissionStatus();
+        handlePermissionStatus(null);
     }
 
     private void startExtractionOrRetro() {
@@ -318,7 +326,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             cfgFlags.put("input_poll_type_behavior", "1");
             cfgFlags.put("android_input_disconnect_workaround", "true");
             cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
-            cfgFlags.put("video_driver", Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ? "vulkan" : "gl");
+            cfgFlags.put("video_driver", (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && "cores64".equals(archCores)) ? "vulkan" : "gl");
 
             boolean hasTouchscreen = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN);
             boolean isLeanback = getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);

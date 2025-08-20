@@ -7,7 +7,6 @@ import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.content.res.AssetManager;
 import android.media.AudioManager;
 import android.os.AsyncTask;
 import android.os.Build;
@@ -24,23 +23,23 @@ import java.io.File;
 import java.io.InputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.BufferedWriter;
-import java.io.FileWriter;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class MainMenuActivity extends PreferenceActivity {
 
     private final int REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS = 124;
     public static String PACKAGE_NAME;
+    private boolean checkPermissions = false;
     private SharedPreferences prefs;
 
     private final String[] ASSET_FOLDERS = {
-            "assets", "database", "filters", "info", "overlays", "shaders", "system", "config", "remaps", "cheats"
+            "assets", "database", "filters", "info", "overlays", "shaders", "system", "config", "remaps"
     };
 
     private final Map<String, String> ASSET_FLAGS = new HashMap<String, String>() {{
@@ -53,7 +52,6 @@ public final class MainMenuActivity extends PreferenceActivity {
         put("system", "system_directory");
         put("config", "rgui_config_directory");
         put("remaps", "input_remapping_directory");
-        put("cheats", "cheat_database_path");
     }};
 
     private final File BASE_DIR = new File(Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
@@ -61,10 +59,6 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     private String archCores;
     private String archAutoconfig;
-
-    private final AtomicInteger processedFiles = new AtomicInteger(0);
-    private volatile int totalFiles = 0;
-    private final Map<String, String[]> assetCache = new ConcurrentHashMap<>();
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -77,29 +71,40 @@ public final class MainMenuActivity extends PreferenceActivity {
         UserPreferences.updateConfigFile(this);
 
         String arch = System.getProperty("os.arch");
-        archCores = arch != null && arch.contains("64") ? "cores64" : "cores32";
+        archCores = arch.contains("64") ? "cores64" : "cores32";
 
         checkRuntimePermissions();
     }
 
+    private boolean addPermission(List<String> permissionsList, String permission) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
+                permissionsList.add(permission);
+                return !shouldShowRequestPermissionRationale(permission);
+            }
+        }
+        return true;
+    }
+
     private void checkRuntimePermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            List<String> permissionsList = new ArrayList<>();
+            List<String> permissionsNeeded = new ArrayList<>();
+            final List<String> permissionsList = new ArrayList<>();
 
-            if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                permissionsList.add(Manifest.permission.READ_EXTERNAL_STORAGE);
-            }
-            if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                permissionsList.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
-            }
+            if (!addPermission(permissionsList, Manifest.permission.READ_EXTERNAL_STORAGE))
+                permissionsNeeded.add("Read External Storage");
+            if (!addPermission(permissionsList, Manifest.permission.WRITE_EXTERNAL_STORAGE))
+                permissionsNeeded.add("Write External Storage");
 
             if (!permissionsList.isEmpty()) {
+                checkPermissions = true;
+                // Agora só requisita as permissões direto, sem AlertDialog
                 requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
-                return;
             }
         }
 
-        startExtractionOrRetro();
+        if (!checkPermissions)
+            startExtractionOrRetro();
     }
 
     @Override
@@ -144,257 +149,168 @@ public final class MainMenuActivity extends PreferenceActivity {
         }
     }
 
-    @Override
-    protected void onResume() {
-        super.onResume();
-        checkRuntimePermissions(); // Verifica novamente quando retorna de Settings
-    }
-
     private void startExtractionOrRetro() {
         boolean firstRun = prefs.getBoolean("firstRun", true);
-        if (firstRun) new AssetExtractionTask().execute();
+        if (firstRun) new UnifiedExtractionTask().execute();
         else finalStartup();
     }
 
-    private class AssetExtractionTask extends AsyncTask<Void, Integer, Boolean> {
-        private ProgressDialog progressDialog;
+    private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
+        ProgressDialog progressDialog;
+        AtomicInteger processedFiles = new AtomicInteger(0);
+        int totalFiles = 0;
 
         @Override
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
             progressDialog.setTitle("Configurando RetroArch DRG...");
-            String archMessage = archCores.equals("cores64") ?
-                    "\nArquitetura dos Cores:\n   - arm64-v8a (64-bit)" :
-                    "\nArquitetura dos Cores:\n   - armeabi-v7a (32-bit)";
+            String archMessage = archCores.equals("cores64") ? "\nArquitetura do Processador:\n  - arm64-v8a (64-bit)" : "\nArquitetura do Processador:\n  - armeabi-v7a (32-bit)";
             progressDialog.setMessage(archMessage + "\n\nClique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo.");
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);
             progressDialog.show();
+
+            if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
+            removeUnusedArchFolders();
+
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) {
+                archAutoconfig = "autoconfig-legacy";
+            } else {
+                archAutoconfig = "autoconfig";
+            }
+
+            totalFiles = countAllFiles(ASSET_FOLDERS) + countAllFiles(new String[]{archCores, archAutoconfig});
+        }
+
+        private void removeUnusedArchFolders() {
+            String[] coresFolders = {"cores32", "cores64"};
+            String[] autoconfigFolders = {"autoconfig-legacy", "autoconfig"};
+
+            for (String folder : coresFolders) if (!folder.equals(archCores)) deleteFolder(new File(BASE_DIR, folder));
+            for (String folder : autoconfigFolders) if (!folder.equals(archAutoconfig)) deleteFolder(new File(BASE_DIR, folder));
+        }
+
+        private void deleteFolder(File folder) {
+            if (folder.exists()) {
+                File[] files = folder.listFiles();
+                if (files != null) {
+                    for (File file : files) {
+                        if (file.isDirectory()) deleteFolder(file);
+                        else file.delete();
+                    }
+                }
+                folder.delete();
+            }
         }
 
         @Override
         protected Boolean doInBackground(Void... voids) {
-            try {
-                if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
-                removeUnusedArchFolders();
+            ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length + 2, 4));
 
-                archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
-
-                AssetManager am = getAssets();
-                List<String> roots = new ArrayList<>();
-                for (String f : ASSET_FOLDERS) roots.add(f);
-                roots.add(archCores);
-                roots.add(archAutoconfig);
-
-                for (String root : roots) preloadAssets(am, root);
-
-                totalFiles = 0;
-                for (String root : roots) totalFiles += countFilesRecursive(root);
-
-                for (String folder : ASSET_FOLDERS)
-                    copyAssetFolderIterative(am, folder, new File(BASE_DIR, folder));
-
-                copyAssetFolderIterative(am, archCores, new File(BASE_DIR, "cores"));
-                copyAssetFolderIterative(am, archAutoconfig, new File(BASE_DIR, "autoconfig"));
-
-                updateRetroarchCfg();
-                prefs.edit().putBoolean("firstRun", false).apply();
-                return true;
-            } catch (Exception e) {
-                e.printStackTrace();
-                return false;
+            for (String folder : ASSET_FOLDERS) {
+                executor.submit(() -> {
+                    try { copyAssetFolder(folder, new File(BASE_DIR, folder)); }
+                    catch (IOException e) { e.printStackTrace(); }
+                });
             }
+
+            executor.submit(() -> {
+                try { copyAssetFolder(archCores, new File(BASE_DIR, "cores")); }
+                catch (IOException e) { e.printStackTrace(); }
+            });
+
+            executor.submit(() -> {
+                try { copyAssetFolder(archAutoconfig, new File(BASE_DIR, "autoconfig")); }
+                catch (IOException e) { e.printStackTrace(); }
+            });
+
+            executor.shutdown();
+            while (!executor.isTerminated()) {
+                publishProgress((processedFiles.get() * 100) / totalFiles);
+                try { Thread.sleep(100); } catch (InterruptedException ignored) {}
+            }
+
+            try { updateRetroarchCfg(); } catch (IOException e) { return false; }
+            return true;
         }
 
         @Override
-        protected void onProgressUpdate(Integer... values) {
-            progressDialog.setProgress(values[0]);
-        }
+        protected void onProgressUpdate(Integer... values) { progressDialog.setProgress(values[0]); }
 
         @Override
-        protected void onPostExecute(Boolean success) {
+        protected void onPostExecute(Boolean result) {
             progressDialog.dismiss();
-            if (success) finalStartup();
-            else finish();
+            prefs.edit().putBoolean("firstRun", false).apply();
+            finalStartup();
         }
 
-        private void copyAssetFolderIterative(AssetManager am, String rootAsset, File targetDir) throws IOException {
-            class FolderEntry {
-                String assetPath;
-                File outDir;
-                FolderEntry(String assetPath, File outDir) {
-                    this.assetPath = assetPath;
-                    this.outDir = outDir;
-                }
-            }
+        private int countAllFiles(String[] folders) {
+            int count = 0;
+            for (String folder : folders) count += countFilesRecursive(folder);
+            return count;
+        }
 
-            List<FolderEntry> queue = new ArrayList<>();
-            queue.add(new FolderEntry(rootAsset, targetDir));
+        private int countFilesRecursive(String assetFolder) {
+            try {
+                String[] assets = getAssets().list(assetFolder);
+                if (assets == null || assets.length == 0) return 1;
+                int total = 0;
+                for (String asset : assets) total += countFilesRecursive(assetFolder + "/" + asset);
+                return total;
+            } catch (IOException e) { return 0; }
+        }
 
-            while (!queue.isEmpty()) {
-                FolderEntry entry = queue.remove(0);
-                String[] assets = assetCache.get(entry.assetPath);
-                if (assets == null) continue;
-                if (!entry.outDir.exists()) entry.outDir.mkdirs();
+        private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
+            String[] assets = getAssets().list(assetFolder);
+            if (!targetFolder.exists()) targetFolder.mkdirs();
 
-                boolean nomediaCreated = false;
-                boolean checkMedia = entry.assetPath.startsWith("assets") || entry.assetPath.startsWith("overlays");
+            if (assets != null && assets.length > 0) {
+                for (String asset : assets) {
+                    String fullPath = assetFolder + "/" + asset;
+                    File outFile = new File(targetFolder, asset);
 
-                for (String name : assets) {
-                    String fullPath = entry.assetPath + "/" + name;
-                    File outFile = new File(entry.outDir, name);
-
-                    if (assetCache.containsKey(fullPath)) {
-                        queue.add(new FolderEntry(fullPath, outFile));
+                    if (getAssets().list(fullPath).length > 0) {
+                        copyAssetFolder(fullPath, outFile);
                     } else {
-                        try (InputStream in = am.open(fullPath);
+                        try (InputStream in = getAssets().open(fullPath);
                              FileOutputStream out = new FileOutputStream(outFile)) {
-                            byte[] buffer = new byte[8192];
+                            byte[] buffer = new byte[1024];
                             int read;
                             while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
                         }
-
-                        if (checkMedia && !nomediaCreated && isMedia(name)) {
-                            File nomedia = new File(entry.outDir, ".nomedia");
-                            if (!nomedia.exists()) nomedia.createNewFile();
-                            nomediaCreated = true;
-                        }
-
                         processedFiles.incrementAndGet();
-                        publishProgress((processedFiles.get() * 100) / totalFiles);
                     }
                 }
             }
         }
-    }
 
-    private void preloadAssets(AssetManager am, String path) throws IOException {
-        String[] list = am.list(path);
-        if (list == null) return;
-        if (list.length > 0) {
-            assetCache.put(path, list);
-            for (String name : list) {
-                String full = path + "/" + name;
-                String[] sub = am.list(full);
-                if (sub != null && sub.length > 0) preloadAssets(am, full);
+        private void updateRetroarchCfg() throws IOException {
+            File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
+            if (!originalCfg.exists()) originalCfg.getParentFile().mkdirs();
+            if (!originalCfg.exists()) originalCfg.createNewFile();
+
+            List<String> lines = new ArrayList<>();
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(originalCfg))) {
+                String line;
+                while ((line = reader.readLine()) != null) lines.add(line);
             }
-        }
-    }
 
-    private int countFilesRecursive(String path) throws IOException {
-        String[] list = assetCache.get(path);
-        if (list == null) return 0;
-        int count = 0;
-        for (String name : list) {
-            String full = path + "/" + name;
-            if (assetCache.containsKey(full)) {
-                if (path.startsWith("assets") || path.startsWith("overlays")) {
-                    count += countFilesRecursive(full);
-                } else {
-                    count += list.length;
-                    break;
+            StringBuilder content = new StringBuilder();
+            for (String line : lines) {
+                for (Map.Entry<String, String> entry : ASSET_FLAGS.entrySet()) {
+                    String folder = entry.getKey();
+                    String flag = entry.getValue();
+
+                    if (line.startsWith(flag)) {
+                        line = flag + " = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"";
+                        break;
+                    }
                 }
-            } else count += 1;
-        }
-        return count;
-    }
-
-    private boolean isMedia(String name) {
-        String lower = name.toLowerCase();
-        return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
-               lower.endsWith(".gif") || lower.endsWith(".webp") ||
-               lower.endsWith(".mp4") || lower.endsWith(".mkv") ||
-               lower.endsWith(".avi") || lower.endsWith(".mov");
-    }
-
-    private void removeUnusedArchFolders() {
-        String[] coresFolders = {"cores32", "cores64"};
-        String[] autoconfigFolders = {"autoconfig-legacy", "autoconfig"};
-
-        for (String folder : coresFolders) if (!folder.equals(archCores)) deleteFolder(new File(BASE_DIR, folder));
-        for (String folder : autoconfigFolders) if (!folder.equals(archAutoconfig)) deleteFolder(new File(BASE_DIR, folder));
-    }
-
-    private void deleteFolder(File folder) {
-        if (folder.exists()) {
-            File[] files = folder.listFiles();
-            if (files != null) {
-                for (File file : files) {
-                    if (file.isDirectory()) deleteFolder(file);
-                    else file.delete();
-                }
+                content.append(line).append("\n");
             }
-            folder.delete();
-        }
-    }
 
-    private void updateRetroarchCfg() throws IOException {
-        File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
-        if (!originalCfg.exists()) originalCfg.getParentFile().mkdirs();
-
-        Map<String, String> cfgFlags = new HashMap<>();
-        cfgFlags.put("menu_scale_factor", "0.600000");
-        cfgFlags.put("ozone_menu_color_theme", "10");
-        cfgFlags.put("input_overlay_opacity", "0.700000");
-        cfgFlags.put("input_overlay_hide_when_gamepad_connected", "true");
-        cfgFlags.put("video_smooth", "false");
-        cfgFlags.put("aspect_ratio_index", "1");
-        cfgFlags.put("netplay_nickname", "RetroGameBox");
-        cfgFlags.put("menu_enable_widgets", "true");
-        cfgFlags.put("pause_nonactive", "false");
-        cfgFlags.put("menu_mouse_enable", "false");
-        cfgFlags.put("input_player1_analog_dpad_mode", "1");
-        cfgFlags.put("input_player2_analog_dpad_mode", "1");
-        cfgFlags.put("input_player3_analog_dpad_mode", "1");
-        cfgFlags.put("input_player4_analog_dpad_mode", "1");
-        cfgFlags.put("input_player5_analog_dpad_mode", "1");
-        cfgFlags.put("input_menu_toggle_gamepad_combo", "9");
-        cfgFlags.put("input_quit_gamepad_combo", "4");
-        cfgFlags.put("input_bind_timeout", "4");
-        cfgFlags.put("input_bind_hold", "1");
-        cfgFlags.put("all_users_control_menu", "true");
-        cfgFlags.put("input_poll_type_behavior", "1");
-        cfgFlags.put("android_input_disconnect_workaround", "true");
-
-        if ("cores32".equals(archCores)) cfgFlags.put("video_threaded", "true");
-        else cfgFlags.put("video_threaded", "false");
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) cfgFlags.put("video_driver", "vulkan");
-        else cfgFlags.put("video_driver", "gl");
-
-        boolean hasTouchscreen = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN);
-        boolean isLeanback = getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
-
-        if (hasTouchscreen && !isLeanback) {
-            cfgFlags.put("input_overlay_enable", "true");
-            cfgFlags.put("input_enable_hotkey_btn", "109");
-            cfgFlags.put("input_menu_toggle_btn", "100");
-            cfgFlags.put("input_save_state_btn", "103");
-            cfgFlags.put("input_load_state_btn", "102");
-            cfgFlags.put("input_state_slot_decrease_btn", "104");
-            cfgFlags.put("input_state_slot_increase_btn", "105");
-        } else {
-            cfgFlags.put("input_overlay_enable", "false");
-            cfgFlags.put("input_enable_hotkey_btn", "196");
-            cfgFlags.put("input_menu_toggle_btn", "188");
-            cfgFlags.put("input_save_state_btn", "193");
-            cfgFlags.put("input_load_state_btn", "192");
-            cfgFlags.put("input_state_slot_decrease_btn", "194");
-            cfgFlags.put("input_state_slot_increase_btn", "195");
-        }
-
-        Map<String, File> assetFiles = new HashMap<>();
-        for (String folder : ASSET_FOLDERS) assetFiles.put(folder, new File(BASE_DIR, folder));
-
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(originalCfg, false))) {
-            for (Map.Entry<String, String> entry : ASSET_FLAGS.entrySet()) {
-                String folder = entry.getKey();
-                String flag = entry.getValue();
-                File path = assetFiles.get(folder);
-                if (path != null) writer.write(flag + " = \"" + path.getAbsolutePath() + "\"\n");
-            }
-            for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
-                writer.write(entry.getKey() + " = \"" + entry.getValue() + "\"\n");
+            try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
+                out.write(content.toString().getBytes());
             }
         }
     }

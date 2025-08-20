@@ -32,12 +32,12 @@ import java.util.HashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.TimeUnit;
 
 public final class MainMenuActivity extends PreferenceActivity {
 
     private final int REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS = 124;
     public static String PACKAGE_NAME;
-    private boolean checkPermissions = false;
     private SharedPreferences prefs;
 
     private final String[] ASSET_FOLDERS = {
@@ -91,17 +91,13 @@ public final class MainMenuActivity extends PreferenceActivity {
     private void checkRuntimePermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             List<String> permissionsList = new ArrayList<>();
-
             addPermission(permissionsList, Manifest.permission.READ_EXTERNAL_STORAGE);
             addPermission(permissionsList, Manifest.permission.WRITE_EXTERNAL_STORAGE);
-
             if (!permissionsList.isEmpty()) {
-                checkPermissions = true;
                 requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
                 return;
             }
         }
-
         startExtractionOrRetro();
     }
 
@@ -124,7 +120,6 @@ public final class MainMenuActivity extends PreferenceActivity {
             startExtractionOrRetro();
         } else {
             int deniedCount = prefs.getInt("deniedCount", 0);
-
             if (permissions != null) deniedCount++;
             prefs.edit().putInt("deniedCount", deniedCount).apply();
 
@@ -144,7 +139,6 @@ public final class MainMenuActivity extends PreferenceActivity {
                         .show();
             } else if (!firstDenialHandled) {
                 firstDenialHandled = true;
-
                 new AlertDialog.Builder(this)
                         .setTitle("Permissões Necessárias!")
                         .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
@@ -230,23 +224,27 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         @Override
         protected Boolean doInBackground(Void... voids) {
-            try {
-                updateRetroarchCfg(); // Executa antes da cópia dos assets
-            } catch (IOException e) {
-                e.printStackTrace();
-                return false;
-            }
-
             ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length + 2, 4));
 
-            for (String folder : ASSET_FOLDERS) executor.submit(() -> copyFolderSafe(folder, new File(BASE_DIR, folder)));
+            // Copia cores e autoconfig primeiro
             executor.submit(() -> copyFolderSafe(archCores, new File(BASE_DIR, "cores")));
             executor.submit(() -> copyFolderSafe(archAutoconfig, new File(BASE_DIR, "autoconfig")));
 
+            // Copia os demais assets
+            for (String folder : ASSET_FOLDERS) executor.submit(() -> copyFolderSafe(folder, new File(BASE_DIR, folder)));
+
             executor.shutdown();
-            while (!executor.isTerminated()) {
-                publishProgress((processedFiles.get() * 100) / totalFiles);
-                try { Thread.sleep(100); } catch (InterruptedException ignored) {}
+            try {
+                executor.awaitTermination(30, TimeUnit.MINUTES); // Aguarda todas as threads terminarem
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+
+            // Cria retroarch.cfg apenas após todos os arquivos estarem copiados
+            try {
+                updateRetroarchCfg();
+            } catch (IOException e) {
+                e.printStackTrace();
             }
 
             return true;
@@ -314,71 +312,69 @@ public final class MainMenuActivity extends PreferenceActivity {
         @Override
         protected void onPostExecute(Boolean result) {
             progressDialog.dismiss();
-            finalStartup();
+            finalStartup(); // Só inicia após cfg criado e arquivos copiados
+        }
+    }
+
+    private void updateRetroarchCfg() throws IOException {
+        File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
+        if (originalCfg.exists()) originalCfg.delete(); // Garante arquivo limpo
+        originalCfg.getParentFile().mkdirs();
+
+        Map<String, String> cfgFlags = new HashMap<>();
+        cfgFlags.put("menu_scale_factor", "0.600000");
+        cfgFlags.put("ozone_menu_color_theme", "10");
+        cfgFlags.put("input_overlay_opacity", "0.700000");
+        cfgFlags.put("input_overlay_hide_when_gamepad_connected", "true");
+        cfgFlags.put("video_smooth", "false");
+        cfgFlags.put("aspect_ratio_index", "1");
+        cfgFlags.put("netplay_nickname", "RetroGameBox");
+        cfgFlags.put("menu_enable_widgets", "true");
+        cfgFlags.put("pause_nonactive", "false");
+        cfgFlags.put("menu_mouse_enable", "false");
+        cfgFlags.put("input_player1_analog_dpad_mode", "1");
+        cfgFlags.put("input_player2_analog_dpad_mode", "1");
+        cfgFlags.put("input_player3_analog_dpad_mode", "1");
+        cfgFlags.put("input_player4_analog_dpad_mode", "1");
+        cfgFlags.put("input_player5_analog_dpad_mode", "1");
+        cfgFlags.put("input_menu_toggle_gamepad_combo", "9");
+        cfgFlags.put("input_quit_gamepad_combo", "4");
+        cfgFlags.put("input_bind_timeout", "4");
+        cfgFlags.put("input_bind_hold", "1");
+        cfgFlags.put("all_users_control_menu", "true");
+        cfgFlags.put("input_poll_type_behavior", "1");
+        cfgFlags.put("android_input_disconnect_workaround", "true");
+        cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
+        cfgFlags.put("video_driver", (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && "cores64".equals(archCores)) ? "vulkan" : "gl");
+
+        boolean hasTouchscreen = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN);
+        boolean isLeanback = getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
+
+        if (hasTouchscreen && !isLeanback) {
+            cfgFlags.put("input_overlay_enable", "true");
+            cfgFlags.put("input_enable_hotkey_btn", "109");
+            cfgFlags.put("input_menu_toggle_btn", "100");
+            cfgFlags.put("input_save_state_btn", "103");
+            cfgFlags.put("input_load_state_btn", "102");
+            cfgFlags.put("input_state_slot_decrease_btn", "104");
+            cfgFlags.put("input_state_slot_increase_btn", "105");
+        } else {
+            cfgFlags.put("input_overlay_enable", "false");
+            cfgFlags.put("input_enable_hotkey_btn", "196");
+            cfgFlags.put("input_menu_toggle_btn", "188");
+            cfgFlags.put("input_save_state_btn", "193");
+            cfgFlags.put("input_load_state_btn", "192");
+            cfgFlags.put("input_state_slot_decrease_btn", "194");
+            cfgFlags.put("input_state_slot_increase_btn", "195");
         }
 
-        private void updateRetroarchCfg() throws IOException {
-            File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
-
-            if (originalCfg.exists()) originalCfg.delete();
-            originalCfg.getParentFile().mkdirs();
-            originalCfg.createNewFile();
-
-            Map<String, String> cfgFlags = new HashMap<>();
-            cfgFlags.put("menu_scale_factor", "0.600000");
-            cfgFlags.put("ozone_menu_color_theme", "10");
-            cfgFlags.put("input_overlay_opacity", "0.700000");
-            cfgFlags.put("input_overlay_hide_when_gamepad_connected", "true");
-            cfgFlags.put("video_smooth", "false");
-            cfgFlags.put("aspect_ratio_index", "1");
-            cfgFlags.put("netplay_nickname", "RetroGameBox");
-            cfgFlags.put("menu_enable_widgets", "true");
-            cfgFlags.put("pause_nonactive", "false");
-            cfgFlags.put("menu_mouse_enable", "false");
-            cfgFlags.put("input_player1_analog_dpad_mode", "1");
-            cfgFlags.put("input_player2_analog_dpad_mode", "1");
-            cfgFlags.put("input_player3_analog_dpad_mode", "1");
-            cfgFlags.put("input_player4_analog_dpad_mode", "1");
-            cfgFlags.put("input_player5_analog_dpad_mode", "1");
-            cfgFlags.put("input_menu_toggle_gamepad_combo", "9");
-            cfgFlags.put("input_quit_gamepad_combo", "4");
-            cfgFlags.put("input_bind_timeout", "4");
-            cfgFlags.put("input_bind_hold", "1");
-            cfgFlags.put("all_users_control_menu", "true");
-            cfgFlags.put("input_poll_type_behavior", "1");
-            cfgFlags.put("android_input_disconnect_workaround", "true");
-            cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
-            cfgFlags.put("video_driver", (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && "cores64".equals(archCores)) ? "vulkan" : "gl");
-
-            boolean hasTouchscreen = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN);
-            boolean isLeanback = getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
-
-            if (hasTouchscreen && !isLeanback) {
-                cfgFlags.put("input_overlay_enable", "true");
-                cfgFlags.put("input_enable_hotkey_btn", "109");
-                cfgFlags.put("input_menu_toggle_btn", "100");
-                cfgFlags.put("input_save_state_btn", "103");
-                cfgFlags.put("input_load_state_btn", "102");
-                cfgFlags.put("input_state_slot_decrease_btn", "104");
-                cfgFlags.put("input_state_slot_increase_btn", "105");
-            } else {
-                cfgFlags.put("input_overlay_enable", "false");
-                cfgFlags.put("input_enable_hotkey_btn", "196");
-                cfgFlags.put("input_menu_toggle_btn", "188");
-                cfgFlags.put("input_save_state_btn", "193");
-                cfgFlags.put("input_load_state_btn", "192");
-                cfgFlags.put("input_state_slot_decrease_btn", "194");
-                cfgFlags.put("input_state_slot_increase_btn", "195");
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(originalCfg, false))) {
+            for (String folder : ASSET_FOLDERS) {
+                File path = new File(BASE_DIR, folder);
+                writer.write(ASSET_FLAGS.get(folder) + " = \"" + path.getAbsolutePath() + "\"\n");
             }
-
-            try (BufferedWriter writer = new BufferedWriter(new FileWriter(originalCfg))) {
-                for (String folder : ASSET_FOLDERS) {
-                    File path = new File(BASE_DIR, folder);
-                    writer.write(ASSET_FLAGS.get(folder) + " = \"" + path.getAbsolutePath() + "\"\n");
-                }
-                for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
-                    writer.write(entry.getKey() + " = \"" + entry.getValue() + "\"\n");
-                }
+            for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
+                writer.write(entry.getKey() + " = \"" + entry.getValue() + "\"\n");
             }
         }
     }

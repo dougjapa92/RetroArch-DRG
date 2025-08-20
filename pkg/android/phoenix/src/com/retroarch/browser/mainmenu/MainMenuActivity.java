@@ -128,6 +128,10 @@ public final class MainMenuActivity extends PreferenceActivity {
         } else {
             int deniedCount = prefs.getInt("deniedCount", 0);
     
+            // Incrementar deniedCount somente se vier de onRequestPermissionsResult
+            if (permissions != null) deniedCount++;
+            prefs.edit().putInt("deniedCount", deniedCount).apply();
+    
             if (deniedCount >= 2 || wentToSettings) {
                 // Segunda mensagem: abrir configurações
                 new AlertDialog.Builder(this)
@@ -145,8 +149,6 @@ public final class MainMenuActivity extends PreferenceActivity {
                     .show();
             } else if (!firstDenialHandled) {
                 // Primeira mensagem: conceder permissões
-                deniedCount++;
-                prefs.edit().putInt("deniedCount", deniedCount).apply();
                 firstDenialHandled = true;
     
                 new AlertDialog.Builder(this)
@@ -320,7 +322,8 @@ public final class MainMenuActivity extends PreferenceActivity {
             if (!originalCfg.exists()) originalCfg.getParentFile().mkdirs();
 
             Map<String, String> cfgFlags = new HashMap<>();
-            // ⚙️ Flags mantidas (não alteradas conforme solicitado)
+            
+            // Flags Globais
             cfgFlags.put("menu_scale_factor", "0.600000");
             cfgFlags.put("ozone_menu_color_theme", "10");
             cfgFlags.put("input_overlay_opacity", "0.700000");
@@ -343,6 +346,8 @@ public final class MainMenuActivity extends PreferenceActivity {
             cfgFlags.put("all_users_control_menu", "true");
             cfgFlags.put("input_poll_type_behavior", "1");
             cfgFlags.put("android_input_disconnect_workaround", "true");
+
+            // Flags Condicionais
             cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
             cfgFlags.put("video_driver", (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && "cores64".equals(archCores)) ? "vulkan" : "gl");
 
@@ -367,6 +372,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 cfgFlags.put("input_state_slot_increase_btn", "195");
             }
 
+            // Populando retroarch.cfg
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(originalCfg, false))) {
                 for (String folder : ASSET_FOLDERS) {
                     File path = new File(BASE_DIR, folder);

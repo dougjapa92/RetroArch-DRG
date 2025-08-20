@@ -3,7 +3,6 @@ package com.retroarch.browser.mainmenu;
 import com.retroarch.browser.preferences.util.UserPreferences;
 import com.retroarch.browser.retroactivity.RetroActivityFuture;
 
-import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -31,7 +30,6 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public final class MainMenuActivity extends PreferenceActivity {
@@ -123,7 +121,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             prefs.edit().putInt("deniedCount", deniedCount).apply();
 
             if (deniedCount >= 2 || wentToSettings) {
-                new AlertDialog.Builder(this)
+                new android.app.AlertDialog.Builder(this)
                         .setTitle("Permissão Negada!")
                         .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
                         .setCancelable(false)
@@ -138,7 +136,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                         .show();
             } else if (!firstDenialHandled) {
                 firstDenialHandled = true;
-                new AlertDialog.Builder(this)
+                new android.app.AlertDialog.Builder(this)
                         .setTitle("Permissões Necessárias!")
                         .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
                         .setCancelable(false)
@@ -206,30 +204,23 @@ public final class MainMenuActivity extends PreferenceActivity {
         @Override
         protected Boolean doInBackground(Void... voids) {
             ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length + 2, 4));
-            CountDownLatch latch = new CountDownLatch(ASSET_FOLDERS.length + 2); // todas as pastas + cores + system
 
-            // Cópia de cores e system
-            executor.submit(() -> { copyFolderSafe(archCores, new File(BASE_DIR, "cores"), latch); });
-            executor.submit(() -> { copyFolderSafe("system", new File(BASE_DIR, "system"), latch); });
-
-            // Outras pastas
-            for (String folder : ASSET_FOLDERS) {
-                if (!folder.equals("system")) {
-                    executor.submit(() -> copyFolderSafe(folder, new File(BASE_DIR, folder), latch));
+            // Cópia sequencial mas bloqueando por arquivo (lógica antiga)
+            try {
+                copyAssetFolder(archCores, new File(BASE_DIR, "cores"));
+                copyAssetFolder("system", new File(BASE_DIR, "system"));
+                for (String folder : ASSET_FOLDERS) {
+                    if (!folder.equals("system")) {
+                        copyAssetFolder(folder, new File(BASE_DIR, folder));
+                    }
                 }
+            } catch (IOException e) {
+                e.printStackTrace();
+                return false;
             }
 
-            executor.shutdown();
-            try { latch.await(); } catch (InterruptedException ignored) {}
-
             try { updateRetroarchCfg(); } catch (IOException e) { e.printStackTrace(); }
-
             return true;
-        }
-
-        private void copyFolderSafe(String assetFolder, File targetFolder, CountDownLatch latch) {
-            try { copyAssetFolder(assetFolder, targetFolder); } catch (IOException e) { e.printStackTrace(); }
-            if (latch != null) latch.countDown();
         }
 
         private int countAllFiles(String[] folders) {
@@ -295,6 +286,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         }
     }
 
+    // updateRetroarchCfg() e finalStartup() permanecem iguais ao seu código atual
     private void updateRetroarchCfg() throws IOException {
         File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
         if (originalCfg.exists()) originalCfg.delete();

@@ -33,7 +33,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public final class MainMenuActivity extends PreferenceActivity {
 
+    private final int REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS = 124;
     public static String PACKAGE_NAME;
+    private boolean checkPermissions = false;
     private SharedPreferences prefs;
 
     private final String[] ASSET_FOLDERS = {
@@ -58,10 +60,6 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     private String archCores;
     private String archAutoconfig;
-    private AtomicInteger processedFiles = new AtomicInteger(0);
-    private ExecutorService executor;
-
-    private final int REQUEST_CODE_PERMISSIONS = 124;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -76,38 +74,44 @@ public final class MainMenuActivity extends PreferenceActivity {
         String arch = System.getProperty("os.arch");
         archCores = arch.contains("64") ? "cores64" : "cores32";
 
-        requestPermissionsIfNeeded();
+        checkRuntimePermissions();
     }
 
-    private void requestPermissionsIfNeeded() {
+    private boolean addPermission(List<String> permissionsList, String permission) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            String[] permissions = {
-                    Manifest.permission.READ_EXTERNAL_STORAGE,
-                    Manifest.permission.WRITE_EXTERNAL_STORAGE
-            };
-
-            boolean granted = true;
-            for (String p : permissions) {
-                if (checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED) {
-                    granted = false;
-                    break;
-                }
-            }
-
-            if (!granted) {
-                requestPermissions(permissions, REQUEST_CODE_PERMISSIONS);
-                return;
+            if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
+                permissionsList.add(permission);
+                return !shouldShowRequestPermissionRationale(permission);
             }
         }
-
-        startExtractionOrRetro();
+        return true;
     }
+
+	private void checkRuntimePermissions() {
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+			List<String> permissionsList = new ArrayList<>();
+
+			if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+				permissionsList.add(Manifest.permission.READ_EXTERNAL_STORAGE);
+			}
+			if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+				permissionsList.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+			}
+
+			if (!permissionsList.isEmpty()) {
+				requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
+				return;
+			}
+		}
+
+		startExtractionOrRetro();
+	}
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        if (requestCode == REQUEST_CODE_PERMISSIONS) {
+        if (requestCode == REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS) {
             boolean allGranted = true;
-            for (int r : grantResults) if (r != PackageManager.PERMISSION_GRANTED) allGranted = false;
+            for (int result : grantResults) if (result != PackageManager.PERMISSION_GRANTED) allGranted = false;
 
             if (allGranted) {
                 prefs.edit().putInt("deniedCount", 0).apply();
@@ -117,7 +121,6 @@ public final class MainMenuActivity extends PreferenceActivity {
                 prefs.edit().putInt("deniedCount", deniedCount).apply();
 
                 if (deniedCount >= 2) {
-                    // Segunda negação → abrir configurações ou sair
                     new AlertDialog.Builder(this)
                             .setTitle("Permissão Negada!")
                             .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
@@ -131,28 +134,18 @@ public final class MainMenuActivity extends PreferenceActivity {
                             .setNegativeButton("Sair", (dialog, which) -> finish())
                             .show();
                 } else {
-                    // Primeira negação → tentar novamente
-                    requestPermissions(permissions, REQUEST_CODE_PERMISSIONS);
+                    new AlertDialog.Builder(this)
+                            .setTitle("Permissões Necessárias!")
+                            .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
+                            .setCancelable(false)
+                            .setPositiveButton("Conceder", (dialog, which) ->
+                                    requestPermissions(permissions, REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
+                            .setNegativeButton("Sair", (dialog, which) -> finish())
+                            .show();
                 }
             }
         } else {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        }
-    }
-
-    @Override
-    protected void onResume() {
-        super.onResume();
-        // Caso o usuário volte das configurações, verifica permissões
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            String[] permissions = {
-                    Manifest.permission.READ_EXTERNAL_STORAGE,
-                    Manifest.permission.WRITE_EXTERNAL_STORAGE
-            };
-            boolean granted = true;
-            for (String p : permissions) if (checkSelfPermission(p) != PackageManager.PERMISSION_GRANTED) granted = false;
-
-            if (granted) startExtractionOrRetro();
         }
     }
 
@@ -164,13 +157,14 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
         ProgressDialog progressDialog;
+        AtomicInteger processedFiles = new AtomicInteger(0);
         int totalFiles = 0;
 
         @Override
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
             progressDialog.setTitle("Configurando RetroArch DRG...");
-            String archMessage = archCores.equals("cores64") ? "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)" : "\nArquitetura dos Cores:\n   - armeabi-v7a (32-bit)";
+            String archMessage = archCores.equals("cores64") ? "\nArquitetura dos Cores:\n   - arm64-v8a (64-bit)" : "\nArquitetura dos Cores:\n   - armeabi-v7a (32-bit)";
             progressDialog.setMessage(archMessage + "\n\nClique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo.");
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);
@@ -179,12 +173,13 @@ public final class MainMenuActivity extends PreferenceActivity {
             if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
             removeUnusedArchFolders();
 
-            archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) {
+                archAutoconfig = "autoconfig-legacy";
+            } else {
+                archAutoconfig = "autoconfig";
+            }
 
             totalFiles = countAllFiles(ASSET_FOLDERS) + countAllFiles(new String[]{archCores, archAutoconfig});
-
-            int cores = Runtime.getRuntime().availableProcessors();
-            executor = Executors.newFixedThreadPool(cores);
         }
 
         private void removeUnusedArchFolders() {
@@ -210,85 +205,37 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         @Override
         protected Boolean doInBackground(Void... voids) {
-            try {
-                submitAssetFolders(ASSET_FOLDERS, null);
-                submitAssetFolders(new String[]{archCores}, "cores");
-                submitAssetFolders(new String[]{archAutoconfig}, "autoconfig");
+            ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length + 2, 4));
 
-                executor.shutdown();
-                while (!executor.isTerminated()) {
-                    publishProgress((processedFiles.get() * 100) / totalFiles);
-                    Thread.sleep(50);
-                }
-
-                updateRetroarchCfg();
-            } catch (IOException | InterruptedException e) {
-                e.printStackTrace();
-                return false;
+            for (String folder : ASSET_FOLDERS) {
+                executor.submit(() -> {
+                    try { copyAssetFolder(folder, new File(BASE_DIR, folder)); }
+                    catch (IOException e) { e.printStackTrace(); }
+                });
             }
+
+            executor.submit(() -> {
+                try { copyAssetFolder(archCores, new File(BASE_DIR, "cores")); }
+                catch (IOException e) { e.printStackTrace(); }
+            });
+
+            executor.submit(() -> {
+                try { copyAssetFolder(archAutoconfig, new File(BASE_DIR, "autoconfig")); }
+                catch (IOException e) { e.printStackTrace(); }
+            });
+
+            executor.shutdown();
+            while (!executor.isTerminated()) {
+                publishProgress((processedFiles.get() * 100) / totalFiles);
+                try { Thread.sleep(100); } catch (InterruptedException ignored) {}
+            }
+
+            try { updateRetroarchCfg(); } catch (IOException e) { return false; }
             return true;
         }
 
-        private void submitAssetFolders(String[] folders, String targetFolderName) {
-            for (String folder : folders) {
-                executor.submit(() -> {
-                    try {
-                        File target = (targetFolderName != null) ? new File(BASE_DIR, targetFolderName) : new File(BASE_DIR, folder);
-                        copyAssetFolder(folder, target);
-                    } catch (IOException e) { e.printStackTrace(); }
-                });
-            }
-        }
-
-        private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
-            String[] assets = getAssets().list(assetFolder);
-            if (!targetFolder.exists()) targetFolder.mkdirs();
-            if (assets == null || assets.length == 0) return;
-
-            boolean hasMedia = false;
-            List<Runnable> subTasks = new ArrayList<>();
-
-            for (String asset : assets) {
-                String fullPath = assetFolder + "/" + asset;
-                File outFile = new File(targetFolder, asset);
-                String[] subAssets = getAssets().list(fullPath);
-
-                if (subAssets != null && subAssets.length > 0) {
-                    subTasks.add(() -> {
-                        try { copyAssetFolder(fullPath, outFile); } catch (IOException e) { e.printStackTrace(); }
-                    });
-                } else {
-                    subTasks.add(() -> {
-                        try (InputStream in = getAssets().open(fullPath);
-                             FileOutputStream out = new FileOutputStream(outFile)) {
-                            byte[] buffer = new byte[1024];
-                            int read;
-                            while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
-                        } catch (IOException e) { e.printStackTrace(); }
-                    });
-
-                    String lower = asset.toLowerCase();
-                    if (!hasMedia && (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
-                                      lower.endsWith(".gif") || lower.endsWith(".mp4") || lower.endsWith(".mkv") ||
-                                      lower.endsWith(".avi") || lower.endsWith(".mov"))) {
-                        hasMedia = true;
-                    }
-                }
-            }
-
-            if (hasMedia) {
-                File nomedia = new File(targetFolder, ".nomedia");
-                if (!nomedia.exists()) nomedia.createNewFile();
-            }
-
-            for (Runnable task : subTasks) executor.submit(task);
-            processedFiles.addAndGet(assets.length);
-        }
-
         @Override
-        protected void onProgressUpdate(Integer... values) {
-            progressDialog.setProgress(values[0]);
-        }
+        protected void onProgressUpdate(Integer... values) { progressDialog.setProgress(values[0]); }
 
         @Override
         protected void onPostExecute(Boolean result) {
@@ -311,6 +258,45 @@ public final class MainMenuActivity extends PreferenceActivity {
                 for (String asset : assets) total += countFilesRecursive(assetFolder + "/" + asset);
                 return total;
             } catch (IOException e) { return 0; }
+        }
+
+        private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
+            String[] assets = getAssets().list(assetFolder);
+            if (!targetFolder.exists()) targetFolder.mkdirs();
+
+            boolean nomediaCreated = false;
+
+            if (assets != null && assets.length > 0) {
+                for (String asset : assets) {
+                    String fullPath = assetFolder + "/" + asset;
+                    File outFile = new File(targetFolder, asset);
+
+                    String[] subAssets = getAssets().list(fullPath);
+                    if (subAssets != null && subAssets.length > 0) {
+                        copyAssetFolder(fullPath, outFile);
+                    } else {
+                        try (InputStream in = getAssets().open(fullPath);
+                             FileOutputStream out = new FileOutputStream(outFile)) {
+                            byte[] buffer = new byte[1024];
+                            int read;
+                            while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
+                        }
+
+                        if (!nomediaCreated) {
+                            String lower = asset.toLowerCase();
+                            if (lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
+                                lower.endsWith(".gif") || lower.endsWith(".mp4") || lower.endsWith(".mkv") ||
+                                lower.endsWith(".avi") || lower.endsWith(".mov")) {
+                                File nomedia = new File(targetFolder, ".nomedia");
+                                if (!nomedia.exists()) nomedia.createNewFile();
+                                nomediaCreated = true;
+                            }
+                        }
+
+                        processedFiles.incrementAndGet();
+                    }
+                }
+            }
         }
 
         private void updateRetroarchCfg() throws IOException {
@@ -379,11 +365,13 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             StringBuilder content = new StringBuilder();
             for (String line : lines) {
+                boolean replaced = false;
                 for (Map.Entry<String, String> entry : ASSET_FLAGS.entrySet()) {
                     String folder = entry.getKey();
                     String flag = entry.getValue();
                     if (line.startsWith(flag)) {
                         line = flag + " = \"" + assetFiles.get(folder).getAbsolutePath() + "\"";
+                        replaced = true;
                         break;
                     }
                 }
@@ -429,4 +417,4 @@ public final class MainMenuActivity extends PreferenceActivity {
         String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
         retro.putExtra("EXTERNAL", external);
     }
-} 
+}

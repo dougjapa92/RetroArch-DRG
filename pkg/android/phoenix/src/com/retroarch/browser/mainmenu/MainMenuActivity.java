@@ -461,4 +461,4 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         retro.putExtra("EXTERNAL", external);
     }
-                            } 
+} 

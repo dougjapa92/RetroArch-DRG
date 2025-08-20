@@ -234,19 +234,27 @@ public final class MainMenuActivity extends PreferenceActivity {
         private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
             String[] assets = getAssets().list(assetFolder);
             if (!targetFolder.exists()) targetFolder.mkdirs();
-
+        
+            // Adicionar .nomedia se for subpasta de assets ou overlays
+            if ((assetFolder.startsWith("assets/") || assetFolder.startsWith("overlays/")) && targetFolder.isDirectory()) {
+                File noMedia = new File(targetFolder, ".nomedia");
+                if (!noMedia.exists()) noMedia.createNewFile();
+            }
+        
             if (assets != null && assets.length > 0) {
                 for (String asset : assets) {
+                    String fullPath = assetFolder + "/" + asset;
+                    File outFile = new File(targetFolder, asset);
+        
                     // Ignorar global.glslp se cores32 e pasta config
                     if ("cores32".equals(archCores) && fullPath.equals("config/global.glslp")) {
                         processedFiles.incrementAndGet();
                         continue;
                     }
-                    String fullPath = assetFolder + "/" + asset;
-                    File outFile = new File(targetFolder, asset);
-
-                    if (getAssets().list(fullPath).length > 0) copyAssetFolder(fullPath, outFile);
-                    else {
+        
+                    if (getAssets().list(fullPath).length > 0) {
+                        copyAssetFolder(fullPath, outFile);
+                    } else {
                         try (InputStream in = getAssets().open(fullPath);
                              FileOutputStream out = new FileOutputStream(outFile)) {
                             byte[] buffer = new byte[1024];

@@ -1,3 +1,4 @@
+
 package com.retroarch.browser.mainmenu;
 
 import com.retroarch.browser.preferences.util.UserPreferences;
@@ -23,8 +24,6 @@ import java.io.File;
 import java.io.InputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.BufferedWriter;
-import java.io.FileWriter;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
@@ -37,14 +36,11 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     private final int REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS = 124;
     public static String PACKAGE_NAME;
+    private boolean checkPermissions = false;
     private SharedPreferences prefs;
 
-    private boolean permissionsHandled = false;
-    private boolean wentToSettings = false;
-    private boolean firstDenialHandled = false;
-
     private final String[] ASSET_FOLDERS = {
-            "assets", "database", "filters", "info", "overlays", "shaders", "system", "config", "remaps", "cheats"
+            "assets", "database", "filters", "info", "overlays", "shaders", "system", "config", "remaps"
     };
 
     private final Map<String, String> ASSET_FLAGS = new HashMap<String, String>() {{
@@ -57,7 +53,6 @@ public final class MainMenuActivity extends PreferenceActivity {
         put("system", "system_directory");
         put("config", "rgui_config_directory");
         put("remaps", "input_remapping_directory");
-        put("cheats", "cheat_database_path");
     }};
 
     private final File BASE_DIR = new File(Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
@@ -82,15 +77,19 @@ public final class MainMenuActivity extends PreferenceActivity {
         checkRuntimePermissions();
     }
 
-    // ------------------------ PERMISSÕES ------------------------
     private boolean addPermission(List<String> permissionsList, String permission) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
-            checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
-            permissionsList.add(permission);
-            return !shouldShowRequestPermissionRationale(permission);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
+                permissionsList.add(permission);
+                return !shouldShowRequestPermissionRationale(permission);
+            }
         }
         return true;
     }
+
+    private boolean permissionsHandled = false;
+    private boolean wentToSettings = false;
+    private boolean firstDenialHandled = false;
 
     private void checkRuntimePermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -173,51 +172,49 @@ public final class MainMenuActivity extends PreferenceActivity {
         }
     }
 
-    // ------------------------ EXTRAÇÃO / RETRO ------------------------
+
     private void startExtractionOrRetro() {
         boolean firstRun = prefs.getBoolean("firstRun", true);
-        if (firstRun) {
-            prefs.edit().putBoolean("firstRun", false).apply();
-            new UnifiedExtractionTask().execute();
-        } else finalStartup();
+        if (firstRun) new UnifiedExtractionTask().execute();
+        else finalStartup();
     }
 
     private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
         ProgressDialog progressDialog;
         AtomicInteger processedFiles = new AtomicInteger(0);
         int totalFiles = 0;
-    
+
         @Override
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
             progressDialog.setTitle("Configurando RetroArch DRG...");
-            String archMessage = archCores.equals("cores64") ?
-                    "\nArquitetura do Processador:\n  - arm64-v8a (64-bit)" :
-                    "\nArquitetura do Processador:\n  - armeabi-v7a (32-bit)";
-            progressDialog.setMessage(archMessage +
-                    "\n\nClique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo.");
+            String archMessage = archCores.equals("cores64") ? "\nArquitetura do Processador:\n  - arm64-v8a (64-bit)" : "\nArquitetura do Processador:\n  - armeabi-v7a (32-bit)";
+            progressDialog.setMessage(archMessage + "\n\nClique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo.");
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);
             progressDialog.show();
-    
+
             if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
             removeUnusedArchFolders();
-    
-            archAutoconfig = Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1 ? "autoconfig-legacy" : "autoconfig";
-    
+
+            // Definir archAutoconfig de acordo com a versão do Android
+            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) { // ≤ 7.1.2
+                archAutoconfig = "autoconfig-legacy";
+            } else {
+                archAutoconfig = "autoconfig";
+            }
+
             totalFiles = countAllFiles(ASSET_FOLDERS) + countAllFiles(new String[]{archCores, archAutoconfig});
         }
-    
+
         private void removeUnusedArchFolders() {
             String[] coresFolders = {"cores32", "cores64"};
             String[] autoconfigFolders = {"autoconfig-legacy", "autoconfig"};
-    
-            for (String folder : coresFolders)
-                if (!folder.equals(archCores)) deleteFolder(new File(BASE_DIR, folder));
-            for (String folder : autoconfigFolders)
-                if (!folder.equals(archAutoconfig)) deleteFolder(new File(BASE_DIR, folder));
+
+            for (String folder : coresFolders) if (!folder.equals(archCores)) deleteFolder(new File(BASE_DIR, folder));
+            for (String folder : autoconfigFolders) if (!folder.equals(archAutoconfig)) deleteFolder(new File(BASE_DIR, folder));
         }
-    
+
         private void deleteFolder(File folder) {
             if (folder.exists()) {
                 File[] files = folder.listFiles();
@@ -230,13 +227,54 @@ public final class MainMenuActivity extends PreferenceActivity {
                 folder.delete();
             }
         }
-        
+
+        @Override
+        protected Boolean doInBackground(Void... voids) {
+            ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length + 2, 4));
+
+            for (String folder : ASSET_FOLDERS) {
+                executor.submit(() -> {
+                    try { copyAssetFolder(folder, new File(BASE_DIR, folder)); }
+                    catch (IOException e) { e.printStackTrace(); }
+                });
+            }
+
+            executor.submit(() -> {
+                try { copyAssetFolder(archCores, new File(BASE_DIR, "cores")); }
+                catch (IOException e) { e.printStackTrace(); }
+            });
+
+            executor.submit(() -> {
+                try { copyAssetFolder(archAutoconfig, new File(BASE_DIR, "autoconfig")); }
+                catch (IOException e) { e.printStackTrace(); }
+            });
+
+            executor.shutdown();
+            while (!executor.isTerminated()) {
+                publishProgress((processedFiles.get() * 100) / totalFiles);
+                try { Thread.sleep(100); } catch (InterruptedException ignored) {}
+            }
+
+            try { updateRetroarchCfg(); } catch (IOException e) { return false; }
+            return true;
+        }
+
+        @Override
+        protected void onProgressUpdate(Integer... values) { progressDialog.setProgress(values[0]); }
+
+        @Override
+        protected void onPostExecute(Boolean result) {
+            progressDialog.dismiss();
+            prefs.edit().putBoolean("firstRun", false).apply();
+            finalStartup();
+        }
+
         private int countAllFiles(String[] folders) {
             int count = 0;
             for (String folder : folders) count += countFilesRecursive(folder);
             return count;
         }
-        
+
         private int countFilesRecursive(String assetFolder) {
             try {
                 String[] assets = getAssets().list(assetFolder);
@@ -244,149 +282,64 @@ public final class MainMenuActivity extends PreferenceActivity {
                 int total = 0;
                 for (String asset : assets) total += countFilesRecursive(assetFolder + "/" + asset);
                 return total;
-            } catch (IOException e) {
-                return 0;
-            }
+            } catch (IOException e) { return 0; }
         }
-        @Override
-        protected Boolean doInBackground(Void... voids) {
-            ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length + 2, 4));
-    
-            // Extrair pastas de assets e diretórios
-            for (String folder : ASSET_FOLDERS)
-                executor.submit(() -> copyAssetFolder(folder, new File(BASE_DIR, folder)));
-    
-            executor.submit(() -> copyAssetFolder(archCores, new File(BASE_DIR, "cores")));
-            executor.submit(() -> copyAssetFolder(archAutoconfig, new File(BASE_DIR, "autoconfig")));
-    
-            executor.shutdown();
-            while (!executor.isTerminated()) {
-                publishProgress((processedFiles.get() * 100) / totalFiles);
-                try { Thread.sleep(100); } catch (InterruptedException ignored) {}
-            }
-    
-            try { createCompleteRetroarchCfg(); } catch (IOException e) { return false; }
-            return true;
-        }
-    
-        private void copyAssetFolder(String assetFolder, File targetFolder) {
-            try {
-                String[] assets = getAssets().list(assetFolder);
-                if (!targetFolder.exists()) targetFolder.mkdirs();
-    
-                // Criação de .nomedia para subpastas de assets e overlays
-                if ((assetFolder.startsWith("assets/") && !assetFolder.equals("assets")) ||
-                    (assetFolder.startsWith("overlays/") && !assetFolder.equals("overlays"))) {
-                    File noMedia = new File(targetFolder, ".nomedia");
-                    if (!noMedia.exists()) noMedia.createNewFile();
-                }
-    
-                if (assets != null && assets.length > 0) {
-                    for (String asset : assets) {
-                        String fullPath = assetFolder + "/" + asset;
-    
-                        // Ignorar config/global.glslp se cores32
-                        if ("cores32".equals(archCores) && fullPath.equals("config/global.glslp")) {
-                            processedFiles.incrementAndGet();
-                            continue;
+
+        private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
+            String[] assets = getAssets().list(assetFolder);
+            if (!targetFolder.exists()) targetFolder.mkdirs();
+
+            if (assets != null && assets.length > 0) {
+                for (String asset : assets) {
+                    String fullPath = assetFolder + "/" + asset;
+                    File outFile = new File(targetFolder, asset);
+
+                    if (getAssets().list(fullPath).length > 0) {
+                        copyAssetFolder(fullPath, outFile);
+                    } else {
+                        try (InputStream in = getAssets().open(fullPath);
+                             FileOutputStream out = new FileOutputStream(outFile)) {
+                            byte[] buffer = new byte[1024];
+                            int read;
+                            while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
                         }
-    
-                        File outFile = new File(targetFolder, asset);
-    
-                        if (getAssets().list(fullPath).length > 0) {
-                            copyAssetFolder(fullPath, outFile);
-                        } else {
-                            try (InputStream in = getAssets().open(fullPath);
-                                 FileOutputStream out = new FileOutputStream(outFile)) {
-                                byte[] buffer = new byte[1024];
-                                int read;
-                                while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
-                            }
-                            processedFiles.incrementAndGet();
-                        }
+                        processedFiles.incrementAndGet();
                     }
                 }
-            } catch (IOException e) { e.printStackTrace(); }
-        }
-    
-        private void createCompleteRetroarchCfg() throws IOException {
-            File cfgFile = new File(CONFIG_DIR, "retroarch.cfg");
-            if (!cfgFile.getParentFile().exists()) cfgFile.getParentFile().mkdirs();
-            if (!cfgFile.exists()) cfgFile.createNewFile();
-    
-            Map<String, String> cfgFlags = new HashMap<>();
-            cfgFlags.put("menu_scale_factor", "0.600000");
-            cfgFlags.put("ozone_menu_color_theme", "10");
-            cfgFlags.put("input_overlay_opacity", "0.700000");
-            cfgFlags.put("input_overlay_hide_when_gamepad_connected", "true");
-            cfgFlags.put("video_smooth", "false");
-            cfgFlags.put("aspect_ratio_index", "1");
-            cfgFlags.put("netplay_nickname", "RetroGameBox");
-            cfgFlags.put("menu_enable_widgets", "true");
-            cfgFlags.put("pause_nonactive", "false");
-            cfgFlags.put("menu_mouse_enable", "false");
-            cfgFlags.put("input_player1_analog_dpad_mode", "1");
-            cfgFlags.put("input_player2_analog_dpad_mode", "1");
-            cfgFlags.put("input_player3_analog_dpad_mode", "1");
-            cfgFlags.put("input_player4_analog_dpad_mode", "1");
-            cfgFlags.put("input_player5_analog_dpad_mode", "1");
-            cfgFlags.put("input_menu_toggle_gamepad_combo", "9");
-            cfgFlags.put("input_quit_gamepad_combo", "4");
-            cfgFlags.put("input_bind_timeout", "4");
-            cfgFlags.put("input_bind_hold", "1");
-            cfgFlags.put("all_users_control_menu", "true");
-            cfgFlags.put("input_poll_type_behavior", "1");
-            cfgFlags.put("android_input_disconnect_workaround", "true");
-            cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
-            cfgFlags.put("video_driver", (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && "cores64".equals(archCores)) ? "vulkan" : "gl");
-    
-            boolean hasTouchscreen = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN);
-            boolean isLeanback = getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
-    
-            if (hasTouchscreen && !isLeanback) {
-                cfgFlags.put("input_overlay_enable", "true");
-                cfgFlags.put("input_enable_hotkey_btn", "109");
-                cfgFlags.put("input_menu_toggle_btn", "100");
-                cfgFlags.put("input_save_state_btn", "103");
-                cfgFlags.put("input_load_state_btn", "102");
-                cfgFlags.put("input_state_slot_decrease_btn", "104");
-                cfgFlags.put("input_state_slot_increase_btn", "105");
-            } else {
-                cfgFlags.put("input_overlay_enable", "false");
-                cfgFlags.put("input_enable_hotkey_btn", "196");
-                cfgFlags.put("input_menu_toggle_btn", "188");
-                cfgFlags.put("input_save_state_btn", "193");
-                cfgFlags.put("input_load_state_btn", "192");
-                cfgFlags.put("input_state_slot_decrease_btn", "194");
-                cfgFlags.put("input_state_slot_increase_btn", "195");
-            }
-    
-            try (BufferedWriter writer = new BufferedWriter(new FileWriter(cfgFile))) {
-                // Diretórios de assets
-                for (String folder : ASSET_FOLDERS) {
-                    writer.write(ASSET_FLAGS.get(folder) + " = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"\n");
-                }
-                writer.write("cores_directory = \"" + new File(BASE_DIR, "cores").getAbsolutePath() + "\"\n");
-                writer.write("autoconfig_directory = \"" + new File(BASE_DIR, "autoconfig").getAbsolutePath() + "\"\n");
-    
-                // Flags adicionais
-                for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
-                    writer.write(entry.getKey() + " = \"" + entry.getValue() + "\"\n");
-                }
             }
         }
-    
-        @Override
-        protected void onProgressUpdate(Integer... values) { progressDialog.setProgress(values[0]); }
-    
-        @Override
-        protected void onPostExecute(Boolean result) {
-            progressDialog.dismiss();
-            prefs.edit().putBoolean("firstRun", false).apply();
-            finalStartup();
+
+        private void updateRetroarchCfg() throws IOException {
+            File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
+            if (!originalCfg.exists()) originalCfg.getParentFile().mkdirs();
+            if (!originalCfg.exists()) originalCfg.createNewFile();
+
+            List<String> lines = new ArrayList<>();
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(originalCfg))) {
+                String line;
+                while ((line = reader.readLine()) != null) lines.add(line);
+            }
+
+            StringBuilder content = new StringBuilder();
+            for (String line : lines) {
+                for (Map.Entry<String, String> entry : ASSET_FLAGS.entrySet()) {
+                    String folder = entry.getKey();
+                    String flag = entry.getValue();
+
+                    if (line.startsWith(flag)) {
+                        line = flag + " = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"";
+                        break;
+                    }
+                }
+                content.append(line).append("\n");
+            }
+
+            try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
+                out.write(content.toString().getBytes());
+            }
         }
     }
-    
+
     public void finalStartup() {
         Intent retro = new Intent(this, RetroActivityFuture.class);
         retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);

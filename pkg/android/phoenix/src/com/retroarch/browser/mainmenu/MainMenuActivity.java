@@ -39,6 +39,10 @@ public final class MainMenuActivity extends PreferenceActivity {
     public static String PACKAGE_NAME;
     private SharedPreferences prefs;
 
+    private boolean permissionsHandled = false;
+    private boolean wentToSettings = false;
+    private boolean firstDenialHandled = false;
+
     private final String[] ASSET_FOLDERS = {
             "assets", "database", "filters", "info", "overlays", "shaders", "system", "config", "remaps", "cheats"
     };
@@ -78,6 +82,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         checkRuntimePermissions();
     }
 
+    // ------------------------ PERMISSÕES ------------------------
     private boolean addPermission(List<String> permissionsList, String permission) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
             checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
@@ -99,20 +104,16 @@ public final class MainMenuActivity extends PreferenceActivity {
         }
         startExtractionOrRetro();
     }
-    
-    private boolean permissionsHandled = false;
-    private boolean wentToSettings = false;
-    private boolean firstDenialHandled = false;
-    
+
     private void handlePermissionStatus(String[] permissions) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || permissionsHandled) return;
-    
+
         List<String> missingPermissions = new ArrayList<>();
         addPermission(missingPermissions, Manifest.permission.READ_EXTERNAL_STORAGE);
         addPermission(missingPermissions, Manifest.permission.WRITE_EXTERNAL_STORAGE);
-    
+
         boolean allGranted = missingPermissions.isEmpty();
-    
+
         if (allGranted) {
             prefs.edit().putInt("deniedCount", 0).apply();
             permissionsHandled = true;
@@ -121,7 +122,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             int deniedCount = prefs.getInt("deniedCount", 0);
             if (permissions != null) deniedCount++;
             prefs.edit().putInt("deniedCount", deniedCount).apply();
-    
+
             if (deniedCount >= 2 || wentToSettings) {
                 new AlertDialog.Builder(this)
                         .setTitle("Permissão Negada!")
@@ -153,7 +154,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
         }
     }
-    
+
     @Override
     protected void onResume() {
         super.onResume();
@@ -162,7 +163,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             wentToSettings = false;
         }
     }
-    
+
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS) {
@@ -172,6 +173,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         }
     }
 
+    // ------------------------ EXTRAÇÃO / RETRO ------------------------
     private void startExtractionOrRetro() {
         boolean firstRun = prefs.getBoolean("firstRun", true);
         if (firstRun) {
@@ -278,7 +280,6 @@ public final class MainMenuActivity extends PreferenceActivity {
             String[] assets = getAssets().list(assetFolder);
             if (!targetFolder.exists()) targetFolder.mkdirs();
 
-            // Criação de .nomedia em subpastas
             if ((assetFolder.startsWith("assets/") && !assetFolder.equals("assets")) ||
                 (assetFolder.startsWith("overlays/") && !assetFolder.equals("overlays"))) {
                 File noMedia = new File(targetFolder, ".nomedia");
@@ -290,7 +291,6 @@ public final class MainMenuActivity extends PreferenceActivity {
                     String fullPath = assetFolder + "/" + asset;
                     File outFile = new File(targetFolder, asset);
 
-                    // Ignorar global.glslp para cores32
                     if ("cores32".equals(archCores) && fullPath.equals("config/global.glslp")) {
                         processedFiles.incrementAndGet();
                         publishProgress((processedFiles.get() * 100) / totalFiles);

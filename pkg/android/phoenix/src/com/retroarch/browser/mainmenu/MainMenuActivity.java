@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -72,6 +73,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     private final AtomicInteger processedFiles = new AtomicInteger(0);
     private volatile int totalFiles = 0;
     private final Map<String, String[]> assetCache = new ConcurrentHashMap<>();
+    private final Set<String> MEDIA_ROOTS = Set.of("assets", "overlays");
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -93,12 +95,10 @@ public final class MainMenuActivity extends PreferenceActivity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             List<String> permissionsList = new ArrayList<>();
 
-            if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)
                 permissionsList.add(Manifest.permission.READ_EXTERNAL_STORAGE);
-            }
-            if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)
                 permissionsList.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
-            }
 
             if (!permissionsList.isEmpty()) {
                 requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
@@ -262,7 +262,11 @@ public final class MainMenuActivity extends PreferenceActivity {
             if (assets == null) return;
             if (!outDir.exists()) outDir.mkdirs();
 
-            boolean nomediaCreated = false;
+            // Cria .nomedia apenas em assets e overlays
+            if (MEDIA_ROOTS.contains(assetDir)) {
+                File nomedia = new File(outDir, ".nomedia");
+                if (!nomedia.exists()) nomedia.createNewFile();
+            }
 
             for (String entry : assets) {
                 String fullPath = assetDir + "/" + entry;
@@ -284,28 +288,12 @@ public final class MainMenuActivity extends PreferenceActivity {
                         while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
                     }
 
-                    if (!nomediaCreated && isMedia(entry)) {
-                        File nomedia = new File(outDir, ".nomedia");
-                        if (!nomedia.exists()) {
-                            try { nomedia.createNewFile(); } catch (IOException ignored) {}
-                        }
-                        nomediaCreated = true;
-                    }
-
                     processedFiles.incrementAndGet();
                 }
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
-    }
-
-    private boolean isMedia(String name) {
-        String lower = name.toLowerCase();
-        return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ||
-               lower.endsWith(".gif") || lower.endsWith(".webp") ||
-               lower.endsWith(".mp4") || lower.endsWith(".mkv") ||
-               lower.endsWith(".avi") || lower.endsWith(".mov");
     }
 
     private void removeUnusedArchFolders() {

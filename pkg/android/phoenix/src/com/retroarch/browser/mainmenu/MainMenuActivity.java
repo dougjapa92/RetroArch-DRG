@@ -23,6 +23,8 @@ import java.io.File;
 import java.io.InputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
@@ -39,7 +41,8 @@ public final class MainMenuActivity extends PreferenceActivity {
     private SharedPreferences prefs;
 
     private final String[] ASSET_FOLDERS = {
-            "assets", "database", "filters", "info", "overlays", "shaders", "system", "config", "remaps", "cheats"
+        "assets", "database", "filters", "info", "overlays",
+        "shaders", "system", "config", "remaps", "cheats"
     };
 
     private final Map<String, String> ASSET_FLAGS = new HashMap<String, String>() {{
@@ -52,11 +55,17 @@ public final class MainMenuActivity extends PreferenceActivity {
         put("system", "system_directory");
         put("config", "rgui_config_directory");
         put("remaps", "input_remapping_directory");
-        put("cheats", "cheat_database_path")
+        put("cheats", "cheat_database_path");
     }};
 
-    private final File BASE_DIR = new File(Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
-    private final File CONFIG_DIR = new File(Environment.getExternalStorageDirectory() + "/Android/data/com.retroarch/files");
+    private final File BASE_DIR = new File(
+        Environment.getExternalStorageDirectory(),
+        "Android/media/com.retroarch"
+    );
+
+    private final File CONFIG_DIR = new File(
+        Environment.getExternalStorageDirectory() + "/Android/data/com.retroarch/files"
+    );
 
     private String archCores;
     private String archAutoconfig;
@@ -94,25 +103,28 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             if (!addPermission(permissionsList, Manifest.permission.READ_EXTERNAL_STORAGE))
                 permissionsNeeded.add("Read External Storage");
+
             if (!addPermission(permissionsList, Manifest.permission.WRITE_EXTERNAL_STORAGE))
                 permissionsNeeded.add("Write External Storage");
 
             if (!permissionsList.isEmpty()) {
                 checkPermissions = true;
-                // Agora só requisita as permissões direto, sem AlertDialog
-                requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
+                requestPermissions(
+                    permissionsList.toArray(new String[0]),
+                    REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS
+                );
             }
         }
 
-        if (!checkPermissions)
-            startExtractionOrRetro();
+        if (!checkPermissions) startExtractionOrRetro();
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS) {
             boolean allGranted = true;
-            for (int result : grantResults) if (result != PackageManager.PERMISSION_GRANTED) allGranted = false;
+            for (int result : grantResults)
+                if (result != PackageManager.PERMISSION_GRANTED) allGranted = false;
 
             if (allGranted) {
                 prefs.edit().putInt("deniedCount", 0).apply();
@@ -123,26 +135,26 @@ public final class MainMenuActivity extends PreferenceActivity {
 
                 if (deniedCount >= 2) {
                     new AlertDialog.Builder(this)
-                            .setTitle("Permissão Negada!")
-                            .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
-                            .setCancelable(false)
-                            .setPositiveButton("Abrir Configurações", (dialog, which) -> {
-                                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                                Uri uri = Uri.fromParts("package", getPackageName(), null);
-                                intent.setData(uri);
-                                startActivity(intent);
-                            })
-                            .setNegativeButton("Sair", (dialog, which) -> finish())
-                            .show();
+                        .setTitle("Permissão Negada!")
+                        .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
+                        .setCancelable(false)
+                        .setPositiveButton("Abrir Configurações", (dialog, which) -> {
+                            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                            Uri uri = Uri.fromParts("package", getPackageName(), null);
+                            intent.setData(uri);
+                            startActivity(intent);
+                        })
+                        .setNegativeButton("Sair", (dialog, which) -> finish())
+                        .show();
                 } else {
                     new AlertDialog.Builder(this)
-                            .setTitle("Permissões Necessárias!")
-                            .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
-                            .setCancelable(false)
-                            .setPositiveButton("Conceder", (dialog, which) ->
-                                    requestPermissions(permissions, REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
-                            .setNegativeButton("Sair", (dialog, which) -> finish())
-                            .show();
+                        .setTitle("Permissões Necessárias!")
+                        .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
+                        .setCancelable(false)
+                        .setPositiveButton("Conceder", (dialog, which) ->
+                            requestPermissions(permissions, REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
+                        .setNegativeButton("Sair", (dialog, which) -> finish())
+                        .show();
                 }
             }
         } else {
@@ -156,6 +168,9 @@ public final class MainMenuActivity extends PreferenceActivity {
         else finalStartup();
     }
 
+    // ----------------------
+    // AsyncTask de extração
+    // ----------------------
     private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
         ProgressDialog progressDialog;
         AtomicInteger processedFiles = new AtomicInteger(0);
@@ -165,8 +180,15 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
             progressDialog.setTitle("Configurando RetroArch DRG...");
-            String archMessage = archCores.equals("cores64") ? "\nArquitetura dos Cores:\n   - arm64-v8a (64-bit)" : "\nArquitetura dos Cores:\n   - armeabi-v7a (32-bit)";
-            progressDialog.setMessage(archMessage + "\n\nClique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo.");
+
+            String archMessage = archCores.equals("cores64")
+                ? "\nArquitetura dos Cores:\n   - arm64-v8a (64-bit)"
+                : "\nArquitetura dos Cores:\n   - armeabi-v7a (32-bit)";
+
+            progressDialog.setMessage(
+                archMessage +
+                "\n\nClique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo."
+            );
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);
             progressDialog.show();
@@ -174,21 +196,23 @@ public final class MainMenuActivity extends PreferenceActivity {
             if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
             removeUnusedArchFolders();
 
-            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) {
-                archAutoconfig = "autoconfig-legacy";
-            } else {
-                archAutoconfig = "autoconfig";
-            }
+            archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1)
+                ? "autoconfig-legacy"
+                : "autoconfig";
 
-            totalFiles = countAllFiles(ASSET_FOLDERS) + countAllFiles(new String[]{archCores, archAutoconfig});
+            totalFiles = countAllFiles(ASSET_FOLDERS)
+                       + countAllFiles(new String[]{archCores, archAutoconfig});
         }
 
         private void removeUnusedArchFolders() {
             String[] coresFolders = {"cores32", "cores64"};
             String[] autoconfigFolders = {"autoconfig-legacy", "autoconfig"};
 
-            for (String folder : coresFolders) if (!folder.equals(archCores)) deleteFolder(new File(BASE_DIR, folder));
-            for (String folder : autoconfigFolders) if (!folder.equals(archAutoconfig)) deleteFolder(new File(BASE_DIR, folder));
+            for (String folder : coresFolders)
+                if (!folder.equals(archCores)) deleteFolder(new File(BASE_DIR, folder));
+
+            for (String folder : autoconfigFolders)
+                if (!folder.equals(archAutoconfig)) deleteFolder(new File(BASE_DIR, folder));
         }
 
         private void deleteFolder(File folder) {
@@ -206,37 +230,56 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         @Override
         protected Boolean doInBackground(Void... voids) {
-            ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length + 2, 4));
+            ExecutorService executor = Executors.newFixedThreadPool(
+                Math.min(ASSET_FOLDERS.length + 2, 4)
+            );
 
             for (String folder : ASSET_FOLDERS) {
                 executor.submit(() -> {
-                    try { copyAssetFolder(folder, new File(BASE_DIR, folder)); }
-                    catch (IOException e) { e.printStackTrace(); }
+                    try {
+                        copyAssetFolder(folder, new File(BASE_DIR, folder));
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                 });
             }
 
             executor.submit(() -> {
-                try { copyAssetFolder(archCores, new File(BASE_DIR, "cores")); }
-                catch (IOException e) { e.printStackTrace(); }
+                try {
+                    copyAssetFolder(archCores, new File(BASE_DIR, "cores"));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             });
 
             executor.submit(() -> {
-                try { copyAssetFolder(archAutoconfig, new File(BASE_DIR, "autoconfig")); }
-                catch (IOException e) { e.printStackTrace(); }
+                try {
+                    copyAssetFolder(archAutoconfig, new File(BASE_DIR, "autoconfig"));
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
             });
 
             executor.shutdown();
             while (!executor.isTerminated()) {
                 publishProgress((processedFiles.get() * 100) / totalFiles);
-                try { Thread.sleep(100); } catch (InterruptedException ignored) {}
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException ignored) {}
             }
 
-            try { updateRetroarchCfg(); } catch (IOException e) { return false; }
+            try {
+                updateRetroarchCfg();
+            } catch (IOException e) {
+                return false;
+            }
             return true;
         }
 
         @Override
-        protected void onProgressUpdate(Integer... values) { progressDialog.setProgress(values[0]); }
+        protected void onProgressUpdate(Integer... values) {
+            progressDialog.setProgress(values[0]);
+        }
 
         @Override
         protected void onPostExecute(Boolean result) {
@@ -245,6 +288,9 @@ public final class MainMenuActivity extends PreferenceActivity {
             finalStartup();
         }
 
+        // ---------------------
+        // Métodos auxiliares
+        // ---------------------
         private int countAllFiles(String[] folders) {
             int count = 0;
             for (String folder : folders) count += countFilesRecursive(folder);
@@ -256,9 +302,12 @@ public final class MainMenuActivity extends PreferenceActivity {
                 String[] assets = getAssets().list(assetFolder);
                 if (assets == null || assets.length == 0) return 1;
                 int total = 0;
-                for (String asset : assets) total += countFilesRecursive(assetFolder + "/" + asset);
+                for (String asset : assets)
+                    total += countFilesRecursive(assetFolder + "/" + asset);
                 return total;
-            } catch (IOException e) { return 0; }
+            } catch (IOException e) {
+                return 0;
+            }
         }
 
         private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
@@ -277,7 +326,8 @@ public final class MainMenuActivity extends PreferenceActivity {
                              FileOutputStream out = new FileOutputStream(outFile)) {
                             byte[] buffer = new byte[1024];
                             int read;
-                            while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
+                            while ((read = in.read(buffer)) != -1)
+                                out.write(buffer, 0, read);
                         }
                         processedFiles.incrementAndGet();
                     }
@@ -288,53 +338,116 @@ public final class MainMenuActivity extends PreferenceActivity {
         private void updateRetroarchCfg() throws IOException {
             File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
             if (!originalCfg.exists()) originalCfg.getParentFile().mkdirs();
-            if (!originalCfg.exists()) originalCfg.createNewFile();
 
-            List<String> lines = new ArrayList<>();
-            try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(originalCfg))) {
-                String line;
-                while ((line = reader.readLine()) != null) lines.add(line);
+            Map<String, String> cfgFlags = new HashMap<>();
+
+            // ⚙️ Flags gerais
+            cfgFlags.put("menu_scale_factor", "0.600000");
+            cfgFlags.put("ozone_menu_color_theme", "10");
+            cfgFlags.put("input_overlay_opacity", "0.700000");
+            cfgFlags.put("input_overlay_hide_when_gamepad_connected", "true");
+            cfgFlags.put("video_smooth", "false");
+            cfgFlags.put("aspect_ratio_index", "1");
+            cfgFlags.put("netplay_nickname", "RetroGameBox");
+            cfgFlags.put("menu_enable_widgets", "true");
+            cfgFlags.put("pause_nonactive", "false");
+            cfgFlags.put("menu_mouse_enable", "false");
+            cfgFlags.put("input_player1_analog_dpad_mode", "1");
+            cfgFlags.put("input_player2_analog_dpad_mode", "1");
+            cfgFlags.put("input_player3_analog_dpad_mode", "1");
+            cfgFlags.put("input_player4_analog_dpad_mode", "1");
+            cfgFlags.put("input_player5_analog_dpad_mode", "1");
+            cfgFlags.put("input_menu_toggle_gamepad_combo", "9");
+            cfgFlags.put("input_quit_gamepad_combo", "4");
+            cfgFlags.put("input_bind_timeout", "4");
+            cfgFlags.put("input_bind_hold", "1");
+            cfgFlags.put("all_users_control_menu", "true");
+            cfgFlags.put("input_poll_type_behavior", "1");
+            cfgFlags.put("android_input_disconnect_workaround", "true");
+
+            // ⚙️ Flags por arquitetura
+            cfgFlags.put("video_threaded",
+                "cores32".equals(archCores) ? "true" : "false"
+            );
+
+            // ⚙️ Flags por versão Android
+            cfgFlags.put("video_driver",
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ? "vulkan" : "gl"
+            );
+
+            // ⚙️ Flags por dispositivo
+            boolean hasTouchscreen = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN);
+            boolean isLeanback = getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
+
+            if (hasTouchscreen && !isLeanback) {
+                cfgFlags.put("input_overlay_enable", "true");
+                cfgFlags.put("input_enable_hotkey_btn", "109");
+                cfgFlags.put("input_menu_toggle_btn", "100");
+                cfgFlags.put("input_save_state_btn", "103");
+                cfgFlags.put("input_load_state_btn", "102");
+                cfgFlags.put("input_state_slot_decrease_btn", "104");
+                cfgFlags.put("input_state_slot_increase_btn", "105");
+            } else {
+                cfgFlags.put("input_overlay_enable", "false");
+                cfgFlags.put("input_enable_hotkey_btn", "196");
+                cfgFlags.put("input_menu_toggle_btn", "188");
+                cfgFlags.put("input_save_state_btn", "193");
+                cfgFlags.put("input_load_state_btn", "192");
+                cfgFlags.put("input_state_slot_decrease_btn", "194");
+                cfgFlags.put("input_state_slot_increase_btn", "195");
             }
 
-            StringBuilder content = new StringBuilder();
-            for (String line : lines) {
+            // ⚙️ Diretórios
+            Map<String, File> assetFiles = new HashMap<>();
+            for (String folder : ASSET_FOLDERS)
+                assetFiles.put(folder, new File(BASE_DIR, folder));
+
+            // Escreve retroarch.cfg
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(originalCfg, false))) {
                 for (Map.Entry<String, String> entry : ASSET_FLAGS.entrySet()) {
                     String folder = entry.getKey();
                     String flag = entry.getValue();
-
-                    if (line.startsWith(flag)) {
-                        line = flag + " = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"";
-                        break;
-                    }
+                    File path = assetFiles.get(folder);
+                    if (path != null)
+                        writer.write(flag + " = \"" + path.getAbsolutePath() + "\"\n");
                 }
-                content.append(line).append("\n");
-            }
-
-            try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
-                out.write(content.toString().getBytes());
+                for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
+                    writer.write(entry.getKey() + " = \"" + entry.getValue() + "\"\n");
+                }
             }
         }
     }
 
+    // ----------------------
+    // Inicialização final
+    // ----------------------
     public void finalStartup() {
         Intent retro = new Intent(this, RetroActivityFuture.class);
         retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
 
         startRetroActivity(
-                retro,
-                null,
-                new File(BASE_DIR, "cores").getAbsolutePath(),
-                new File(CONFIG_DIR, "retroarch.cfg").getAbsolutePath(),
-                Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
-                BASE_DIR.getAbsolutePath(),
-                getApplicationInfo().sourceDir
+            retro,
+            null,
+            new File(BASE_DIR, "cores").getAbsolutePath(),
+            new File(CONFIG_DIR, "retroarch.cfg").getAbsolutePath(),
+            Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
+            BASE_DIR.getAbsolutePath(),
+            getApplicationInfo().sourceDir
         );
+
         startActivity(retro);
         finish();
     }
 
-    public static void startRetroActivity(Intent retro, String contentPath, String corePath,
-                                          String configFilePath, String imePath, String dataDirPath, String dataSourcePath) {
+    public static void startRetroActivity(
+        Intent retro,
+        String contentPath,
+        String corePath,
+        String configFilePath,
+        String imePath,
+        String dataDirPath,
+        String dataSourcePath
+    ) {
         if (contentPath != null) retro.putExtra("ROM", contentPath);
         retro.putExtra("LIBRETRO", corePath);
         retro.putExtra("CONFIGFILE", configFilePath);
@@ -342,7 +455,10 @@ public final class MainMenuActivity extends PreferenceActivity {
         retro.putExtra("DATADIR", dataDirPath);
         retro.putExtra("APK", dataSourcePath);
         retro.putExtra("SDCARD", Environment.getExternalStorageDirectory().getAbsolutePath());
-        String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
+
+        String external = Environment.getExternalStorageDirectory().getAbsolutePath()
+                        + "/Android/data/" + PACKAGE_NAME + "/files";
+
         retro.putExtra("EXTERNAL", external);
     }
-} 
+                            } 

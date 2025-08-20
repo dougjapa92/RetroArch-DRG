@@ -82,6 +82,21 @@ public final class MainMenuActivity extends PreferenceActivity {
         checkRuntimePermissions();
     }
 
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // Verifica novamente as permissões ao retornar do Settings
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED ||
+                checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+
+                showPermissionsAlert();
+            } else {
+                startExtractionOrRetro();
+            }
+        }
+    }
+
     private void checkRuntimePermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             List<String> permissionsList = new ArrayList<>();
@@ -102,6 +117,33 @@ public final class MainMenuActivity extends PreferenceActivity {
         startExtractionOrRetro();
     }
 
+    private void showPermissionsAlert() {
+        int deniedCount = prefs.getInt("deniedCount", 0);
+        if (deniedCount >= 2) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Permissão Negada!")
+                    .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
+                    .setCancelable(false)
+                    .setPositiveButton("Abrir Configurações", (dialog, which) -> {
+                        Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                        Uri uri = Uri.fromParts("package", getPackageName(), null);
+                        intent.setData(uri);
+                        startActivity(intent);
+                    })
+                    .setNegativeButton("Sair", (dialog, which) -> finish())
+                    .show();
+        } else {
+            new AlertDialog.Builder(this)
+                    .setTitle("Permissões Necessárias!")
+                    .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
+                    .setCancelable(false)
+                    .setPositiveButton("Conceder", (dialog, which) ->
+                            checkRuntimePermissions())
+                    .setNegativeButton("Sair", (dialog, which) -> finish())
+                    .show();
+        }
+    }
+
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS) {
@@ -114,30 +156,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             } else {
                 int deniedCount = prefs.getInt("deniedCount", 0) + 1;
                 prefs.edit().putInt("deniedCount", deniedCount).apply();
-
-                if (deniedCount >= 2) {
-                    new AlertDialog.Builder(this)
-                            .setTitle("Permissão Negada!")
-                            .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
-                            .setCancelable(false)
-                            .setPositiveButton("Abrir Configurações", (dialog, which) -> {
-                                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                                Uri uri = Uri.fromParts("package", getPackageName(), null);
-                                intent.setData(uri);
-                                startActivity(intent);
-                            })
-                            .setNegativeButton("Sair", (dialog, which) -> finish())
-                            .show();
-                } else {
-                    new AlertDialog.Builder(this)
-                            .setTitle("Permissões Necessárias!")
-                            .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
-                            .setCancelable(false)
-                            .setPositiveButton("Conceder", (dialog, which) ->
-                                    requestPermissions(permissions, REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
-                            .setNegativeButton("Sair", (dialog, which) -> finish())
-                            .show();
-                }
+                showPermissionsAlert();
             }
         } else {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);

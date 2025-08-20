@@ -33,7 +33,6 @@ import java.util.Map;
 import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -78,6 +77,18 @@ public final class MainMenuActivity extends PreferenceActivity {
         archCores = arch != null && arch.contains("64") ? "cores64" : "cores32";
 
         checkRuntimePermissions();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED &&
+                checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+                boolean firstRun = prefs.getBoolean("firstRun", true);
+                if (firstRun) startExtractionOrRetro();
+            }
+        }
     }
 
     private void checkRuntimePermissions() {
@@ -188,7 +199,6 @@ public final class MainMenuActivity extends PreferenceActivity {
                 totalFiles = 0;
                 for (String root : roots) totalFiles += countFilesRecursive(root);
 
-                // Executor único compartilhado
                 ExecutorService executor = buildSafeExecutor();
                 for (String folder : ASSET_FOLDERS) {
                     File target = new File(BASE_DIR, folder);

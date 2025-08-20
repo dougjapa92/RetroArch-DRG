@@ -32,7 +32,6 @@ import java.util.HashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.TimeUnit;
 
 public final class MainMenuActivity extends PreferenceActivity {
 
@@ -231,21 +230,18 @@ public final class MainMenuActivity extends PreferenceActivity {
             executor.submit(() -> copyFolderSafe(archAutoconfig, new File(BASE_DIR, "autoconfig")));
 
             // Copia os demais assets
-            for (String folder : ASSET_FOLDERS) executor.submit(() -> copyFolderSafe(folder, new File(BASE_DIR, folder)));
+            for (String folder : ASSET_FOLDERS)
+                executor.submit(() -> copyFolderSafe(folder, new File(BASE_DIR, folder)));
 
             executor.shutdown();
-            try {
-                executor.awaitTermination(30, TimeUnit.MINUTES); // Aguarda todas as threads terminarem
-            } catch (InterruptedException e) {
-                e.printStackTrace();
+            // Aguarda threads terminarem mas sem bloquear progress
+            while (!executor.isTerminated()) {
+                publishProgress((processedFiles.get() * 100) / totalFiles);
+                try { Thread.sleep(100); } catch (InterruptedException ignored) {}
             }
 
-            // Cria retroarch.cfg apenas após todos os arquivos estarem copiados
-            try {
-                updateRetroarchCfg();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            // Atualiza retroarch.cfg após todos os arquivos estarem prontos
+            try { updateRetroarchCfg(); } catch (IOException e) { e.printStackTrace(); }
 
             return true;
         }
@@ -312,13 +308,13 @@ public final class MainMenuActivity extends PreferenceActivity {
         @Override
         protected void onPostExecute(Boolean result) {
             progressDialog.dismiss();
-            finalStartup(); // Só inicia após cfg criado e arquivos copiados
+            finalStartup();
         }
     }
 
     private void updateRetroarchCfg() throws IOException {
         File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
-        if (originalCfg.exists()) originalCfg.delete(); // Garante arquivo limpo
+        if (originalCfg.exists()) originalCfg.delete();
         originalCfg.getParentFile().mkdirs();
 
         Map<String, String> cfgFlags = new HashMap<>();

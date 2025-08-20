@@ -67,7 +67,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     private final Map<String, String[]> assetCache = new ConcurrentHashMap<>();
 
     @Override
-    public void onCreate(Bundle savedInstanceState) {
+    protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
         PACKAGE_NAME = getPackageName();
@@ -85,16 +85,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        // Verifica novamente as permissões ao retornar do Settings
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED ||
-                checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-
-                showPermissionsAlert();
-            } else {
-                startExtractionOrRetro();
-            }
-        }
+        checkRuntimePermissions(); // revalida as permissões quando volta de Settings
     }
 
     private void checkRuntimePermissions() {
@@ -117,33 +108,6 @@ public final class MainMenuActivity extends PreferenceActivity {
         startExtractionOrRetro();
     }
 
-    private void showPermissionsAlert() {
-        int deniedCount = prefs.getInt("deniedCount", 0);
-        if (deniedCount >= 2) {
-            new AlertDialog.Builder(this)
-                    .setTitle("Permissão Negada!")
-                    .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
-                    .setCancelable(false)
-                    .setPositiveButton("Abrir Configurações", (dialog, which) -> {
-                        Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                        Uri uri = Uri.fromParts("package", getPackageName(), null);
-                        intent.setData(uri);
-                        startActivity(intent);
-                    })
-                    .setNegativeButton("Sair", (dialog, which) -> finish())
-                    .show();
-        } else {
-            new AlertDialog.Builder(this)
-                    .setTitle("Permissões Necessárias!")
-                    .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
-                    .setCancelable(false)
-                    .setPositiveButton("Conceder", (dialog, which) ->
-                            checkRuntimePermissions())
-                    .setNegativeButton("Sair", (dialog, which) -> finish())
-                    .show();
-        }
-    }
-
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         if (requestCode == REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS) {
@@ -156,7 +120,30 @@ public final class MainMenuActivity extends PreferenceActivity {
             } else {
                 int deniedCount = prefs.getInt("deniedCount", 0) + 1;
                 prefs.edit().putInt("deniedCount", deniedCount).apply();
-                showPermissionsAlert();
+
+                if (deniedCount >= 2) {
+                    new AlertDialog.Builder(this)
+                            .setTitle("Permissão Negada!")
+                            .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
+                            .setCancelable(false)
+                            .setPositiveButton("Abrir Configurações", (dialog, which) -> {
+                                Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                                Uri uri = Uri.fromParts("package", getPackageName(), null);
+                                intent.setData(uri);
+                                startActivity(intent);
+                            })
+                            .setNegativeButton("Sair", (dialog, which) -> finish())
+                            .show();
+                } else {
+                    new AlertDialog.Builder(this)
+                            .setTitle("Permissões Necessárias!")
+                            .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
+                            .setCancelable(false)
+                            .setPositiveButton("Conceder", (dialog, which) ->
+                                    requestPermissions(permissions, REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS))
+                            .setNegativeButton("Sair", (dialog, which) -> finish())
+                            .show();
+                }
             }
         } else {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
@@ -230,6 +217,58 @@ public final class MainMenuActivity extends PreferenceActivity {
             if (success) finalStartup();
             else finish();
         }
+
+        private void copyAssetFolderIterative(AssetManager am, String rootAsset, File targetDir) throws IOException {
+            class FolderEntry {
+                String assetPath;
+                File outDir;
+                FolderEntry(String assetPath, File outDir) {
+                    this.assetPath = assetPath;
+                    this.outDir = outDir;
+                }
+            }
+
+            List<FolderEntry> queue = new ArrayList<>();
+            queue.add(new FolderEntry(rootAsset, targetDir));
+
+            while (!queue.isEmpty()) {
+                FolderEntry entry = queue.remove(0);
+                String[] assets = assetCache.get(entry.assetPath);
+                if (assets == null) continue;
+                if (!entry.outDir.exists()) entry.outDir.mkdirs();
+
+                boolean nomediaCreated = false;
+                boolean checkMedia = entry.assetPath.startsWith("assets") || entry.assetPath.startsWith("overlays");
+
+                for (String name : assets) {
+                    String fullPath = entry.assetPath + "/" + name;
+                    File outFile = new File(entry.outDir, name);
+
+                    if (assetCache.containsKey(fullPath)) {
+                        queue.add(new FolderEntry(fullPath, outFile));
+                    } else {
+                        if ("config".equals(entry.assetPath) && "global.glslp".equals(name) && "cores32".equals(archCores))
+                            continue;
+
+                        try (InputStream in = am.open(fullPath);
+                             FileOutputStream out = new FileOutputStream(outFile)) {
+                            byte[] buffer = new byte[8192];
+                            int read;
+                            while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
+                        }
+
+                        if (checkMedia && !nomediaCreated && isMedia(name)) {
+                            File nomedia = new File(entry.outDir, ".nomedia");
+                            if (!nomedia.exists()) nomedia.createNewFile();
+                            nomediaCreated = true;
+                        }
+
+                        processedFiles.incrementAndGet();
+                        publishProgress((processedFiles.get() * 100) / totalFiles);
+                    }
+                }
+            }
+        }
     }
 
     private void preloadAssets(AssetManager am, String path) throws IOException {
@@ -261,58 +300,6 @@ public final class MainMenuActivity extends PreferenceActivity {
             } else count += 1;
         }
         return count;
-    }
-
-    private void copyAssetFolderIterative(AssetManager am, String rootAsset, File targetDir) throws IOException {
-        class FolderEntry {
-            String assetPath;
-            File outDir;
-            FolderEntry(String assetPath, File outDir) {
-                this.assetPath = assetPath;
-                this.outDir = outDir;
-            }
-        }
-
-        List<FolderEntry> queue = new ArrayList<>();
-        queue.add(new FolderEntry(rootAsset, targetDir));
-
-        while (!queue.isEmpty()) {
-            FolderEntry entry = queue.remove(0);
-            String[] assets = assetCache.get(entry.assetPath);
-            if (assets == null) continue;
-            if (!entry.outDir.exists()) entry.outDir.mkdirs();
-
-            boolean nomediaCreated = false;
-            boolean checkMedia = entry.assetPath.startsWith("assets") || entry.assetPath.startsWith("overlays");
-
-            for (String name : assets) {
-                String fullPath = entry.assetPath + "/" + name;
-                File outFile = new File(entry.outDir, name);
-
-                if (assetCache.containsKey(fullPath)) {
-                    queue.add(new FolderEntry(fullPath, outFile));
-                } else {
-                    if ("config".equals(entry.assetPath) && "global.glslp".equals(name) && "cores32".equals(archCores))
-                        continue;
-
-                    try (InputStream in = am.open(fullPath);
-                         FileOutputStream out = new FileOutputStream(outFile)) {
-                        byte[] buffer = new byte[8192];
-                        int read;
-                        while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
-                    }
-
-                    if (checkMedia && !nomediaCreated && isMedia(name)) {
-                        File nomedia = new File(entry.outDir, ".nomedia");
-                        if (!nomedia.exists()) nomedia.createNewFile();
-                        nomediaCreated = true;
-                    }
-
-                    processedFiles.incrementAndGet();
-                    publishProgress((processedFiles.get() * 100) / totalFiles);
-                }
-            }
-        }
     }
 
     private boolean isMedia(String name) {

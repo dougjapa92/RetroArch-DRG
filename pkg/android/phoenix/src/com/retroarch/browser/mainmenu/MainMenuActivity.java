@@ -102,7 +102,6 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
         }
 
-        // Se permissões já concedidas
         startExtractionOrRetro();
     }
 
@@ -231,6 +230,13 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         @Override
         protected Boolean doInBackground(Void... voids) {
+            try {
+                updateRetroarchCfg(); // Executa antes da cópia dos assets
+            } catch (IOException e) {
+                e.printStackTrace();
+                return false;
+            }
+
             ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length + 2, 4));
 
             for (String folder : ASSET_FOLDERS) executor.submit(() -> copyFolderSafe(folder, new File(BASE_DIR, folder)));
@@ -243,7 +249,6 @@ public final class MainMenuActivity extends PreferenceActivity {
                 try { Thread.sleep(100); } catch (InterruptedException ignored) {}
             }
 
-            try { updateRetroarchCfg(); } catch (IOException e) { return false; }
             return true;
         }
 
@@ -314,11 +319,12 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         private void updateRetroarchCfg() throws IOException {
             File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
-            if (!originalCfg.exists()) originalCfg.getParentFile().mkdirs();
+
+            if (originalCfg.exists()) originalCfg.delete();
+            originalCfg.getParentFile().mkdirs();
+            originalCfg.createNewFile();
 
             Map<String, String> cfgFlags = new HashMap<>();
-
-            // Flags Globais
             cfgFlags.put("menu_scale_factor", "0.600000");
             cfgFlags.put("ozone_menu_color_theme", "10");
             cfgFlags.put("input_overlay_opacity", "0.700000");
@@ -341,7 +347,6 @@ public final class MainMenuActivity extends PreferenceActivity {
             cfgFlags.put("all_users_control_menu", "true");
             cfgFlags.put("input_poll_type_behavior", "1");
             cfgFlags.put("android_input_disconnect_workaround", "true");
-
             cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
             cfgFlags.put("video_driver", (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && "cores64".equals(archCores)) ? "vulkan" : "gl");
 
@@ -366,7 +371,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 cfgFlags.put("input_state_slot_increase_btn", "195");
             }
 
-            try (BufferedWriter writer = new BufferedWriter(new FileWriter(originalCfg, false))) {
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(originalCfg))) {
                 for (String folder : ASSET_FOLDERS) {
                     File path = new File(BASE_DIR, folder);
                     writer.write(ASSET_FLAGS.get(folder) + " = \"" + path.getAbsolutePath() + "\"\n");
@@ -407,4 +412,4 @@ public final class MainMenuActivity extends PreferenceActivity {
         String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
         retro.putExtra("EXTERNAL", external);
     }
-}
+} 

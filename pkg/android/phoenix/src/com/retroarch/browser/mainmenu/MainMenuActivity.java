@@ -235,8 +235,9 @@ public final class MainMenuActivity extends PreferenceActivity {
             String[] assets = getAssets().list(assetFolder);
             if (!targetFolder.exists()) targetFolder.mkdirs();
         
-            // Adicionar .nomedia se for subpasta de assets ou overlays
-            if ((assetFolder.startsWith("assets/") || assetFolder.startsWith("overlays/")) && targetFolder.isDirectory()) {
+            // Adicionar .nomedia se for subpasta de assets ou overlays (não na raiz)
+            if ((assetFolder.startsWith("assets/") && !assetFolder.equals("assets")) ||
+                (assetFolder.startsWith("overlays/") && !assetFolder.equals("overlays"))) {
                 File noMedia = new File(targetFolder, ".nomedia");
                 if (!noMedia.exists()) noMedia.createNewFile();
             }

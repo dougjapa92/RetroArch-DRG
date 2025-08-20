@@ -194,7 +194,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             progressDialog.setTitle("Configurando RetroArch DRG...");
             progressDialog.setMessage((archCores.equals("cores64") ? "\nArquitetura dos Cores:\n   - arm64-v8a (64-bit)"
                     : "\nArquitetura dos Cores:\n   - armeabi-v7a (32-bit)") +
-                    "\n\nClique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo.");
+                    "\n\nClique em \"Sair\" após a configuração ou force o encerramento do aplicativo.");
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);
             progressDialog.show();
@@ -206,16 +206,16 @@ public final class MainMenuActivity extends PreferenceActivity {
         @Override
         protected Boolean doInBackground(Void... voids) {
             ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length + 2, 4));
-            CountDownLatch latch = new CountDownLatch(2); // cores + system
+            CountDownLatch latch = new CountDownLatch(ASSET_FOLDERS.length + 2); // todas as pastas + cores + system
 
-            // Tarefas críticas
+            // Cópia de cores e system
             executor.submit(() -> { copyFolderSafe(archCores, new File(BASE_DIR, "cores"), latch); });
             executor.submit(() -> { copyFolderSafe("system", new File(BASE_DIR, "system"), latch); });
 
-            // Tarefas não críticas
+            // Outras pastas
             for (String folder : ASSET_FOLDERS) {
                 if (!folder.equals("system")) {
-                    executor.submit(() -> copyFolderSafe(folder, new File(BASE_DIR, folder), null));
+                    executor.submit(() -> copyFolderSafe(folder, new File(BASE_DIR, folder), latch));
                 }
             }
 
@@ -228,9 +228,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         }
 
         private void copyFolderSafe(String assetFolder, File targetFolder, CountDownLatch latch) {
-            try {
-                copyAssetFolder(assetFolder, targetFolder);
-            } catch (IOException e) { e.printStackTrace(); }
+            try { copyAssetFolder(assetFolder, targetFolder); } catch (IOException e) { e.printStackTrace(); }
             if (latch != null) latch.countDown();
         }
 

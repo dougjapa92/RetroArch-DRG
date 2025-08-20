@@ -112,7 +112,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     private boolean wentToSettings = false;
     
     private void handlePermissionStatus(String[] permissions) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || permissionsHandled) return;
     
         List<String> missingPermissions = new ArrayList<>();
         addPermission(missingPermissions, Manifest.permission.READ_EXTERNAL_STORAGE);
@@ -121,45 +121,48 @@ public final class MainMenuActivity extends PreferenceActivity {
         boolean allGranted = missingPermissions.isEmpty();
     
         if (allGranted) {
+            // Permissões concedidas
             prefs.edit().putInt("deniedCount", 0).apply();
             permissionsHandled = true;
+            startExtractionOrRetro(); // Executa extração / RetroArch
+            return;
+        }
     
-            // Chama a extração/executa RetroArch mesmo na primeira execução
-            startExtractionOrRetro();
+        // Permissões ainda faltando
+        int deniedCount = prefs.getInt("deniedCount", 0);
+    
+        if (deniedCount >= 2 || wentToSettings) {
+            // Segunda mensagem: Abrir Configurações
+            new AlertDialog.Builder(this)
+                .setTitle("Permissão Negada!")
+                .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
+                .setCancelable(false)
+                .setPositiveButton("Abrir Configurações", (dialog, which) -> {
+                    wentToSettings = true;
+                    Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                    Uri uri = Uri.fromParts("package", getPackageName(), null);
+                    intent.setData(uri);
+                    startActivity(intent);
+                })
+                .setNegativeButton("Sair", (dialog, which) -> finish())
+                .show();
         } else {
-            int deniedCount = prefs.getInt("deniedCount", 0);
+            // Primeira mensagem: Conceder permissões
+            deniedCount++;
+            prefs.edit().putInt("deniedCount", deniedCount).apply();
     
-            if (deniedCount >= 2 || wentToSettings) {
-                new AlertDialog.Builder(this)
-                    .setTitle("Permissão Negada!")
-                    .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
-                    .setCancelable(false)
-                    .setPositiveButton("Abrir Configurações", (dialog, which) -> {
-                        wentToSettings = true;
-                        Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-                        Uri uri = Uri.fromParts("package", getPackageName(), null);
-                        intent.setData(uri);
-                        startActivity(intent);
-                    })
-                    .setNegativeButton("Sair", (dialog, which) -> finish())
-                    .show();
-            } else {
-                deniedCount++;
-                prefs.edit().putInt("deniedCount", deniedCount).apply();
-    
-                new AlertDialog.Builder(this)
-                    .setTitle("Permissões Necessárias!")
-                    .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
-                    .setCancelable(false)
-                    .setPositiveButton("Conceder", (dialog, which) -> {
-                        if (permissions != null)
-                            requestPermissions(permissions, REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
-                        else
-                            checkRuntimePermissions();
-                    })
-                    .setNegativeButton("Sair", (dialog, which) -> finish())
-                    .show();
-            }
+            new AlertDialog.Builder(this)
+                .setTitle("Permissões Necessárias!")
+                .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
+                .setCancelable(false)
+                .setPositiveButton("Conceder", (dialog, which) -> {
+                    if (permissions != null)
+                        requestPermissions(permissions, REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
+                    else
+                        checkRuntimePermissions();
+                })
+                .setNegativeButton("Sair", (dialog, which) -> finish())
+                .show();
         }
     }
     
@@ -167,8 +170,9 @@ public final class MainMenuActivity extends PreferenceActivity {
     protected void onResume() {
         super.onResume();
         if (wentToSettings) {
+            // Verifica permissões após voltar das configurações
             handlePermissionStatus(null);
-            wentToSettings = false; // reseta a flag
+            wentToSettings = false;
         }
     }
     
@@ -180,30 +184,35 @@ public final class MainMenuActivity extends PreferenceActivity {
             super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         }
     }
-
+    
     private void startExtractionOrRetro() {
-        if (prefs.getBoolean("firstRun", true))
+        // Garantir que as permissões foram tratadas antes
+        if (!permissionsHandled) return;
+    
+        // Sempre executar UnifiedExtractionTask na primeira execução
+        if (prefs.getBoolean("firstRun", true)) {
             new UnifiedExtractionTask().execute();
-        else
+        } else {
             finalStartup();
+        }
     }
-
+    
     private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
         ProgressDialog progressDialog;
         AtomicInteger processedFiles = new AtomicInteger(0);
         int totalFiles = 0;
-
+    
         @Override
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
             progressDialog.setTitle("Configurando RetroArch DRG...");
             progressDialog.setMessage((archCores.equals("cores64") ? "\nArquitetura dos Cores:\n   - arm64-v8a (64-bit)"
                     : "\nArquitetura dos Cores:\n   - armeabi-v7a (32-bit)") +
-                    "\n\nClique em \"Sair do RetroArch\" após a configuração ou force o encerramento do aplicativo.");
+                    "\n\nExtraindo base.apk e arquivos necessários. Aguarde...");
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);
             progressDialog.show();
-
+    
             if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
             archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
             removeUnusedArchFolders();

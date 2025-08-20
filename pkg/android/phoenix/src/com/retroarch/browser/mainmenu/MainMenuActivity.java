@@ -1,4 +1,3 @@
-
 package com.retroarch.browser.mainmenu;
 
 import com.retroarch.browser.preferences.util.UserPreferences;

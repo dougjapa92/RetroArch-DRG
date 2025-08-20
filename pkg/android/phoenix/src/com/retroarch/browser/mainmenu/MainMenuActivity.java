@@ -22,9 +22,9 @@ import android.net.Uri;
 import java.io.File;
 import java.io.InputStream;
 import java.io.FileOutputStream;
+import java.io.IOException;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
-import java.io.IOException;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
@@ -74,17 +74,16 @@ public final class MainMenuActivity extends PreferenceActivity {
         UserPreferences.updateConfigFile(this);
 
         String arch = System.getProperty("os.arch");
-        archCores = arch != null && arch.contains("64") ? "cores64" : "cores32";
+        archCores = arch.contains("64") ? "cores64" : "cores32";
 
         checkRuntimePermissions();
     }
 
     private boolean addPermission(List<String> permissionsList, String permission) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
-                permissionsList.add(permission);
-                return !shouldShowRequestPermissionRationale(permission);
-            }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M &&
+                checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
+            permissionsList.add(permission);
+            return !shouldShowRequestPermissionRationale(permission);
         }
         return true;
     }
@@ -102,8 +101,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
         }
 
-        if (!checkPermissions)
-            startExtractionOrRetro();
+        if (!checkPermissions) startExtractionOrRetro();
     }
 
     @Override
@@ -149,9 +147,10 @@ public final class MainMenuActivity extends PreferenceActivity {
     }
 
     private void startExtractionOrRetro() {
-        boolean firstRun = prefs.getBoolean("firstRun", true);
-        if (firstRun) new UnifiedExtractionTask().execute();
-        else finalStartup();
+        if (prefs.getBoolean("firstRun", true))
+            new UnifiedExtractionTask().execute();
+        else
+            finalStartup();
     }
 
     private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
@@ -177,21 +176,17 @@ public final class MainMenuActivity extends PreferenceActivity {
         }
 
         private void removeUnusedArchFolders() {
-            String[] coresFolders = {"cores32", "cores64"};
-            String[] autoconfigFolders = {"autoconfig-legacy", "autoconfig"};
-
-            for (String folder : coresFolders) if (!folder.equals(archCores)) deleteFolder(new File(BASE_DIR, folder));
-            for (String folder : autoconfigFolders) if (!folder.equals(archAutoconfig)) deleteFolder(new File(BASE_DIR, folder));
+            for (String folder : new String[]{"cores32", "cores64"})
+                if (!folder.equals(archCores)) deleteFolder(new File(BASE_DIR, folder));
+            for (String folder : new String[]{"autoconfig-legacy", "autoconfig"})
+                if (!folder.equals(archAutoconfig)) deleteFolder(new File(BASE_DIR, folder));
         }
 
         private void deleteFolder(File folder) {
             if (folder.exists()) {
-                File[] files = folder.listFiles();
-                if (files != null) {
-                    for (File file : files) {
-                        if (file.isDirectory()) deleteFolder(file);
-                        else file.delete();
-                    }
+                for (File file : folder.listFiles()) {
+                    if (file.isDirectory()) deleteFolder(file);
+                    else file.delete();
                 }
                 folder.delete();
             }
@@ -201,22 +196,9 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected Boolean doInBackground(Void... voids) {
             ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length + 2, 4));
 
-            for (String folder : ASSET_FOLDERS) {
-                executor.submit(() -> {
-                    try { copyAssetFolder(folder, new File(BASE_DIR, folder)); }
-                    catch (IOException e) { e.printStackTrace(); }
-                });
-            }
-
-            executor.submit(() -> {
-                try { copyAssetFolder(archCores, new File(BASE_DIR, "cores")); }
-                catch (IOException e) { e.printStackTrace(); }
-            });
-
-            executor.submit(() -> {
-                try { copyAssetFolder(archAutoconfig, new File(BASE_DIR, "autoconfig")); }
-                catch (IOException e) { e.printStackTrace(); }
-            });
+            for (String folder : ASSET_FOLDERS) executor.submit(() -> copyFolderSafe(folder, new File(BASE_DIR, folder)));
+            executor.submit(() -> copyFolderSafe(archCores, new File(BASE_DIR, "cores")));
+            executor.submit(() -> copyFolderSafe(archAutoconfig, new File(BASE_DIR, "autoconfig")));
 
             executor.shutdown();
             while (!executor.isTerminated()) {
@@ -228,14 +210,9 @@ public final class MainMenuActivity extends PreferenceActivity {
             return true;
         }
 
-        @Override
-        protected void onProgressUpdate(Integer... values) { progressDialog.setProgress(values[0]); }
-
-        @Override
-        protected void onPostExecute(Boolean result) {
-            progressDialog.dismiss();
-            prefs.edit().putBoolean("firstRun", false).apply();
-            finalStartup();
+        private void copyFolderSafe(String assetFolder, File targetFolder) {
+            try { copyAssetFolder(assetFolder, targetFolder); }
+            catch (IOException e) { e.printStackTrace(); }
         }
 
         private int countAllFiles(String[] folders) {
@@ -263,9 +240,8 @@ public final class MainMenuActivity extends PreferenceActivity {
                     String fullPath = assetFolder + "/" + asset;
                     File outFile = new File(targetFolder, asset);
 
-                    if (getAssets().list(fullPath).length > 0) {
-                        copyAssetFolder(fullPath, outFile);
-                    } else {
+                    if (getAssets().list(fullPath).length > 0) copyAssetFolder(fullPath, outFile);
+                    else {
                         try (InputStream in = getAssets().open(fullPath);
                              FileOutputStream out = new FileOutputStream(outFile)) {
                             byte[] buffer = new byte[1024];
@@ -278,13 +254,22 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
         }
 
+        @Override
+        protected void onProgressUpdate(Integer... values) { progressDialog.setProgress(values[0]); }
+
+        @Override
+        protected void onPostExecute(Boolean result) {
+            progressDialog.dismiss();
+            prefs.edit().putBoolean("firstRun", false).apply();
+            finalStartup();
+        }
+
         private void updateRetroarchCfg() throws IOException {
             File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
             if (!originalCfg.exists()) originalCfg.getParentFile().mkdirs();
 
             Map<String, String> cfgFlags = new HashMap<>();
-
-            // ⚙️ Flags gerais
+            // ⚙️ Flags mantidas (não alteradas conforme solicitado)
             cfgFlags.put("menu_scale_factor", "0.600000");
             cfgFlags.put("ozone_menu_color_theme", "10");
             cfgFlags.put("input_overlay_opacity", "0.700000");
@@ -307,20 +292,9 @@ public final class MainMenuActivity extends PreferenceActivity {
             cfgFlags.put("all_users_control_menu", "true");
             cfgFlags.put("input_poll_type_behavior", "1");
             cfgFlags.put("android_input_disconnect_workaround", "true");
+            cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
+            cfgFlags.put("video_driver", Build.VERSION.SDK_INT >= Build.VERSION_CODES.R ? "vulkan" : "gl");
 
-            // ⚙️ Flags específicas por arquitetura
-            if ("cores32".equals(archCores))
-                cfgFlags.put("video_threaded", "true");
-            else
-                cfgFlags.put("video_threaded", "false");
-
-            // ⚙️ Flags específicas por versão do Android
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
-                cfgFlags.put("video_driver", "vulkan");
-            else
-                cfgFlags.put("video_driver", "gl");
-
-            // ⚙️ Flags específicas por tipo de dispositivo
             boolean hasTouchscreen = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN);
             boolean isLeanback = getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
 
@@ -342,17 +316,10 @@ public final class MainMenuActivity extends PreferenceActivity {
                 cfgFlags.put("input_state_slot_increase_btn", "195");
             }
 
-            Map<String, File> assetFiles = new HashMap<>();
-            for (String folder : ASSET_FOLDERS)
-                assetFiles.put(folder, new File(BASE_DIR, folder));
-
             try (BufferedWriter writer = new BufferedWriter(new FileWriter(originalCfg, false))) {
-                for (Map.Entry<String, String> entry : ASSET_FLAGS.entrySet()) {
-                    String folder = entry.getKey();
-                    String flag = entry.getValue();
-                    File path = assetFiles.get(folder);
-                    if (path != null)
-                        writer.write(flag + " = \"" + path.getAbsolutePath() + "\"\n");
+                for (String folder : ASSET_FOLDERS) {
+                    File path = new File(BASE_DIR, folder);
+                    writer.write(ASSET_FLAGS.get(folder) + " = \"" + path.getAbsolutePath() + "\"\n");
                 }
                 for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
                     writer.write(entry.getKey() + " = \"" + entry.getValue() + "\"\n");

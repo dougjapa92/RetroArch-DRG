@@ -69,6 +69,9 @@ android {
             jniLibs.srcDir '../phoenix-common/libs'
             jni.srcDirs = []
             res.srcDirs = ['res', '../phoenix-common/res']
+            assets {
+                include '**/.nomedia'
+            }
         }
         normal {
             java.srcDirs += ['../play-core-stub']

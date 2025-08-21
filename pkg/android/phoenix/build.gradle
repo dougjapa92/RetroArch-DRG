@@ -69,9 +69,6 @@ android {
             jniLibs.srcDir '../phoenix-common/libs'
             jni.srcDirs = []
             res.srcDirs = ['res', '../phoenix-common/res']
-            assets {
-                include '**/.nomedia'
-            }
         }
         normal {
             java.srcDirs += ['../play-core-stub']
@@ -109,6 +106,11 @@ android {
         checkReleaseBuilds true
         abortOnError false
     }
+
+    // 🔽 Forçar inclusão de arquivos ocultos como .nomedia
+    aaptOptions {
+        ignoreAssetsPattern "!.nomedia"
+    }
 }
 
 dependencies {
@@ -118,4 +120,4 @@ dependencies {
 String getManifestAttribute(String attribute) {
     def manifest = new XmlParser().parse("${project.projectDir}/AndroidManifest.xml")
     return manifest.attributes().find { ((String) it.key).contains(attribute) }.value
-}
+} 

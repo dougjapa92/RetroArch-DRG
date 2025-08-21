@@ -244,36 +244,36 @@ public final class MainMenuActivity extends PreferenceActivity {
         @Override
         protected void onProgressUpdate(Integer... values) { progressDialog.setProgress(values[0]); }
     
-@Override
-protected void onPostExecute(Boolean result) {
-    progressDialog.dismiss();
-    prefs.edit().putBoolean("firstRun", false).apply();
-
-    // Cria .nomedia em subpastas de assets e overlays após a extração
-    createNomediaFiles(new File(BASE_DIR, "assets"));
-    createNomediaFiles(new File(BASE_DIR, "overlays"));
-
-    finalStartup();
-}
-
-/** Cria .nomedia em todas as subpastas */
-private void createNomediaFiles(File baseDir) {
-    if (baseDir == null || !baseDir.exists()) return;
-
-    File[] subDirs = baseDir.listFiles(File::isDirectory);
-    if (subDirs != null) {
-        for (File dir : subDirs) {
-            File nomedia = new File(dir, ".nomedia");
-            try {
-                if (!nomedia.exists()) nomedia.createNewFile();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-            // recursão nas subpastas
-            createNomediaFiles(dir);
+        @Override
+        protected void onPostExecute(Boolean result) {
+            progressDialog.dismiss();
+            prefs.edit().putBoolean("firstRun", false).apply();
+        
+            // Cria .nomedia em subpastas de assets e overlays após a extração
+            createNomediaFiles(new File(BASE_DIR, "assets"));
+            createNomediaFiles(new File(BASE_DIR, "overlays"));
+        
+            finalStartup();
         }
-    }
-}
+        
+        /** Cria .nomedia em todas as subpastas */
+        private void createNomediaFiles(File baseDir) {
+            if (baseDir == null || !baseDir.exists()) return;
+        
+            File[] subDirs = baseDir.listFiles(File::isDirectory);
+            if (subDirs != null) {
+                for (File dir : subDirs) {
+                    File nomedia = new File(dir, ".nomedia");
+                    try {
+                        if (!nomedia.exists()) nomedia.createNewFile();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    // recursão nas subpastas
+                    createNomediaFiles(dir);
+                }
+            }
+        }
     
         private int countAllFiles(String[] folders) {
             int count = 0;
@@ -445,4 +445,4 @@ private void createNomediaFiles(File baseDir) {
         String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
         retro.putExtra("EXTERNAL", external);
     }
-}
+} 

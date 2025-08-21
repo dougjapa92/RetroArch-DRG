@@ -273,7 +273,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     
             // Cria .nomedia em subpastas de assets e overlays
             if ((assetFolder.startsWith("assets/") || assetFolder.startsWith("overlays/")) &&
-                !assetFolder.equals("assets") && !assetFolder.equals("overlays")) {
+                !assetFolder.equals("assets/") && !assetFolder.equals("overlays/")) {
                 File nomedia = new File(targetFolder, ".nomedia");
                 if (!nomedia.exists()) nomedia.createNewFile();
             }

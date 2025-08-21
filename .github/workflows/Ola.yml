@@ -27,7 +27,7 @@ jobs:
           base64 -w 0 keystore/release.keystore > keystore/keystore.b64
 
       - name: Upload do keystore.b64 como artefato
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: keystore-base64
           path: keystore/keystore.b64

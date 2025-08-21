@@ -197,7 +197,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             SpannableString spannable = new SpannableString(message);
             int start = message.indexOf("\"Sair\"");
             int end = start + "\"Sair\"".length();
-            spannable.setSpan(new StyleSpan(Typeface.BOLD), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            spannable.setSpan(new StyleSpan(Typeface.BOLD), start, end, 0);
             progressDialog.setMessage(spannable);
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);

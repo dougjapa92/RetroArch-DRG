@@ -190,43 +190,59 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
             progressDialog.setTitle("Configurando RetroArch DRG...");
-            String archMessage = archCores.equals("cores64") ?
-                    "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)" :
-                    "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
-            String message = archMessage + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do Retro Game Box.";
-            SpannableString spannable = new SpannableString(message);
-            int start = message.indexOf("\"Sair\"");
-            int end = start + "\"Sair\"".length();
-            spannable.setSpan(new StyleSpan(Typeface.BOLD), start, end, 0);
-            progressDialog.setMessage(spannable);
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);
             progressDialog.show();
     
-            // Definir archAutoconfig de acordo com a versão do Android
             archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
     
-            totalFiles = countAllFiles(ASSET_FOLDERS) + countAllFiles(new String[]{archCores, archAutoconfig});
+            totalFiles = countAllFiles(ASSET_FOLDERS) 
+                       + countAllFiles(new String[]{archCores, archAutoconfig}) 
+                       + countFoldersForNomedia(new File(BASE_DIR, "assets"))
+                       + countFoldersForNomedia(new File(BASE_DIR, "overlays"))
+                       + countFoldersForNomedia(new File(BASE_DIR, "system"));
         }
     
         @Override
         protected Boolean doInBackground(Void... voids) {
-            ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length + 2, 4));
+            // Copia arquivos normalmente
+            copyAssetsWithProgress();
     
+            // Cria .nomedia e atualiza progresso
+            processedFiles.addAndGet(processNomediaFolder(new File(BASE_DIR, "assets")));
+            processedFiles.addAndGet(processNomediaFolder(new File(BASE_DIR, "overlays")));
+            processedFiles.addAndGet(processNomediaFolder(new File(BASE_DIR, "system")));
+    
+            return true;
+        }
+    
+        @Override
+        protected void onProgressUpdate(Integer... values) {
+            progressDialog.setProgress(values[0]);
+        }
+    
+        @Override
+        protected void onPostExecute(Boolean result) {
+            progressDialog.dismiss();
+            prefs.edit().putBoolean("firstRun", false).apply();
+            finalStartup();
+        }
+    
+        // Copia assets e atualiza processedFiles
+        private void copyAssetsWithProgress() {
+            ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length + 2, 4));
             for (String folder : ASSET_FOLDERS) {
                 executor.submit(() -> {
-                    try { copyAssetFolder(folder, new File(BASE_DIR, folder)); }
+                    try { copyAssetFolder(folder, new File(BASE_DIR, folder)); } 
                     catch (IOException e) { e.printStackTrace(); }
                 });
             }
-    
             executor.submit(() -> {
-                try { copyAssetFolder(archCores, new File(BASE_DIR, "cores")); }
+                try { copyAssetFolder(archCores, new File(BASE_DIR, "cores")); } 
                 catch (IOException e) { e.printStackTrace(); }
             });
-    
             executor.submit(() -> {
-                try { copyAssetFolder(archAutoconfig, new File(BASE_DIR, "autoconfig")); }
+                try { copyAssetFolder(archAutoconfig, new File(BASE_DIR, "autoconfig")); } 
                 catch (IOException e) { e.printStackTrace(); }
             });
     
@@ -235,43 +251,15 @@ public final class MainMenuActivity extends PreferenceActivity {
                 publishProgress((processedFiles.get() * 100) / totalFiles);
                 try { Thread.sleep(100); } catch (InterruptedException ignored) {}
             }
-    
-            try { updateRetroarchCfg(); } catch (IOException e) { return false; }
-            return true;
         }
     
-        @Override
-        protected void onProgressUpdate(Integer... values) { progressDialog.setProgress(values[0]); }
+        // Retorna o número de pastas processadas com .nomedia
+        private int processNomediaFolder(File dir) {
+            if (dir == null || !dir.exists() || !dir.isDirectory()) return 0;
     
-        @Override
-        protected void onPostExecute(Boolean result) {
-            progressDialog.dismiss();
-            prefs.edit().putBoolean("firstRun", false).apply();
-        
-            // Cria .nomedia nas pastas com imagens
-            ExecutorService executor = Executors.newFixedThreadPool(3);
-            
-            executor.submit(() -> processFolderForImages(new File(BASE_DIR, "assets")));
-            executor.submit(() -> processFolderForImages(new File(BASE_DIR, "overlays")));
-            executor.submit(() -> processFolderForImages(new File(BASE_DIR, "system")));
-            
-            executor.shutdown();
-            while (!executor.isTerminated()) {
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        
-            finalStartup();
-        }
-        
-        /** Cria .nomedia em uma pasta se encontrar ao menos uma imagem, e continua nas subpastas */
-        private void processFolderForImages(File dir) {
-            if (dir == null || !dir.exists() || !dir.isDirectory()) return;
-        
-            // Cria .nomedia se houver imagens na pasta
+            int created = 0;
+    
+            // Cria .nomedia se houver imagens
             File[] images = dir.listFiles(f -> f.isFile() && {
                 String name = f.getName().toLowerCase();
                 return name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png");
@@ -279,68 +267,36 @@ public final class MainMenuActivity extends PreferenceActivity {
             if (images != null && images.length > 0) {
                 File nomedia = new File(dir, ".nomedia");
                 if (!nomedia.exists()) {
-                    try {
-                        nomedia.createNewFile();
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                    }
+                    try { nomedia.createNewFile(); created++; } catch (IOException e) { e.printStackTrace(); }
                 }
             }
-        
-            // Processa recursivamente subpastas
+    
             File[] subdirs = dir.listFiles(File::isDirectory);
             if (subdirs != null) {
-                for (File subdir : subdirs) {
-                    processFolderForImages(subdir);
-                }
+                for (File subdir : subdirs) created += processNomediaFolder(subdir);
             }
-        } 
     
-        private int countAllFiles(String[] folders) {
+            publishProgress((processedFiles.addAndGet(created) * 100) / totalFiles);
+            return created;
+        }
+    
+        // Conta pastas que poderão receber .nomedia para o progresso inicial
+        private int countFoldersForNomedia(File dir) {
+            if (dir == null || !dir.exists() || !dir.isDirectory()) return 0;
             int count = 0;
-            for (String folder : folders) count += countFilesRecursive(folder);
+            File[] images = dir.listFiles(f -> f.isFile() && {
+                String name = f.getName().toLowerCase();
+                return name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png");
+            });
+            if (images != null && images.length > 0) count++;
+    
+            File[] subdirs = dir.listFiles(File::isDirectory);
+            if (subdirs != null) {
+                for (File subdir : subdirs) count += countFoldersForNomedia(subdir);
+            }
             return count;
         }
-    
-        private int countFilesRecursive(String assetFolder) {
-            try {
-                String[] assets = getAssets().list(assetFolder);
-                if (assets == null || assets.length == 0) return 1;
-                int total = 0;
-                for (String asset : assets) total += countFilesRecursive(assetFolder + "/" + asset);
-                return total;
-            } catch (IOException e) { return 0; }
-        }
-    
-        private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
-            String[] assets = getAssets().list(assetFolder);
-            if (!targetFolder.exists()) targetFolder.mkdirs();
-    
-            if (assets != null && assets.length > 0) {
-                for (String asset : assets) {
-                    String fullPath = assetFolder + "/" + asset;
-                    File outFile = new File(targetFolder, asset);
-    
-                    if ("cores32".equals(archCores) && fullPath.equals("config/global.glslp")) {
-                        processedFiles.incrementAndGet();
-                        continue;
-                    }
-    
-                    if (getAssets().list(fullPath).length > 0) {
-                        copyAssetFolder(fullPath, outFile);
-                    } else {
-                        try (InputStream in = getAssets().open(fullPath);
-                             FileOutputStream out = new FileOutputStream(outFile)) {
-                            byte[] buffer = new byte[1024];
-                            int read;
-                            while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
-                        }
-                        processedFiles.incrementAndGet();
-                    }
-                }
-            }
-        }
-
+        
         private void updateRetroarchCfg() throws IOException {
             File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
             if (!originalCfg.exists()) originalCfg.getParentFile().mkdirs();

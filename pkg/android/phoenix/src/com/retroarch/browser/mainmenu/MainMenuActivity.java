@@ -196,8 +196,8 @@ public final class MainMenuActivity extends PreferenceActivity {
     
             archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
     
-            totalFiles = countAllFiles(ASSET_FOLDERS) 
-                       + countAllFiles(new String[]{archCores, archAutoconfig}) 
+            totalFiles = countAllFiles(ASSET_FOLDERS)
+                       + countAllFiles(new String[]{archCores, archAutoconfig})
                        + countFoldersForNomedia(new File(BASE_DIR, "assets"))
                        + countFoldersForNomedia(new File(BASE_DIR, "overlays"))
                        + countFoldersForNomedia(new File(BASE_DIR, "system"));
@@ -205,10 +205,8 @@ public final class MainMenuActivity extends PreferenceActivity {
     
         @Override
         protected Boolean doInBackground(Void... voids) {
-            // Copia arquivos normalmente
             copyAssetsWithProgress();
     
-            // Cria .nomedia e atualiza progresso
             processedFiles.addAndGet(processNomediaFolder(new File(BASE_DIR, "assets")));
             publishProgress((processedFiles.get() * 100) / totalFiles);
     
@@ -233,25 +231,33 @@ public final class MainMenuActivity extends PreferenceActivity {
             finalStartup();
         }
     
-        /** Copia todos os assets com progresso */
         private void copyAssetsWithProgress() {
             ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length + 2, 4));
     
-            for (String folder : ASSET_FOLDERS) {
-                executor.submit(() -> {
-                    try { copyAssetFolder(folder, new File(BASE_DIR, folder)); } 
-                    catch (IOException e) { e.printStackTrace(); }
+            for (final String folder : ASSET_FOLDERS) {
+                executor.submit(new Runnable() {
+                    @Override
+                    public void run() {
+                        try { copyAssetFolder(folder, new File(BASE_DIR, folder)); } 
+                        catch (IOException e) { e.printStackTrace(); }
+                    }
                 });
             }
     
-            executor.submit(() -> {
-                try { copyAssetFolder(archCores, new File(BASE_DIR, "cores")); } 
-                catch (IOException e) { e.printStackTrace(); }
+            executor.submit(new Runnable() {
+                @Override
+                public void run() {
+                    try { copyAssetFolder(archCores, new File(BASE_DIR, "cores")); } 
+                    catch (IOException e) { e.printStackTrace(); }
+                }
             });
     
-            executor.submit(() -> {
-                try { copyAssetFolder(archAutoconfig, new File(BASE_DIR, "autoconfig")); } 
-                catch (IOException e) { e.printStackTrace(); }
+            executor.submit(new Runnable() {
+                @Override
+                public void run() {
+                    try { copyAssetFolder(archAutoconfig, new File(BASE_DIR, "autoconfig")); } 
+                    catch (IOException e) { e.printStackTrace(); }
+                }
             });
     
             executor.shutdown();
@@ -261,7 +267,6 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
         }
     
-        /** Copia uma pasta de assets recursivamente */
         private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
             String[] assets = getAssets().list(assetFolder);
             if (!targetFolder.exists()) targetFolder.mkdirs();
@@ -271,13 +276,13 @@ public final class MainMenuActivity extends PreferenceActivity {
                     String fullPath = assetFolder + "/" + asset;
                     File outFile = new File(targetFolder, asset);
     
-                    // Ignora global.glslp se cores32
                     if ("cores32".equals(archCores) && fullPath.equals("config/global.glslp")) {
                         processedFiles.incrementAndGet();
                         continue;
                     }
     
-                    if (getAssets().list(fullPath).length > 0) {
+                    String[] subAssets = getAssets().list(fullPath);
+                    if (subAssets != null && subAssets.length > 0) {
                         copyAssetFolder(fullPath, outFile);
                     } else {
                         try (InputStream in = getAssets().open(fullPath);
@@ -292,16 +297,20 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
         }
     
-        /** Retorna o número de pastas processadas com .nomedia */
         private int processNomediaFolder(File dir) {
             if (dir == null || !dir.exists() || !dir.isDirectory()) return 0;
     
             int created = 0;
     
-            File[] images = dir.listFiles(f -> f.isFile() && {
-                String name = f.getName().toLowerCase();
-                return name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png");
+            File[] images = dir.listFiles(new java.io.FileFilter() {
+                @Override
+                public boolean accept(File f) {
+                    if (!f.isFile()) return false;
+                    String name = f.getName().toLowerCase();
+                    return name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png");
+                }
             });
+    
             if (images != null && images.length > 0) {
                 File nomedia = new File(dir, ".nomedia");
                 if (!nomedia.exists()) {
@@ -309,7 +318,11 @@ public final class MainMenuActivity extends PreferenceActivity {
                 }
             }
     
-            File[] subdirs = dir.listFiles(File::isDirectory);
+            File[] subdirs = dir.listFiles(new java.io.FileFilter() {
+                @Override
+                public boolean accept(File f) { return f.isDirectory(); }
+            });
+    
             if (subdirs != null) {
                 for (File subdir : subdirs) created += processNomediaFolder(subdir);
             }
@@ -317,20 +330,31 @@ public final class MainMenuActivity extends PreferenceActivity {
             return created;
         }
     
-        /** Conta pastas que poderão receber .nomedia */
         private int countFoldersForNomedia(File dir) {
             if (dir == null || !dir.exists() || !dir.isDirectory()) return 0;
+    
             int count = 0;
-            File[] images = dir.listFiles(f -> f.isFile() && {
-                String name = f.getName().toLowerCase();
-                return name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png");
+    
+            File[] images = dir.listFiles(new java.io.FileFilter() {
+                @Override
+                public boolean accept(File f) {
+                    if (!f.isFile()) return false;
+                    String name = f.getName().toLowerCase();
+                    return name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png");
+                }
             });
+    
             if (images != null && images.length > 0) count++;
     
-            File[] subdirs = dir.listFiles(File::isDirectory);
+            File[] subdirs = dir.listFiles(new java.io.FileFilter() {
+                @Override
+                public boolean accept(File f) { return f.isDirectory(); }
+            });
+    
             if (subdirs != null) {
                 for (File subdir : subdirs) count += countFoldersForNomedia(subdir);
             }
+    
             return count;
         }
         
@@ -459,4 +483,4 @@ public final class MainMenuActivity extends PreferenceActivity {
         String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
         retro.putExtra("EXTERNAL", external);
     }
-}  
+}   

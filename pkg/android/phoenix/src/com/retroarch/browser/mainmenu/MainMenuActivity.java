@@ -248,30 +248,38 @@ public final class MainMenuActivity extends PreferenceActivity {
             progressDialog.dismiss();
             prefs.edit().putBoolean("firstRun", false).apply();
         
-            // Cria .nomedia em subpastas de assets e overlays após a extração
-            createNomediaFiles(new File(BASE_DIR, "assets"));
-            createNomediaFiles(new File(BASE_DIR, "overlays"));
+            // Cria .nomedia nas pastas com imagens
+            createNomediaIfImages(new File(BASE_DIR, "assets"));
+            createNomediaIfImages(new File(BASE_DIR, "overlays"));
+            createNomediaIfImages(new File(BASE_DIR, "system"));
         
             finalStartup();
         }
         
-        /** Cria .nomedia em todas as subpastas */
-        private void createNomediaFiles(File baseDir) {
-            if (baseDir == null || !baseDir.exists()) return;
+        /** Cria .nomedia se houver pelo menos um arquivo jpg, jpeg ou png na pasta ou subpastas */
+        private boolean createNomediaIfImages(File dir) {
+            if (dir == null || !dir.exists() || !dir.isDirectory()) return false;
         
-            File[] subDirs = baseDir.listFiles(File::isDirectory);
-            if (subDirs != null) {
-                for (File dir : subDirs) {
-                    File nomedia = new File(dir, ".nomedia");
-                    try {
-                        if (!nomedia.exists()) nomedia.createNewFile();
-                    } catch (IOException e) {
-                        e.printStackTrace();
+            File[] files = dir.listFiles();
+            if (files == null) return false;
+        
+            for (File f : files) {
+                if (f.isFile()) {
+                    String name = f.getName().toLowerCase();
+                    if (name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png")) {
+                        File nomedia = new File(dir, ".nomedia");
+                        try {
+                            if (!nomedia.exists()) nomedia.createNewFile();
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
+                        return true; // achou imagem, cria .nomedia e interrompe
                     }
-                    // recursão nas subpastas
-                    createNomediaFiles(dir);
+                } else if (f.isDirectory()) {
+                    if (createNomediaIfImages(f)) return true; // se a subpasta tiver imagem, interrompe
                 }
             }
+            return false; // nenhuma imagem encontrada nesta pasta ou subpastas
         }
     
         private int countAllFiles(String[] folders) {

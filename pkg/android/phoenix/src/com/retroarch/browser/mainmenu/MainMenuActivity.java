@@ -271,30 +271,30 @@ public final class MainMenuActivity extends PreferenceActivity {
         private void processFolderForImages(File dir) {
             if (dir == null || !dir.exists() || !dir.isDirectory()) return;
         
-            // Verifica se existe alguma imagem diretamente na pasta
-            String[] images = dir.list((d, name) -> {
-                String lower = name.toLowerCase();
-                return lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png");
+            // Cria .nomedia se houver imagens na pasta
+            File[] images = dir.listFiles(f -> f.isFile() && {
+                String name = f.getName().toLowerCase();
+                return name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png");
             });
-        
             if (images != null && images.length > 0) {
                 File nomedia = new File(dir, ".nomedia");
-                try {
-                    if (!nomedia.exists()) nomedia.createNewFile();
-                } catch (IOException e) {
-                    e.printStackTrace();
+                if (!nomedia.exists()) {
+                    try {
+                        nomedia.createNewFile();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
                 }
-                return; // pula para a próxima pasta
             }
         
-            // Lista subpastas e processa recursivamente
-            String[] subDirs = dir.list((d, name) -> new File(d, name).isDirectory());
-            if (subDirs != null) {
-                for (String subName : subDirs) {
-                    processFolderForImages(new File(dir, subName));
+            // Processa recursivamente subpastas
+            File[] subdirs = dir.listFiles(File::isDirectory);
+            if (subdirs != null) {
+                for (File subdir : subdirs) {
+                    processFolderForImages(subdir);
                 }
             }
-        }
+        } 
     
         private int countAllFiles(String[] folders) {
             int count = 0;

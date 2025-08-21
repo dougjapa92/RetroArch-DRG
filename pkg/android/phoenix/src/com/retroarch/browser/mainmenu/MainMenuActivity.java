@@ -182,98 +182,80 @@ public final class MainMenuActivity extends PreferenceActivity {
         ProgressDialog progressDialog;
         AtomicInteger processedFiles = new AtomicInteger(0);
         int totalFiles = 0;
-
+    
         @Override
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
             progressDialog.setTitle("Configurando RetroArch DRG...");
-            String archMessage = archCores.equals("cores64") ? "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)" : "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
-            progressDialog.setMessage(archMessage + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do Retro Game Box");
+            String archMessage = archCores.equals("cores64") ?
+                    "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)" :
+                    "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
+            String message = archMessage + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do Retro Game Box";
+            SpannableString spannable = new SpannableString(message);
+            int start = message.indexOf("\"Sair\"");
+            int end = start + "\"Sair\"".length();
+            spannable.setSpan(new StyleSpan(Typeface.BOLD), start, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            progressDialog.setMessage(spannable);
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);
             progressDialog.show();
-
+    
             if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
             removeUnusedArchFolders();
-
+    
             // Definir archAutoconfig de acordo com a versão do Android
-            if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) { // ≤ 7.1.2
-                archAutoconfig = "autoconfig-legacy";
-            } else {
-                archAutoconfig = "autoconfig";
-            }
-
+            archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
+    
             totalFiles = countAllFiles(ASSET_FOLDERS) + countAllFiles(new String[]{archCores, archAutoconfig});
         }
-
-        private void removeUnusedArchFolders() {
-            String[] coresFolders = {"cores32", "cores64"};
-            String[] autoconfigFolders = {"autoconfig-legacy", "autoconfig"};
-
-            for (String folder : coresFolders) if (!folder.equals(archCores)) deleteFolder(new File(BASE_DIR, folder));
-            for (String folder : autoconfigFolders) if (!folder.equals(archAutoconfig)) deleteFolder(new File(BASE_DIR, folder));
-        }
-
-        private void deleteFolder(File folder) {
-            if (folder.exists()) {
-                File[] files = folder.listFiles();
-                if (files != null) {
-                    for (File file : files) {
-                        if (file.isDirectory()) deleteFolder(file);
-                        else file.delete();
-                    }
-                }
-                folder.delete();
-            }
-        }
-
+    
         @Override
         protected Boolean doInBackground(Void... voids) {
             ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length + 2, 4));
-
+    
             for (String folder : ASSET_FOLDERS) {
                 executor.submit(() -> {
                     try { copyAssetFolder(folder, new File(BASE_DIR, folder)); }
                     catch (IOException e) { e.printStackTrace(); }
                 });
             }
-
+    
             executor.submit(() -> {
                 try { copyAssetFolder(archCores, new File(BASE_DIR, "cores")); }
                 catch (IOException e) { e.printStackTrace(); }
             });
-
+    
             executor.submit(() -> {
                 try { copyAssetFolder(archAutoconfig, new File(BASE_DIR, "autoconfig")); }
                 catch (IOException e) { e.printStackTrace(); }
             });
-
+    
             executor.shutdown();
             while (!executor.isTerminated()) {
                 publishProgress((processedFiles.get() * 100) / totalFiles);
                 try { Thread.sleep(100); } catch (InterruptedException ignored) {}
             }
-
+    
             try { updateRetroarchCfg(); } catch (IOException e) { return false; }
             return true;
         }
-
+    
         @Override
         protected void onProgressUpdate(Integer... values) { progressDialog.setProgress(values[0]); }
-
+    
         @Override
         protected void onPostExecute(Boolean result) {
             progressDialog.dismiss();
             prefs.edit().putBoolean("firstRun", false).apply();
             finalStartup();
         }
-
+    
         private int countAllFiles(String[] folders) {
             int count = 0;
             for (String folder : folders) count += countFilesRecursive(folder);
             return count;
         }
-
+    
         private int countFilesRecursive(String assetFolder) {
             try {
                 String[] assets = getAssets().list(assetFolder);
@@ -283,21 +265,28 @@ public final class MainMenuActivity extends PreferenceActivity {
                 return total;
             } catch (IOException e) { return 0; }
         }
-
+    
         private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
             String[] assets = getAssets().list(assetFolder);
             if (!targetFolder.exists()) targetFolder.mkdirs();
-
+    
+            // Cria .nomedia em subpastas de assets e overlays
+            if ((assetFolder.startsWith("assets/") || assetFolder.startsWith("overlays/")) &&
+                !assetFolder.equals("assets") && !assetFolder.equals("overlays")) {
+                File nomedia = new File(targetFolder, ".nomedia");
+                if (!nomedia.exists()) nomedia.createNewFile();
+            }
+    
             if (assets != null && assets.length > 0) {
                 for (String asset : assets) {
                     String fullPath = assetFolder + "/" + asset;
                     File outFile = new File(targetFolder, asset);
-
+    
                     if ("cores32".equals(archCores) && fullPath.equals("config/global.glslp")) {
                         processedFiles.incrementAndGet();
                         continue;
                     }
-
+    
                     if (getAssets().list(fullPath).length > 0) {
                         copyAssetFolder(fullPath, outFile);
                     } else {

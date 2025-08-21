@@ -18,6 +18,10 @@ import android.provider.Settings;
 import android.content.pm.PackageManager;
 import android.Manifest;
 import android.net.Uri;
+import android.text.Spannable;
+import android.text.SpannableString;
+import android.text.style.StyleSpan;
+import android.graphics.Typeface;
 
 import java.io.File;
 import java.io.InputStream;
@@ -199,9 +203,6 @@ public final class MainMenuActivity extends PreferenceActivity {
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);
             progressDialog.show();
-    
-            if (!BASE_DIR.exists()) BASE_DIR.mkdirs();
-            removeUnusedArchFolders();
     
             // Definir archAutoconfig de acordo com a versão do Android
             archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";

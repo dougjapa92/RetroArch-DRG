@@ -117,6 +117,9 @@ android {
     aaptOptions {
         ignoreAssetsPattern "!*.nomedia"
     }
+    packagingOptions {
+        pickFirst '**/.nomedia'
+    }
 }
 
 dependencies {

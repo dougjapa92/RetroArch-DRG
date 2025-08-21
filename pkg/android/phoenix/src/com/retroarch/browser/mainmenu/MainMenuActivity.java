@@ -244,12 +244,36 @@ public final class MainMenuActivity extends PreferenceActivity {
         @Override
         protected void onProgressUpdate(Integer... values) { progressDialog.setProgress(values[0]); }
     
-        @Override
-        protected void onPostExecute(Boolean result) {
-            progressDialog.dismiss();
-            prefs.edit().putBoolean("firstRun", false).apply();
-            finalStartup();
+@Override
+protected void onPostExecute(Boolean result) {
+    progressDialog.dismiss();
+    prefs.edit().putBoolean("firstRun", false).apply();
+
+    // Cria .nomedia em subpastas de assets e overlays após a extração
+    createNomediaFiles(new File(BASE_DIR, "assets"));
+    createNomediaFiles(new File(BASE_DIR, "overlays"));
+
+    finalStartup();
+}
+
+/** Cria .nomedia em todas as subpastas */
+private void createNomediaFiles(File baseDir) {
+    if (baseDir == null || !baseDir.exists()) return;
+
+    File[] subDirs = baseDir.listFiles(File::isDirectory);
+    if (subDirs != null) {
+        for (File dir : subDirs) {
+            File nomedia = new File(dir, ".nomedia");
+            try {
+                if (!nomedia.exists()) nomedia.createNewFile();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            // recursão nas subpastas
+            createNomediaFiles(dir);
         }
+    }
+}
     
         private int countAllFiles(String[] folders) {
             int count = 0;
@@ -270,13 +294,6 @@ public final class MainMenuActivity extends PreferenceActivity {
         private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
             String[] assets = getAssets().list(assetFolder);
             if (!targetFolder.exists()) targetFolder.mkdirs();
-    
-            // Cria .nomedia em subpastas de assets e overlays
-            if ((assetFolder.startsWith("assets/") || assetFolder.startsWith("overlays/")) &&
-                !assetFolder.equals("assets/") && !assetFolder.equals("overlays/")) {
-                File nomedia = new File(targetFolder, ".nomedia");
-                if (!nomedia.exists()) nomedia.createNewFile();
-            }
     
             if (assets != null && assets.length > 0) {
                 for (String asset : assets) {

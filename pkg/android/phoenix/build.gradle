@@ -17,7 +17,7 @@ allprojects {
 
     Properties props = new Properties()
     props.load(new FileInputStream(new File(project.rootDir, "retroarch.properties")))
-    props.each { prop -> 
+    props.each { prop ->
         project.ext.set(prop.key, prop.value)
     }
 }
@@ -27,9 +27,7 @@ apply plugin: 'com.android.application'
 android {
     namespace "com.retroarch"
     compileSdkVersion 34
-    buildToolsVersion "30.0.3"
     ndkVersion "22.0.7026061"
-
     flavorDimensions "variant"
 
     defaultConfig {
@@ -50,7 +48,7 @@ android {
     }
 
     buildFeatures {
-        buildConfig = true // Ativa campos customizados
+        buildConfig = true
     }
 
     productFlavors {
@@ -83,11 +81,20 @@ android {
 
     signingConfigs {
         release {
-            def keystorePath = System.getenv("GITHUB_WORKSPACE") + "/pkg/android/phoenix/my-release-key.keystore"
-            storeFile file(keystorePath)
-            storePassword "123456"
-            keyAlias "phoenixkey"
-            keyPassword "123456"
+            def keystorePath = "${buildDir}/keystore/release.keystore"
+            def keystoreBase64 = System.getenv("KEYSTORE_BASE64")
+            def keystoreBytes = keystoreBase64?.decodeBase64()
+            if (keystoreBytes != null) {
+                def keystoreFile = new File(keystorePath)
+                keystoreFile.parentFile.mkdirs()
+                keystoreFile.bytes = keystoreBytes
+                storeFile keystoreFile
+                storePassword System.getenv("KEYSTORE_PASSWORD")
+                keyAlias System.getenv("KEY_ALIAS")
+                keyPassword System.getenv("KEY_PASSWORD")
+            } else {
+                throw new GradleException("Keystore base64 não encontrado ou inválido")
+            }
         }
     }
 
@@ -102,22 +109,21 @@ android {
         }
     }
 
-    lintOptions {
+    lint {
         checkReleaseBuilds true
         abortOnError false
     }
 
-    // 🔽 Forçar inclusão de arquivos ocultos como .nomedia
     aaptOptions {
-        ignoreAssetsPattern "!.nomedia"
+        ignoreAssetsPattern "!*.nomedia"
     }
 }
 
 dependencies {
-    // Dependências necessárias
+    // Suas dependências aqui
 }
 
 String getManifestAttribute(String attribute) {
     def manifest = new XmlParser().parse("${project.projectDir}/AndroidManifest.xml")
-    return manifest.attributes().find { ((String) it.key).contains(attribute) }.value
+    return manifest.attributes().find { ((String) it.key).contains(attribute) }?.value
 } 

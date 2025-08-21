@@ -43,86 +43,43 @@ CORES_LIST=(
   "vice_x64_libretro_android.so.zip"
 )
 
-baixar_core() {
-  local ARCH=$1
-  local CORES_DIR=$2
-  local TEMP_DIR=$3
-  local CORE_FILE=$4
-  local BASE_URL="https://buildbot.libretro.com/nightly/android/latest/$ARCH/"
-  local MAX_RETRIES=3
-  local RETRY=0
-  local WAIT=2
-
-  mkdir -p "$CORES_DIR" "$TEMP_DIR"
-
-  while [[ $RETRY -lt $MAX_RETRIES ]]; do
-    echo "[$ARCH] Baixando $CORE_FILE (tentativa $((RETRY+1)))..."
-    if curl -sS -fL "${BASE_URL}${CORE_FILE}" -o "$TEMP_DIR/$CORE_FILE"; then
-      unzip -oq "$TEMP_DIR/$CORE_FILE" -d "$TEMP_DIR"
-      for SO_FILE in "$TEMP_DIR"/*.so; do
-        cp -f "$SO_FILE" "$CORES_DIR/"
-      done
-      echo "[$ARCH] $CORE_FILE atualizado com sucesso."
-      rm -f "$TEMP_DIR/$CORE_FILE"
-      return 0
-    else
-      echo "[$ARCH] Falha ao baixar $CORE_FILE (tentativa $((RETRY+1)))."
-      ((RETRY++))
-      sleep $WAIT
-      WAIT=$((WAIT * 2))
-    fi
-  done
-
-  echo "[$ARCH] Erro crítico: não foi possível baixar $CORE_FILE após $MAX_RETRIES tentativas."
-  return 1
-}
-
 baixar_cores() {
   local ARCH=$1
   local CORES_DIR=$2
   local TEMP_DIR=$3
-  local MAX_JOBS=4
-  local SUCCESSFUL=()
-  local FAILED=()
+  local BASE_URL="https://buildbot.libretro.com/nightly/android/latest/$ARCH/"
 
   mkdir -p "$CORES_DIR" "$TEMP_DIR"
 
   for CORE_FILE in "${CORES_LIST[@]}"; do
-    baixar_core "$ARCH" "$CORES_DIR" "$TEMP_DIR" "$CORE_FILE" &
-    
-    # Limita o número de jobs simultâneos
-    while [[ $(jobs -r | wc -l) -ge $MAX_JOBS ]]; do
-      sleep 1
+    local RETRY=0
+    local WAIT=2
+    while true; do
+      echo "[$ARCH] Baixando $CORE_FILE (tentativa $((RETRY+1)))..."
+      if curl -sS -fL "${BASE_URL}${CORE_FILE}" -o "$TEMP_DIR/$CORE_FILE"; then
+        unzip -oq "$TEMP_DIR/$CORE_FILE" -d "$TEMP_DIR"
+        for SO_FILE in "$TEMP_DIR"/*.so; do
+          cp -f "$SO_FILE" "$CORES_DIR/"
+        done
+        echo "[$ARCH] $CORE_FILE atualizado com sucesso."
+        echo "-------------------------------------------------------------------------------------------------"
+        break
+      else
+        echo "[$ARCH] Falha ao baixar $CORE_FILE (tentativa $((RETRY+1)))."
+        ((RETRY++))
+        if [[ $RETRY -ge 3 ]]; then
+          echo "[$ARCH] Erro crítico: não foi possível baixar $CORE_FILE após 3 tentativas."
+          exit 1
+        fi
+        sleep $WAIT
+        WAIT=$((WAIT * 2))
+      fi
     done
-  done
-
-  wait  # Espera todos os downloads terminarem
-
-  # Classifica cores em bem-sucedidos ou falhos
-  for CORE_FILE in "${CORES_LIST[@]}"; do
-    if [[ -f "$CORES_DIR/${CORE_FILE%.zip}.so" ]]; then
-      SUCCESSFUL+=("$CORE_FILE")
-    else
-      FAILED+=("$CORE_FILE")
-    fi
+    rm -f "$TEMP_DIR/$CORE_FILE"
   done
 
   rm -rf "$TEMP_DIR"
-
-  # Exibe resumo
-  echo "===== Resumo do download ====="
-  echo "Total de cores: ${#CORES_LIST[@]}"
-  echo "Sucesso: ${#SUCCESSFUL[@]}"
-  echo "Falha: ${#FAILED[@]}"
-
-  if [[ ${#FAILED[@]} -gt 0 ]]; then
-    echo "Cores que falharam:"
-    printf '%s\n' "${FAILED[@]}"
-    exit 1
-  else
-    echo "Todos os cores foram baixados com sucesso."
-  fi
 }
 
 # Exemplo de uso:
-# baixar_cores "arm64-v8a" "/caminho/para/cores" "/caminho/temporario" 
+# baixar_cores "arm64-v8a" "/caminho/para/cores" "/caminho/temporario"

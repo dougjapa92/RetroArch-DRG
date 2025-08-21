@@ -188,7 +188,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
             progressDialog.setTitle("Configurando RetroArch DRG...");
             String archMessage = archCores.equals("cores64") ? "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)" : "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
-            progressDialog.setMessage(archMessage + "\n\Após configuração, clique em \"Sair\" após a configuração e prossiga com a instalação do Retro Game Box");
+            progressDialog.setMessage(archMessage + "\nClique em \"Sair\" após a configuração e prossiga com a instalação do Retro Game Box");
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);
             progressDialog.show();

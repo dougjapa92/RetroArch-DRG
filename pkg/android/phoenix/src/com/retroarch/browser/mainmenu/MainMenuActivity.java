@@ -193,7 +193,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             String archMessage = archCores.equals("cores64") ?
                     "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)" :
                     "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
-            String message = archMessage + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do Retro Game Box";
+            String message = archMessage + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do Retro Game Box.";
             SpannableString spannable = new SpannableString(message);
             int start = message.indexOf("\"Sair\"");
             int end = start + "\"Sair\"".length();

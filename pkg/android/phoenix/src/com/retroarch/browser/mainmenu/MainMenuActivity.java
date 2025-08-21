@@ -249,9 +249,20 @@ public final class MainMenuActivity extends PreferenceActivity {
             prefs.edit().putBoolean("firstRun", false).apply();
         
             // Cria .nomedia nas pastas com imagens
-            processFolderForImages(new File(BASE_DIR, "assets"));
-            processFolderForImages(new File(BASE_DIR, "overlays"));
-            processFolderForImages(new File(BASE_DIR, "system"));
+            ExecutorService executor = Executors.newFixedThreadPool(3);
+            
+            executor.submit(() -> processFolderForImages(new File(BASE_DIR, "assets")));
+            executor.submit(() -> processFolderForImages(new File(BASE_DIR, "overlays")));
+            executor.submit(() -> processFolderForImages(new File(BASE_DIR, "system")));
+            
+            executor.shutdown();
+            while (!executor.isTerminated()) {
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
         
             finalStartup();
         }
@@ -260,32 +271,30 @@ public final class MainMenuActivity extends PreferenceActivity {
         private void processFolderForImages(File dir) {
             if (dir == null || !dir.exists() || !dir.isDirectory()) return;
         
-            boolean hasImage = false;
-            File[] files = dir.listFiles();
-            if (files == null) return;
+            // Verifica se existe alguma imagem diretamente na pasta
+            String[] images = dir.list((d, name) -> {
+                String lower = name.toLowerCase();
+                return lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png");
+            });
         
-            for (File f : files) {
-                if (f.isFile()) {
-                    String name = f.getName().toLowerCase();
-                    if (name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png")) {
-                        hasImage = true;
-                    }
-                } else if (f.isDirectory()) {
-                    // processa recursivamente cada subpasta
-                    processFolderForImages(f);
-                }
-            }
-        
-            // cria .nomedia se houver alguma imagem nesta pasta
-            if (hasImage) {
+            if (images != null && images.length > 0) {
                 File nomedia = new File(dir, ".nomedia");
                 try {
                     if (!nomedia.exists()) nomedia.createNewFile();
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
+                return; // pula para a próxima pasta
             }
-        } 
+        
+            // Lista subpastas e processa recursivamente
+            String[] subDirs = dir.list((d, name) -> new File(d, name).isDirectory());
+            if (subDirs != null) {
+                for (String subName : subDirs) {
+                    processFolderForImages(new File(dir, subName));
+                }
+            }
+        }
     
         private int countAllFiles(String[] folders) {
             int count = 0;
@@ -457,4 +466,4 @@ public final class MainMenuActivity extends PreferenceActivity {
         String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
         retro.putExtra("EXTERNAL", external);
     }
-}
+} 

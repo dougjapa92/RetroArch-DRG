@@ -210,8 +210,13 @@ public final class MainMenuActivity extends PreferenceActivity {
     
             // Cria .nomedia e atualiza progresso
             processedFiles.addAndGet(processNomediaFolder(new File(BASE_DIR, "assets")));
+            publishProgress((processedFiles.get() * 100) / totalFiles);
+    
             processedFiles.addAndGet(processNomediaFolder(new File(BASE_DIR, "overlays")));
+            publishProgress((processedFiles.get() * 100) / totalFiles);
+    
             processedFiles.addAndGet(processNomediaFolder(new File(BASE_DIR, "system")));
+            publishProgress((processedFiles.get() * 100) / totalFiles);
     
             return true;
         }
@@ -228,19 +233,22 @@ public final class MainMenuActivity extends PreferenceActivity {
             finalStartup();
         }
     
-        // Copia assets e atualiza processedFiles
+        /** Copia todos os assets com progresso */
         private void copyAssetsWithProgress() {
             ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length + 2, 4));
+    
             for (String folder : ASSET_FOLDERS) {
                 executor.submit(() -> {
                     try { copyAssetFolder(folder, new File(BASE_DIR, folder)); } 
                     catch (IOException e) { e.printStackTrace(); }
                 });
             }
+    
             executor.submit(() -> {
                 try { copyAssetFolder(archCores, new File(BASE_DIR, "cores")); } 
                 catch (IOException e) { e.printStackTrace(); }
             });
+    
             executor.submit(() -> {
                 try { copyAssetFolder(archAutoconfig, new File(BASE_DIR, "autoconfig")); } 
                 catch (IOException e) { e.printStackTrace(); }
@@ -253,13 +261,43 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
         }
     
-        // Retorna o número de pastas processadas com .nomedia
+        /** Copia uma pasta de assets recursivamente */
+        private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
+            String[] assets = getAssets().list(assetFolder);
+            if (!targetFolder.exists()) targetFolder.mkdirs();
+    
+            if (assets != null && assets.length > 0) {
+                for (String asset : assets) {
+                    String fullPath = assetFolder + "/" + asset;
+                    File outFile = new File(targetFolder, asset);
+    
+                    // Ignora global.glslp se cores32
+                    if ("cores32".equals(archCores) && fullPath.equals("config/global.glslp")) {
+                        processedFiles.incrementAndGet();
+                        continue;
+                    }
+    
+                    if (getAssets().list(fullPath).length > 0) {
+                        copyAssetFolder(fullPath, outFile);
+                    } else {
+                        try (InputStream in = getAssets().open(fullPath);
+                             FileOutputStream out = new FileOutputStream(outFile)) {
+                            byte[] buffer = new byte[1024];
+                            int read;
+                            while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
+                        }
+                        processedFiles.incrementAndGet();
+                    }
+                }
+            }
+        }
+    
+        /** Retorna o número de pastas processadas com .nomedia */
         private int processNomediaFolder(File dir) {
             if (dir == null || !dir.exists() || !dir.isDirectory()) return 0;
     
             int created = 0;
     
-            // Cria .nomedia se houver imagens
             File[] images = dir.listFiles(f -> f.isFile() && {
                 String name = f.getName().toLowerCase();
                 return name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png");
@@ -276,11 +314,10 @@ public final class MainMenuActivity extends PreferenceActivity {
                 for (File subdir : subdirs) created += processNomediaFolder(subdir);
             }
     
-            publishProgress((processedFiles.addAndGet(created) * 100) / totalFiles);
             return created;
         }
     
-        // Conta pastas que poderão receber .nomedia para o progresso inicial
+        /** Conta pastas que poderão receber .nomedia */
         private int countFoldersForNomedia(File dir) {
             if (dir == null || !dir.exists() || !dir.isDirectory()) return 0;
             int count = 0;
@@ -422,4 +459,4 @@ public final class MainMenuActivity extends PreferenceActivity {
         String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
         retro.putExtra("EXTERNAL", external);
     }
-} 
+}  

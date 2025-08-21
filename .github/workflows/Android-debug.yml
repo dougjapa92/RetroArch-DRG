@@ -12,6 +12,10 @@ permissions:
 
 env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+  KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+  KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+  KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+  KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
 jobs:
   build-phoenix:
@@ -30,6 +34,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y unzip zip curl
+
+      - name: Restore keystore from base64
+        run: |
+          mkdir -p pkg/android/phoenix/keystore
+          echo "$KEYSTORE_BASE64" | base64 -d > pkg/android/phoenix/keystore/release.keystore
 
       - name: Set execute permissions recursively
         run: |

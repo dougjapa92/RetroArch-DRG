@@ -174,7 +174,6 @@ public final class MainMenuActivity extends PreferenceActivity {
         }
     }
 
-
     private void startExtractionOrRetro() {
         boolean firstRun = prefs.getBoolean("firstRun", true);
         if (firstRun) new UnifiedExtractionTask().execute();
@@ -185,7 +184,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         ProgressDialog progressDialog;
         AtomicInteger processedFiles = new AtomicInteger(0);
         int totalFiles = 0;
-    
+
         @Override
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
@@ -202,106 +201,118 @@ public final class MainMenuActivity extends PreferenceActivity {
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);
             progressDialog.show();
-    
-            // Definir archAutoconfig de acordo com a versão do Android
+
             archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
-    
-            totalFiles = countAllFiles(ASSET_FOLDERS) + countAllFiles(new String[]{archCores, archAutoconfig});
+
+            // Conta arquivos e pastas com imagens para progresso
+            totalFiles = countAllFiles(ASSET_FOLDERS)
+                    + countAllFiles(new String[]{archCores, archAutoconfig})
+                    + countFoldersWithImages(new File(BASE_DIR, "assets"))
+                    + countFoldersWithImages(new File(BASE_DIR, "overlays"))
+                    + countFoldersWithImages(new File(BASE_DIR, "system"));
         }
-    
+
         @Override
         protected Boolean doInBackground(Void... voids) {
             ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length + 2, 4));
-    
+
             for (String folder : ASSET_FOLDERS) {
                 executor.submit(() -> {
                     try { copyAssetFolder(folder, new File(BASE_DIR, folder)); }
                     catch (IOException e) { e.printStackTrace(); }
                 });
             }
-    
+
             executor.submit(() -> {
                 try { copyAssetFolder(archCores, new File(BASE_DIR, "cores")); }
                 catch (IOException e) { e.printStackTrace(); }
             });
-    
+
             executor.submit(() -> {
                 try { copyAssetFolder(archAutoconfig, new File(BASE_DIR, "autoconfig")); }
                 catch (IOException e) { e.printStackTrace(); }
             });
-    
+
             executor.shutdown();
             while (!executor.isTerminated()) {
                 publishProgress((processedFiles.get() * 100) / totalFiles);
                 try { Thread.sleep(100); } catch (InterruptedException ignored) {}
             }
-    
+
             try { updateRetroarchCfg(); } catch (IOException e) { return false; }
             return true;
         }
-    
+
         @Override
         protected void onProgressUpdate(Integer... values) { progressDialog.setProgress(values[0]); }
-    
+
         @Override
         protected void onPostExecute(Boolean result) {
             progressDialog.dismiss();
             prefs.edit().putBoolean("firstRun", false).apply();
-        
-            // Cria .nomedia nas pastas com imagens
+
             ExecutorService executor = Executors.newFixedThreadPool(3);
-            
+
             executor.submit(() -> processFolderForImages(new File(BASE_DIR, "assets")));
             executor.submit(() -> processFolderForImages(new File(BASE_DIR, "overlays")));
             executor.submit(() -> processFolderForImages(new File(BASE_DIR, "system")));
-            
+
             executor.shutdown();
             while (!executor.isTerminated()) {
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
+                try { Thread.sleep(100); } catch (InterruptedException e) { e.printStackTrace(); }
             }
-        
+
             finalStartup();
         }
-        
+
         /** Cria .nomedia em uma pasta se encontrar ao menos uma imagem, e continua nas subpastas */
         private void processFolderForImages(File dir) {
             if (dir == null || !dir.exists() || !dir.isDirectory()) return;
-        
-            // Verifica se existe alguma imagem diretamente na pasta
+
             String[] images = dir.list((d, name) -> {
                 String lower = name.toLowerCase();
                 return lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png");
             });
-        
+
             if (images != null && images.length > 0) {
                 File nomedia = new File(dir, ".nomedia");
-                try {
-                    if (!nomedia.exists()) nomedia.createNewFile();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-                // **não retornamos aqui**; queremos processar também as subpastas
+                try { if (!nomedia.exists()) nomedia.createNewFile(); } 
+                catch (IOException e) { e.printStackTrace(); }
             }
-        
-            // Lista subpastas e processa recursivamente
+
             File[] subDirs = dir.listFiles(File::isDirectory);
             if (subDirs != null) {
-                for (File subDir : subDirs) {
-                    processFolderForImages(subDir);
-                }
+                for (File subDir : subDirs) processFolderForImages(subDir);
             }
         }
-    
+
+        /** Conta pastas que terão .nomedia, incluindo subpastas */
+        private int countFoldersWithImages(File dir) {
+            if (dir == null || !dir.exists() || !dir.isDirectory()) return 0;
+
+            int count = 0;
+
+            String[] images = dir.list((d, name) -> {
+                String lower = name.toLowerCase();
+                return lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png");
+            });
+
+            if (images != null && images.length > 0) count++;
+
+            File[] subDirs = dir.listFiles(File::isDirectory);
+            if (subDirs != null) {
+                for (File subDir : subDirs) count += countFoldersWithImages(subDir);
+            }
+
+            return count;
+        }
+
         private int countAllFiles(String[] folders) {
             int count = 0;
             for (String folder : folders) count += countFilesRecursive(folder);
             return count;
         }
-    
+
         private int countFilesRecursive(String assetFolder) {
             try {
                 String[] assets = getAssets().list(assetFolder);
@@ -311,21 +322,21 @@ public final class MainMenuActivity extends PreferenceActivity {
                 return total;
             } catch (IOException e) { return 0; }
         }
-    
+
         private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
             String[] assets = getAssets().list(assetFolder);
             if (!targetFolder.exists()) targetFolder.mkdirs();
-    
+
             if (assets != null && assets.length > 0) {
                 for (String asset : assets) {
                     String fullPath = assetFolder + "/" + asset;
                     File outFile = new File(targetFolder, asset);
-    
+
                     if ("cores32".equals(archCores) && fullPath.equals("config/global.glslp")) {
                         processedFiles.incrementAndGet();
                         continue;
                     }
-    
+
                     if (getAssets().list(fullPath).length > 0) {
                         copyAssetFolder(fullPath, outFile);
                     } else {
@@ -466,4 +477,4 @@ public final class MainMenuActivity extends PreferenceActivity {
         String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
         retro.putExtra("EXTERNAL", external);
     }
-} 
+}  

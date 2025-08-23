@@ -360,6 +360,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             Map<String, String> cfgFlags = new HashMap<>();
             
             // Flags Globais
+            cfgFlags.put("menu_driver", "ozone");
             cfgFlags.put("menu_scale_factor", "0.600000");
             cfgFlags.put("ozone_menu_color_theme", "10");
             cfgFlags.put("input_overlay_opacity", "0.700000");

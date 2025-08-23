@@ -42,7 +42,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     private SharedPreferences prefs;
 
     private final String[] ASSET_FOLDERS = {
-            "assets", "database", "filters", "info", "overlays", "shaders", "system", "config", "remaps"
+            "assets", "database", "filters", "info", "overlays", "shaders", "system", "config", "remaps", "cheats"
     };
 
     private final Map<String, String> ASSET_FLAGS = new HashMap<String, String>() {{
@@ -55,6 +55,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         put("system", "system_directory");
         put("config", "rgui_config_directory");
         put("remaps", "input_remapping_directory");
+        put("cheats", "cheat_database_path");
     }};
 
     private final File BASE_DIR = new File(Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");

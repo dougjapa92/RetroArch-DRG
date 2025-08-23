@@ -42,7 +42,8 @@ public final class MainMenuActivity extends PreferenceActivity {
     private SharedPreferences prefs;
 
     private final String[] ASSET_FOLDERS = {
-            "assets", "database", "filters", "info", "overlays", "shaders", "system", "config", "remaps", "cheats"
+        "assets", "database", "filters", "info", "overlays", 
+        "shaders", "system", "config", "remaps", "cheats"
     };
 
     private final Map<String, String> ASSET_FLAGS = new HashMap<String, String>() {{

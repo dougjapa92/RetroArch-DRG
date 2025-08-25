@@ -70,10 +70,17 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     private static int selectedInput = -1;
 
     /**
-     * Cria o novo CFG para controle desconhecido.
+     * Wrapper NÃO ESTÁTICO chamado via JNI (sem precisar de Context explícito).
      */
-    public static void createConfigForUnknownController(int vendorId, int productId,
-                                                        String deviceName, Context context) {
+    public void createConfigForUnknownController(int vendorId, int productId, String deviceName) {
+        createConfigForUnknownControllerInternal(vendorId, productId, deviceName, this);
+    }
+
+    /**
+     * Método interno (privado/estático) que contém a lógica real.
+     */
+    private static void createConfigForUnknownControllerInternal(int vendorId, int productId,
+                                                                 String deviceName, Context context) {
         selectedInput = -1;
         latch = new CountDownLatch(1);
 
@@ -86,12 +93,10 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 boolean pressed = latch.await(TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
                 if (!pressed) {
-                    // Timeout de 10s, encerra sem nova mensagem
-                    break;
+                    break; // timeout de 10s
                 }
 
                 if (selectedInput == -1) {
-                    // Botão errado
                     wrongAttempts++;
                     if (wrongAttempts < MAX_WRONG_ATTEMPTS) {
                         Toast.makeText(context, "Pressione Select para autoconfigurar o controle:", Toast.LENGTH_SHORT).show();
@@ -118,13 +123,12 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         } catch (InterruptedException e) {
             Toast.makeText(context, "Autoconfiguração interrompida", Toast.LENGTH_SHORT).show();
         } finally {
-            latch = null; // garante que sai do modo de captura
+            latch = null;
         }
     }
 
     /**
-     * Trata os eventos de tecla enviados pela Activity.
-     * Retorna true se consumiu o evento.
+     * Trata eventos de tecla.
      */
     public static boolean handleKeyEvent(KeyEvent event) {
         if (latch == null)
@@ -179,7 +183,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         }
     }
 
-    // ===================== FIM DO CÓDIGO INCORPORADO DO CONFIGHELPER =====================
+    // ===================== FIM DO CONFIGHELPER =====================
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -283,7 +287,8 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     private void attemptToggleNvidiaCursorVisibility(boolean state) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
             try {
-                Method mInputManager_setCursorVisibility = InputManager.class.getMethod("setCursorVisibility", boolean.class);
+                Method mInputManager_setCursorVisibility =
+                        InputManager.class.getMethod("setCursorVisibility", boolean.class);
                 InputManager inputManager = (InputManager) getSystemService(Context.INPUT_SERVICE);
                 mInputManager_setCursorVisibility.invoke(inputManager, !state);
             } catch (NoSuchMethodException e) {

@@ -4,7 +4,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.Message;
 import android.view.PointerIcon;
 import android.view.View;
 import android.view.WindowManager;
@@ -23,15 +22,12 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Method;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 public final class RetroActivityFuture extends RetroActivityCamera {
 
     private boolean quitfocus = false;
     private View mDecorView;
     private static int selectedInput = -1;
-    private static CountDownLatch latch;
 
     private static final int HANDLER_WHAT_TOGGLE_IMMERSIVE = 1;
     private static final int HANDLER_WHAT_TOGGLE_POINTER_CAPTURE = 2;
@@ -43,7 +39,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
 
     private final Handler mHandler = new Handler(Looper.getMainLooper()) {
         @Override
-        public void handleMessage(Message msg) {
+        public void handleMessage(android.os.Message msg) {
             boolean state = (msg.arg1 == HANDLER_ARG_TRUE);
             switch (msg.what) {
                 case HANDLER_WHAT_TOGGLE_IMMERSIVE: attemptToggleImmersiveMode(state); break;
@@ -65,11 +61,10 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         createConfigForUnknownControllerInternal(vendorId, productId, deviceName, this);
     }
 
-    /** Método interno com AlertDialog, contador e bordas arredondadas */
+    /** AlertDialog com bordas arredondadas, largura ajustada e timeout */
     private static void createConfigForUnknownControllerInternal(int vendorId, int productId,
                                                                  String deviceName, Context context) {
         selectedInput = -1;
-        latch = new CountDownLatch(1);
         Log.i("RetroActivityFuture", "Iniciando criação de CFG para: " + deviceName);
 
         new Handler(Looper.getMainLooper()).post(() -> {
@@ -79,7 +74,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             AlertDialog dialog = builder.create();
             dialog.show();
 
-            // Fundo branco com cantos arredondados
+            // Bordas arredondadas e largura ajustada
             if (dialog.getWindow() != null) {
                 GradientDrawable bg = new GradientDrawable();
                 bg.setColor(0xFFFFFFFF);
@@ -87,19 +82,12 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 dialog.getWindow().setBackgroundDrawable(bg);
 
                 WindowManager.LayoutParams lp = dialog.getWindow().getAttributes();
-                lp.width = (int)(context.getResources().getDisplayMetrics().density * 300); // largura fixa ~300dp
+                lp.width = (int) (context.getResources().getDisplayMetrics().widthPixels * 0.85); // 85% da largura
                 lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
                 dialog.getWindow().setAttributes(lp);
             }
 
-            dialog.setCancelable(false);
-            dialog.setButton(AlertDialog.BUTTON_NEGATIVE, "Cancelar", (d, which) -> {
-                selectedInput = -1;
-                dialog.dismiss();
-                latch.countDown();
-                Toast.makeText(context, "Autoconfiguração cancelada", Toast.LENGTH_SHORT).show();
-            });
-
+            // Timeout e mensagem dinâmica
             final Handler countdownHandler = new Handler(Looper.getMainLooper());
             final int[] remaining = {TIMEOUT_SECONDS};
 
@@ -108,7 +96,12 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 public void run() {
                     if (selectedInput != -1 || remaining[0] <= 0) {
                         dialog.dismiss();
-                        latch.countDown();
+                        if (selectedInput != -1) {
+                            onConfigFinished(context, deviceName, vendorId, productId);
+                        } else {
+                            Log.i("RetroActivityFuture", "Timeout ou cancelamento");
+                            Toast.makeText(context, "Autoconfiguração cancelada por timeout", Toast.LENGTH_SHORT).show();
+                        }
                         return;
                     }
                     dialog.setMessage("Pressione Select (4,109,196) no controle.\nTimeout: " + remaining[0] + "s");
@@ -116,49 +109,43 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                     countdownHandler.postDelayed(this, 1000);
                 }
             };
-
             countdownHandler.post(countdownRunnable);
+
+            dialog.setCancelable(false);
+            dialog.setButton(AlertDialog.BUTTON_NEGATIVE, "Cancelar", (d, which) -> {
+                Log.i("RetroActivityFuture", "Usuário cancelou o diálogo");
+                selectedInput = -1;
+                dialog.dismiss();
+                Toast.makeText(context, "Autoconfiguração cancelada", Toast.LENGTH_SHORT).show();
+            });
         });
-
-        try {
-            latch.await(TIMEOUT_SECONDS + 1, TimeUnit.SECONDS); // espera C continuar
-        } catch (InterruptedException e) {
-            Log.i("RetroActivityFuture", "Espera interrompida");
-        }
-
-        if (selectedInput != -1) {
-            onConfigFinished(context, deviceName, vendorId, productId);
-        } else {
-            Log.i("RetroActivityFuture", "Autoconfiguração cancelada ou timeout");
-            Toast.makeText(context, "Autoconfiguração cancelada ou timeout", Toast.LENGTH_SHORT).show();
-        }
-
-        latch = null;
     }
 
     /** Chamada quando input detectado */
     private static void onConfigFinished(Context context, String deviceName, int vendorId, int productId) {
-        Log.i("RetroActivityFuture", "Input detectado: " + selectedInput);
-        String baseFile;
-        switch (selectedInput) {
-            case INPUT_SELECT_4: baseFile = "Base4.cfg"; break;
-            case INPUT_SELECT_109: baseFile = "Base109.cfg"; break;
-            case INPUT_SELECT_196: baseFile = "Base196.cfg"; break;
-            default: baseFile = "Base4.cfg"; break;
+        if (selectedInput != -1) {
+            Log.i("RetroActivityFuture", "Input detectado: " + selectedInput);
+            String baseFile;
+            switch (selectedInput) {
+                case INPUT_SELECT_4: baseFile = "Base4.cfg"; break;
+                case INPUT_SELECT_109: baseFile = "Base109.cfg"; break;
+                case INPUT_SELECT_196: baseFile = "Base196.cfg"; break;
+                default: baseFile = "Base4.cfg"; break;
+            }
+            createCfgFromBase(baseFile, deviceName, vendorId, productId, context);
         }
-        createCfgFromBase(baseFile, deviceName, vendorId, productId, context);
     }
 
-    /** Captura input físico do controle */
+    /** Captura o input físico */
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (event.getAction() == KeyEvent.ACTION_DOWN) {
-            int keyCode = event.getKeyCode();
-            if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {
-                selectedInput = keyCode;
-                if (latch != null) latch.countDown();
-                return true;
-            }
+        if (event.getAction() != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event);
+
+        int keyCode = event.getKeyCode();
+        if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {
+            Log.i("RetroActivityFuture", "KeyEvent detectado: " + keyCode);
+            selectedInput = keyCode;
+            return true;
         }
         return super.dispatchKeyEvent(event);
     }
@@ -182,7 +169,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             writer.write("input_product_id = " + productId + "\n");
             writer.flush();
             Log.i("RetroActivityFuture", "Configuração criada: " + output.getName());
-            Toast.makeText(context, "Arquivo " + output.getName() + " criado com sucesso", Toast.LENGTH_SHORT).show();
+            Toast.makeText(context, "Configuração criada: " + output.getName(), Toast.LENGTH_SHORT).show();
         } catch (IOException e) {
             Log.e("RetroActivityFuture", "Erro ao criar CFG: " + e.getMessage());
             Toast.makeText(context, "Erro ao criar CFG: " + e.getMessage(), Toast.LENGTH_LONG).show();
@@ -249,7 +236,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
 
     private void mHandlerSendUiMessage(int what, boolean state) {
         int arg1 = state ? HANDLER_ARG_TRUE : HANDLER_ARG_FALSE;
-        Message message = mHandler.obtainMessage(what, arg1, -1);
+        android.os.Message message = mHandler.obtainMessage(what, arg1, -1);
         mHandler.sendMessageDelayed(message, HANDLER_MESSAGE_DELAY_DEFAULT_MS);
     }
 
@@ -294,7 +281,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 Method m = InputManager.class.getMethod("setCursorVisibility", boolean.class);
                 InputManager im = (InputManager) getSystemService(Context.INPUT_SERVICE);
                 m.invoke(im, !state);
-            } catch (NoSuchMethodException e) { } 
+            } catch (NoSuchMethodException e) { }
             catch (Exception e) { Log.w("RetroActivityFuture", e.getMessage()); }
         }
     }

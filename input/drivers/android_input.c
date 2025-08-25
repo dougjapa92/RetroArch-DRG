@@ -1212,17 +1212,19 @@ static void handle_hotplug(android_input_t *android,
        }
        else
        {
-           jclass cls = (*env)->FindClass(env, "com/retroarch/browser/retroactivity/RetroActivityFuture");
+           jobject activity = g_android->activity->clazz;
+           jclass cls = (*env)->GetObjectClass(env, activity); // pega a classe da Activity diretamente
+   
            if (!cls)
            {
-               RARCH_ERR("Classe Java RetroActivityFuture não encontrada\n");
+               RARCH_ERR("Classe da Activity não encontrada\n");
            }
            else
            {
-               jmethodID mid = (*env)->GetStaticMethodID(
+               jmethodID mid = (*env)->GetMethodID(
                    env, cls,
                    "createConfigForUnknownController",
-                   "(IILjava/lang/String;Landroid/content/Context;)V"
+                   "(IILjava/lang/String;)V" // versão não estática
                );
    
                if (!mid)
@@ -1232,9 +1234,8 @@ static void handle_hotplug(android_input_t *android,
                else
                {
                    jstring jDeviceName = (*env)->NewStringUTF(env, device_name);
-                   jobject activity = g_android->activity->clazz;
    
-                   (*env)->CallStaticVoidMethod(env, cls, mid, vendorId, productId, jDeviceName, activity);
+                   (*env)->CallVoidMethod(env, activity, mid, vendorId, productId, jDeviceName);
    
                    if ((*env)->ExceptionCheck(env))
                    {

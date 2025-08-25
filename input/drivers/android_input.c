@@ -47,6 +47,42 @@
 #include "../../retroarch.h"
 #include "../../runloop.h"
 
+#include <jni.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <dirent.h>   // para opendir/readdir/closedir
+#include <limits.h>   // para PATH_MAX
+
+#define INPUT_AUTOCONFIG_DIR "/sdcard/emulated/0/Android/media/com.retroarch/media/autoconfig/android"
+
+#define RARCH_LOG(...)   __android_log_print(ANDROID_LOG_INFO, "RetroArch", __VA_ARGS__)
+#define RARCH_WARN(...)  __android_log_print(ANDROID_LOG_WARN, "RetroArch", __VA_ARGS__)
+#define RARCH_ERR(...)   __android_log_print(ANDROID_LOG_ERROR, "RetroArch", __VA_ARGS__)
+
+// Ponteiro global do JVM, inicializado no JNI_OnLoad
+JavaVM *g_vm = NULL;
+
+JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved)
+{
+    g_vm = vm;  // inicializa o ponteiro global
+    return JNI_VERSION_1_6;
+};
+
+#ifndef strlcpy
+static inline size_t strlcpy(char *dst, const char *src, size_t siz)
+{
+    size_t len = strlen(src);
+    if (siz) {
+        size_t copy = (len >= siz) ? siz - 1 : len;
+        memcpy(dst, src, copy);
+        dst[copy] = '\0';
+    }
+    return len;
+}
+#endif 
+
 #define MAX_TOUCH 16
 #define MAX_NUM_KEYBOARDS 3
 #define DEFAULT_ASENSOR_EVENT_RATE 60
@@ -1038,60 +1074,154 @@ static bool is_configured_as_physical_keyboard(int vendor_id, int product_id, co
     return false;
 }
 
+/* Verifica se já existe autoconfig para o controle */
+static int input_autoconfigure_exists(const char *device_name, int vendorId, int productId)
+{
+    if (!device_name || device_name[0] == '\0')
+    {
+        RARCH_ERR("Device name vazio\n");
+        return 0;
+    }
+
+    DIR *dir = opendir(INPUT_AUTOCONFIG_DIR);
+    if (!dir)
+    {
+        RARCH_ERR("Falha ao abrir diretório de cfg\n");
+        return 0;
+    }
+
+    char expected_name[PATH_MAX];
+    snprintf(expected_name, sizeof(expected_name), "%s.cfg", device_name);
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL)
+    {
+        if (strcmp(entry->d_name, expected_name) == 0)
+        {
+            char filepath[PATH_MAX];
+            snprintf(filepath, sizeof(filepath), "%s/%s", INPUT_AUTOCONFIG_DIR, entry->d_name);
+
+            FILE *fp = fopen(filepath, "r");
+            if (!fp)
+            {
+                RARCH_ERR("Falha ao abrir cfg %s\n", filepath);
+                closedir(dir);
+                return 0;
+            }
+
+            int cfg_vendor = -1, cfg_product = -1;
+            char line[512];
+            while (fgets(line, sizeof(line), fp))
+            {
+                sscanf(line, "input_vendor_id = \"%d\"", &cfg_vendor);
+                sscanf(line, "input_product_id = \"%d\"", &cfg_product);
+            }
+
+            fclose(fp);
+            closedir(dir);
+
+            if (cfg_vendor == vendorId && cfg_product == productId)
+            {
+                RARCH_LOG("CFG existente e IDs válidos: %s\n", filepath);
+                return 1;
+            }
+            else
+            {
+                RARCH_WARN("CFG existente mas IDs diferentes: %s\n", filepath);
+                return 0;
+            }
+        }
+    }
+
+    closedir(dir);
+    RARCH_WARN("CFG não encontrado para %s, será criado novo\n", device_name);
+    return 0;
+}
+
+/* Chamado quando pluga novo controle */
 static void handle_hotplug(android_input_t *android,
       struct android_app *android_app, int *port, int id,
       int source)
 {
-   char device_name[256];
-   char name_buf[256];
-   int vendorId             = 0;
-   int productId            = 0;
+    char device_name[256] = {0};
+    char name_buf[256] = {0};
+    int vendorId = 0, productId = 0;
 
-   device_name[0] = name_buf[0] = '\0';
+    if (!engine_lookup_name(device_name, &vendorId, &productId, sizeof(device_name), id))
+    {
+        RARCH_ERR("Falha ao obter nome do dispositivo\n");
+        return;
+    }
 
-   if (!engine_lookup_name(device_name, &vendorId,
-            &productId, sizeof(device_name), id))
-      return;
+    if (source == AINPUT_SOURCE_KEYBOARD && kbd_num < MAX_NUM_KEYBOARDS)
+    {
+        kbd_id[kbd_num++] = id;
+        RARCH_LOG("Teclado físico registrado: %s\n", device_name);
+        return;
+    }
 
-   /* Se for teclado */
-   if (source == AINPUT_SOURCE_KEYBOARD && kbd_num < MAX_NUM_KEYBOARDS)
-   {
-      kbd_id[kbd_num] = id;
-      kbd_num++;
-      return;
-   }
+    if ((source & AINPUT_SOURCE_KEYBOARD) && kbd_num < MAX_NUM_KEYBOARDS &&
+        is_configured_as_physical_keyboard(vendorId, productId, device_name))
+    {
+        kbd_id[kbd_num++] = id;
+        RARCH_LOG("Teclado físico configurado via IDs: %s\n", device_name);
+        return;
+    }
 
-   if ((source & AINPUT_SOURCE_KEYBOARD) && kbd_num < MAX_NUM_KEYBOARDS &&
-       is_configured_as_physical_keyboard(vendorId, productId, device_name))
-   {
-      kbd_id[kbd_num] = id;
-      kbd_num++;
-      return;
-   }
+    if (!string_is_empty(device_name))
+        strlcpy(name_buf, device_name, sizeof(name_buf));
 
-   /* Caso não seja teclado, usa o próprio nome do dispositivo */
-   if (!string_is_empty(device_name))
-      strlcpy(name_buf, device_name, sizeof(name_buf));
+    if (*port < 0)
+        *port = android->pads_connected;
 
-   if (*port < 0)
-      *port = android->pads_connected;
+    if (!input_autoconfigure_exists(name_buf, vendorId, productId))
+    {
+        RARCH_LOG("Chamando Java para criar cfg para %s\n", name_buf);
 
-   input_autoconfigure_connect(
-         name_buf,
-         NULL,
-         android_joypad.ident,
-         *port,
-         vendorId,
-         productId);
+        JNIEnv *env;
+        if ((*g_vm)->AttachCurrentThread(g_vm, &env, NULL) == JNI_OK)
+        {
+            jclass cls = (*env)->FindClass(env, "com/retroarch/browser/RetroActivityFuture");
+            if (cls)
+            {
+                jmethodID mid = (*env)->GetStaticMethodID(env, cls,
+                    "createConfigForUnknownController",
+                    "(IILjava/lang/String;Landroid/content/Context;)V");
+                if (mid)
+                {
+                    jstring jDeviceName = (*env)->NewStringUTF(env, device_name);
+                    jobject activity = g_android->activity->clazz;
 
-   android->pad_states[android->pads_connected].id   =
-      g_android->id[android->pads_connected]         = id;
-   android->pad_states[android->pads_connected].port = *port;
+                    (*env)->CallStaticVoidMethod(env, cls, mid, vendorId, productId, jDeviceName, activity);
 
-   strlcpy(android->pad_states[*port].name, name_buf,
-         sizeof(android->pad_states[*port].name));
+                    if ((*env)->ExceptionCheck(env))
+                    {
+                        (*env)->ExceptionDescribe(env);
+                        (*env)->ExceptionClear(env);
+                        RARCH_ERR("Exceção no Java\n");
+                    }
 
-   android->pads_connected++;
+                    (*env)->DeleteLocalRef(env, jDeviceName);
+                }
+                (*env)->DeleteLocalRef(env, cls);
+            }
+            (*g_vm)->DetachCurrentThread(g_vm);
+        }
+    }
+    else
+    {
+        RARCH_LOG("CFG já existente, não chamando Java: %s\n", name_buf);
+    }
+
+    input_autoconfigure_connect(name_buf, NULL, android_joypad.ident, *port, vendorId, productId);
+
+    android->pad_states[android->pads_connected].id =
+        g_android->id[android->pads_connected] = id;
+    android->pad_states[android->pads_connected].port = *port;
+    strlcpy(android->pad_states[*port].name, name_buf, sizeof(android->pad_states[*port].name));
+
+    android->pads_connected++;
+    RARCH_LOG("Controle registrado com sucesso: %s\n", name_buf);
 }
 
 static int android_input_get_id(AInputEvent *event)

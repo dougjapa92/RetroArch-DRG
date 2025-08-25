@@ -1174,29 +1174,60 @@ static void handle_hotplug(android_input_t *android,
     if (*port < 0)
         *port = android->pads_connected;
 
-    if (!input_autoconfigure_exists(name_buf, vendorId, productId))
-    {
-        RARCH_LOG("Chamando Java para criar cfg para %s\n", name_buf);
+   if (!input_autoconfigure_exists(name_buf, vendorId, productId))
+   {
+       RARCH_LOG("Chamando Java para criar cfg para %s\n", name_buf);
    
-        JNIEnv *env;
-        if ((*g_vm)->AttachCurrentThread(g_vm, &env, NULL) == JNI_OK)
-        {
-            jclass cls = (*env)->FindClass(env, "com/retroarch/browser/RetroActivityFuture");
-            jmethodID mid = (*env)->GetStaticMethodID(env, cls,
-               "createConfigForUnknownController",
-               "(IILjava/lang/String;Landroid/content/Context;)V");
+       JNIEnv *env;
+       if ((*g_vm)->AttachCurrentThread(g_vm, &env, NULL) != JNI_OK)
+       {
+           RARCH_ERR("Falha ao anexar thread ao JVM\n");
+       }
+       else
+       {
+           jclass cls = (*env)->FindClass(env, "com/retroarch/browser/RetroActivityFuture");
+           if (!cls)
+           {
+               RARCH_ERR("Classe Java RetroActivityFuture não encontrada\n");
+           }
+           else
+           {
+               jmethodID mid = (*env)->GetStaticMethodID(
+                   env, cls,
+                   "createConfigForUnknownController",
+                   "(IILjava/lang/String;Landroid/content/Context;)V"
+               );
    
-            jstring jDeviceName = (*env)->NewStringUTF(env, name_buf);
-            jobject activity = g_android->activity->clazz;
+               if (!mid)
+               {
+                   RARCH_ERR("Método createConfigForUnknownController não encontrado\n");
+               }
+               else
+               {
+                   jstring jDeviceName = (*env)->NewStringUTF(env, device_name);
+                   jobject activity = g_android->activity->clazz;
    
-            (*env)->CallStaticVoidMethod(env, cls, mid, vendorId, productId, jDeviceName, activity);
+                   (*env)->CallStaticVoidMethod(env, cls, mid, vendorId, productId, jDeviceName, activity);
    
-            (*env)->DeleteLocalRef(env, jDeviceName);
-            (*env)->DeleteLocalRef(env, cls);
+                   if ((*env)->ExceptionCheck(env))
+                   {
+                       (*env)->ExceptionDescribe(env);
+                       (*env)->ExceptionClear(env);
+                       RARCH_ERR("Exceção lançada durante createConfigForUnknownController\n");
+                   }
    
-            (*g_vm)->DetachCurrentThread(g_vm);
-        }
-    }
+                   (*env)->DeleteLocalRef(env, jDeviceName);
+               }
+               (*env)->DeleteLocalRef(env, cls);
+           }
+           (*g_vm)->DetachCurrentThread(g_vm);
+       }
+   }
+   else
+   {
+       RARCH_LOG("CFG já existente, não chamando Java: %s\n", name_buf);
+   }
+
     else
     {
         RARCH_LOG("CFG já existente, não chamando Java: %s\n", name_buf);

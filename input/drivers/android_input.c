@@ -1090,46 +1090,73 @@ static int input_autoconfigure_exists(const char *device_name, int vendorId, int
         return 0;
     }
 
-    char expected_name[PATH_MAX];
-    snprintf(expected_name, sizeof(expected_name), "%s.cfg", device_name);
-
     struct dirent *entry;
+    char filepath[PATH_MAX];
+
+    // Procura pelo arquivo device_name.cfg
+    snprintf(filepath, sizeof(filepath), "%s/%s.cfg", INPUT_AUTOCONFIG_DIR, device_name);
+    FILE *fp = fopen(filepath, "r");
+    if (fp)
+    {
+        int cfg_vendor = -1, cfg_product = -1;
+        char line[512];
+        while (fgets(line, sizeof(line), fp))
+        {
+            sscanf(line, "input_vendor_id = \"%d\"", &cfg_vendor);
+            sscanf(line, "input_product_id = \"%d\"", &cfg_product);
+        }
+        fclose(fp);
+
+        if (cfg_vendor == vendorId && cfg_product == productId)
+        {
+            RARCH_LOG("CFG existente e IDs válidos: %s\n", filepath);
+            closedir(dir);
+            return 1;
+        }
+        else
+        {
+            RARCH_WARN("CFG existente mas IDs diferentes: %s\n", filepath);
+            closedir(dir);
+            return 0;
+        }
+    }
+
+    // Procura pelo device_name dentro de input_device_display_name de todos os CFGs
+    rewinddir(dir);
     while ((entry = readdir(dir)) != NULL)
     {
-        if (strcmp(entry->d_name, expected_name) == 0)
+        if (entry->d_type != DT_REG) // apenas arquivos
+            continue;
+
+        snprintf(filepath, sizeof(filepath), "%s/%s", INPUT_AUTOCONFIG_DIR, entry->d_name);
+        fp = fopen(filepath, "r");
+        if (!fp)
+            continue;
+
+        int cfg_vendor = -1, cfg_product = -1;
+        char line[512];
+        int match_found = 0;
+        while (fgets(line, sizeof(line), fp))
         {
-            char filepath[PATH_MAX];
-            snprintf(filepath, sizeof(filepath), "%s/%s", INPUT_AUTOCONFIG_DIR, entry->d_name);
+            sscanf(line, "input_vendor_id = \"%d\"", &cfg_vendor);
+            sscanf(line, "input_product_id = \"%d\"", &cfg_product);
 
-            FILE *fp = fopen(filepath, "r");
-            if (!fp)
-            {
-                RARCH_ERR("Falha ao abrir cfg %s\n", filepath);
-                closedir(dir);
-                return 0;
-            }
+            if (strstr(line, "input_device_display_name") && strstr(line, device_name))
+                match_found = 1;
+        }
+        fclose(fp);
 
-            int cfg_vendor = -1, cfg_product = -1;
-            char line[512];
-            while (fgets(line, sizeof(line), fp))
-            {
-                sscanf(line, "input_vendor_id = \"%d\"", &cfg_vendor);
-                sscanf(line, "input_product_id = \"%d\"", &cfg_product);
-            }
-
-            fclose(fp);
+        if (match_found && cfg_vendor == vendorId && cfg_product == productId)
+        {
+            RARCH_LOG("CFG existente (display_name) e IDs válidos: %s\n", filepath);
             closedir(dir);
-
-            if (cfg_vendor == vendorId && cfg_product == productId)
-            {
-                RARCH_LOG("CFG existente e IDs válidos: %s\n", filepath);
-                return 1;
-            }
-            else
-            {
-                RARCH_WARN("CFG existente mas IDs diferentes: %s\n", filepath);
-                return 0;
-            }
+            return 1;
+        }
+        else if (match_found)
+        {
+            RARCH_WARN("CFG existente (display_name) mas IDs diferentes: %s\n", filepath);
+            closedir(dir);
+            return 0;
         }
     }
 

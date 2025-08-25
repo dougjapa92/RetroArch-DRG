@@ -1177,34 +1177,23 @@ static void handle_hotplug(android_input_t *android,
     if (!input_autoconfigure_exists(name_buf, vendorId, productId))
     {
         RARCH_LOG("Chamando Java para criar cfg para %s\n", name_buf);
-
+   
         JNIEnv *env;
         if ((*g_vm)->AttachCurrentThread(g_vm, &env, NULL) == JNI_OK)
         {
             jclass cls = (*env)->FindClass(env, "com/retroarch/browser/RetroActivityFuture");
-            if (cls)
-            {
-                jmethodID mid = (*env)->GetStaticMethodID(env, cls,
-                    "createConfigForUnknownController",
-                    "(IILjava/lang/String;Landroid/content/Context;)V");
-                if (mid)
-                {
-                    jstring jDeviceName = (*env)->NewStringUTF(env, device_name);
-                    jobject activity = g_android->activity->clazz;
-
-                    (*env)->CallStaticVoidMethod(env, cls, mid, vendorId, productId, jDeviceName, activity);
-
-                    if ((*env)->ExceptionCheck(env))
-                    {
-                        (*env)->ExceptionDescribe(env);
-                        (*env)->ExceptionClear(env);
-                        RARCH_ERR("Exceção no Java\n");
-                    }
-
-                    (*env)->DeleteLocalRef(env, jDeviceName);
-                }
-                (*env)->DeleteLocalRef(env, cls);
-            }
+            jmethodID mid = (*env)->GetStaticMethodID(env, cls,
+               "createConfigForUnknownController",
+               "(IILjava/lang/String;Landroid/content/Context;)V");
+   
+            jstring jDeviceName = (*env)->NewStringUTF(env, name_buf);
+            jobject activity = g_android->activity->clazz;
+   
+            (*env)->CallStaticVoidMethod(env, cls, mid, vendorId, productId, jDeviceName, activity);
+   
+            (*env)->DeleteLocalRef(env, jDeviceName);
+            (*env)->DeleteLocalRef(env, cls);
+   
             (*g_vm)->DetachCurrentThread(g_vm);
         }
     }

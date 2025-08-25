@@ -1228,11 +1228,6 @@ static void handle_hotplug(android_input_t *android,
        RARCH_LOG("CFG já existente, não chamando Java: %s\n", name_buf);
    }
 
-    else
-    {
-        RARCH_LOG("CFG já existente, não chamando Java: %s\n", name_buf);
-    }
-
     input_autoconfigure_connect(name_buf, NULL, android_joypad.ident, *port, vendorId, productId);
 
     android->pad_states[android->pads_connected].id =

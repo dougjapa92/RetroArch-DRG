@@ -14,6 +14,7 @@ import android.hardware.input.InputManager;
 import android.util.Log;
 import android.widget.Toast;
 import android.app.AlertDialog;
+import android.graphics.drawable.GradientDrawable;
 
 import com.retroarch.browser.preferences.util.ConfigFile;
 import com.retroarch.browser.preferences.util.UserPreferences;
@@ -22,13 +23,12 @@ import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Method;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 
 public final class RetroActivityFuture extends RetroActivityCamera {
 
     private boolean quitfocus = false;
     private View mDecorView;
+    private static int selectedInput = -1;
 
     private static final int HANDLER_WHAT_TOGGLE_IMMERSIVE = 1;
     private static final int HANDLER_WHAT_TOGGLE_POINTER_CAPTURE = 2;
@@ -59,73 +59,81 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         }
     };
 
-    // ===================== AUTOCONFIGURATION =====================
+    // Input constants
     private static final int INPUT_SELECT_4 = 4;
     private static final int INPUT_SELECT_109 = 109;
     private static final int INPUT_SELECT_196 = 196;
-    private static final int MAX_WRONG_ATTEMPTS = 5;
     private static final int TIMEOUT_SECONDS = 10;
-
-    private static CountDownLatch latch;
-    private static int selectedInput = -1;
 
     /** Wrapper chamado via JNI */
     public void createConfigForUnknownController(int vendorId, int productId, String deviceName) {
         createConfigForUnknownControllerInternal(vendorId, productId, deviceName, this);
     }
 
-    /** Método interno com AlertDialog + CountDownLatch */
+    /** Método interno com AlertDialog, contador de timeout e bordas arredondadas */
     private static void createConfigForUnknownControllerInternal(int vendorId, int productId,
                                                                  String deviceName, Context context) {
         selectedInput = -1;
-        latch = new CountDownLatch(1);
-
         Log.i("RetroActivityFuture", "Iniciando criação de CFG para: " + deviceName);
-
-        final CountDownLatch dialogLatch = new CountDownLatch(1);
 
         new Handler(Looper.getMainLooper()).post(() -> {
             Log.i("RetroActivityFuture", "Criando AlertDialog na UI thread");
 
             AlertDialog.Builder builder = new AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Light_Dialog_Alert);
             builder.setTitle("Autoconfiguração de Controle");
-            builder.setMessage("Pressione Select para autoconfigurar o controle.");
-            builder.setCancelable(false);
-            builder.setNegativeButton("Cancelar", (dialog, which) -> {
-                Log.i("RetroActivityFuture", "Usuário cancelou o diálogo");
-                selectedInput = -1;
-                latch.countDown();
-            });
 
             AlertDialog dialog = builder.create();
             dialog.show();
 
-            // Força fundo branco
-            dialog.getWindow().setBackgroundDrawableResource(android.R.color.white);
+            // Fundo branco com cantos arredondados
+            if (dialog.getWindow() != null) {
+                GradientDrawable bg = new GradientDrawable();
+                bg.setColor(0xFFFFFFFF);
+                bg.setCornerRadius(24f);
+                dialog.getWindow().setBackgroundDrawable(bg);
 
-            Log.i("RetroActivityFuture", "Dialog exibido, aguardando input...");
-
-            new Thread(() -> {
-                try {
-                    latch.await(); // Aguarda input físico ou cancelamento
-                    Log.i("RetroActivityFuture", "Input recebido ou cancelado, fechando diálogo");
-                    new Handler(Looper.getMainLooper()).post(dialog::dismiss);
-                } catch (InterruptedException e) {
-                    Log.i("RetroActivityFuture", "Thread de input interrompida");
-                } finally {
-                    dialogLatch.countDown();
-                }
-            }).start();
-        });
-
-        try {
-            if (!dialogLatch.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-                Log.i("RetroActivityFuture", "Timeout aguardando input do usuário");
+                WindowManager.LayoutParams lp = dialog.getWindow().getAttributes();
+                lp.width = WindowManager.LayoutParams.WRAP_CONTENT;
+                lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
+                dialog.getWindow().setAttributes(lp);
             }
-        } catch (InterruptedException e) {
-            Log.i("RetroActivityFuture", "Espera do diálogo interrompida");
-        }
 
+            final Handler countdownHandler = new Handler(Looper.getMainLooper());
+            final int[] remaining = {TIMEOUT_SECONDS};
+
+            Runnable countdownRunnable = new Runnable() {
+                @Override
+                public void run() {
+                    if (selectedInput != -1 || remaining[0] <= 0) {
+                        dialog.dismiss();
+                        if (selectedInput != -1) {
+                            onConfigFinished(context, deviceName, vendorId, productId);
+                        } else {
+                            Log.i("RetroActivityFuture", "Timeout ou cancelamento");
+                            Toast.makeText(context, "Autoconfiguração cancelada por timeout", Toast.LENGTH_SHORT).show();
+                        }
+                        return;
+                    }
+                    dialog.setMessage("Pressione Select (4,109,196) no controle.\nTimeout: " + remaining[0] + "s");
+                    remaining[0]--;
+                    countdownHandler.postDelayed(this, 1000);
+                }
+            };
+
+            countdownHandler.post(countdownRunnable);
+
+            dialog.setCancelable(false);
+            dialog.setButton(AlertDialog.BUTTON_NEGATIVE, "Cancelar", (d, which) -> {
+                Log.i("RetroActivityFuture", "Usuário cancelou o diálogo");
+                selectedInput = -1;
+                dialog.dismiss();
+                Toast.makeText(context, "Autoconfiguração cancelada", Toast.LENGTH_SHORT).show();
+            });
+        });
+    }
+
+    /** Chamada quando input detectado */
+    private static void onConfigFinished(Context context, String deviceName, int vendorId, int productId) {
         if (selectedInput != -1) {
             Log.i("RetroActivityFuture", "Input detectado: " + selectedInput);
             String baseFile;
@@ -136,27 +144,20 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 default: baseFile = "Base4.cfg"; break;
             }
             createCfgFromBase(baseFile, deviceName, vendorId, productId, context);
-        } else {
-            Log.i("RetroActivityFuture", "Autoconfiguração falhou ou cancelada");
-            Toast.makeText(context, "Autoconfiguração falhou ou cancelada", Toast.LENGTH_SHORT).show();
         }
-
-        latch = null;
     }
 
     /** Trata eventos de tecla do controle */
     public static boolean handleKeyEvent(KeyEvent event) {
-        if (latch == null) return false;
-
         if (event.getAction() != KeyEvent.ACTION_DOWN) return true;
 
         int keyCode = event.getKeyCode();
         if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {
             Log.i("RetroActivityFuture", "KeyEvent detectado: " + keyCode);
             selectedInput = keyCode;
-            latch.countDown();
+            return true;
         }
-        return true;
+        return false;
     }
 
     /** Criação do arquivo CFG */
@@ -189,11 +190,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         static String readFileToString(File file) throws IOException {
             byte[] bytes = new byte[(int) file.length()];
             java.io.FileInputStream fis = new java.io.FileInputStream(file);
-            try {
-                fis.read(bytes);
-            } finally {
-                fis.close();
-            }
+            try { fis.read(bytes); } finally { fis.close(); }
             return new String(bytes);
         }
     }
@@ -227,9 +224,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                     getWindow().getAttributes().layoutInDisplayCutoutMode =
                             WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
                 }
-            } catch (Exception e) {
-                Log.w("RetroActivityFuture", e.getMessage());
-            }
+            } catch (Exception e) { Log.w("RetroActivityFuture", e.getMessage()); }
         }
     }
 
@@ -245,12 +240,8 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         mHandlerSendUiMessage(HANDLER_WHAT_TOGGLE_IMMERSIVE, hasFocus);
         try {
             ConfigFile configFile = new ConfigFile(UserPreferences.getDefaultConfigPath(this));
-            if (configFile.getBoolean("input_auto_mouse_grab")) {
-                inputGrabMouse(hasFocus);
-            }
-        } catch (Exception e) {
-            Log.w("RetroActivityFuture", e.getMessage());
-        }
+            if (configFile.getBoolean("input_auto_mouse_grab")) inputGrabMouse(hasFocus);
+        } catch (Exception e) { Log.w("RetroActivityFuture", e.getMessage()); }
     }
 
     private void mHandlerSendUiMessage(int what, boolean state) {
@@ -281,9 +272,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                             | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                             | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
                 }
-            } catch (Exception e) {
-                Log.w("RetroActivityFuture", e.getMessage());
-            }
+            } catch (Exception e) { Log.w("RetroActivityFuture", e.getMessage()); }
         }
     }
 
@@ -292,9 +281,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             try {
                 if (state) mDecorView.requestPointerCapture();
                 else mDecorView.releasePointerCapture();
-            } catch (Exception e) {
-                Log.w("RetroActivityFuture", e.getMessage());
-            }
+            } catch (Exception e) { Log.w("RetroActivityFuture", e.getMessage()); }
         }
     }
 
@@ -304,26 +291,17 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 Method m = InputManager.class.getMethod("setCursorVisibility", boolean.class);
                 InputManager im = (InputManager) getSystemService(Context.INPUT_SERVICE);
                 m.invoke(im, !state);
-            } catch (NoSuchMethodException e) {
-                // NVIDIA extension não disponível
-            } catch (Exception e) {
-                Log.w("RetroActivityFuture", e.getMessage());
-            }
+            } catch (NoSuchMethodException e) { } 
+            catch (Exception e) { Log.w("RetroActivityFuture", e.getMessage()); }
         }
     }
 
     private void attemptTogglePointerIcon(boolean state) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             try {
-                if (state) {
-                    PointerIcon nullPointerIcon = PointerIcon.getSystemIcon(this, PointerIcon.TYPE_NULL);
-                    mDecorView.setPointerIcon(nullPointerIcon);
-                } else {
-                    mDecorView.setPointerIcon(null);
-                }
-            } catch (Exception e) {
-                Log.w("RetroActivityFuture", e.getMessage());
-            }
+                if (state) mDecorView.setPointerIcon(PointerIcon.getSystemIcon(this, PointerIcon.TYPE_NULL));
+                else mDecorView.setPointerIcon(null);
+            } catch (Exception e) { Log.w("RetroActivityFuture", e.getMessage()); }
         }
     }
 

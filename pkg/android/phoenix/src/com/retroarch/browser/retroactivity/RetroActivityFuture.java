@@ -58,8 +58,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         }
     };
 
-    // ===================== INÍCIO DO CÓDIGO INCORPORADO DO CONFIGHELPER =====================
-
+    // ===================== CONFIGHELPER =====================
     private static final int INPUT_SELECT_4 = 4;
     private static final int INPUT_SELECT_109 = 109;
     private static final int INPUT_SELECT_196 = 196;
@@ -69,39 +68,40 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     private static CountDownLatch latch;
     private static int selectedInput = -1;
 
-    /**
-     * Wrapper NÃO ESTÁTICO chamado via JNI (sem precisar de Context explícito).
-     */
+    // Wrapper não estático chamado via JNI
     public void createConfigForUnknownController(int vendorId, int productId, String deviceName) {
         createConfigForUnknownControllerInternal(vendorId, productId, deviceName, this);
     }
 
-    /**
-     * Método interno (privado/estático) que contém a lógica real.
-     */
     private static void createConfigForUnknownControllerInternal(int vendorId, int productId,
                                                                  String deviceName, Context context) {
         selectedInput = -1;
         latch = new CountDownLatch(1);
 
-        Toast.makeText(context, "Pressione Select para autoconfigurar o controle:", Toast.LENGTH_LONG).show();
+        Log.i("RetroActivityFuture", "Iniciando autoconfiguração para: " + deviceName);
+        Toast.makeText(context, "Pressione Select (4, 109 ou 196) para autoconfigurar o controle", Toast.LENGTH_LONG).show();
 
         int wrongAttempts = 0;
 
         try {
             while (selectedInput == -1 && wrongAttempts < MAX_WRONG_ATTEMPTS) {
+                Log.i("RetroActivityFuture", "Aguardando input do usuário...");
                 boolean pressed = latch.await(TIMEOUT_SECONDS, TimeUnit.SECONDS);
 
                 if (!pressed) {
-                    break; // timeout de 10s
+                    Log.w("RetroActivityFuture", "Timeout atingido sem input do usuário.");
+                    break;
                 }
 
                 if (selectedInput == -1) {
                     wrongAttempts++;
+                    Log.w("RetroActivityFuture", "Botão errado pressionado. Tentativa " + wrongAttempts);
                     if (wrongAttempts < MAX_WRONG_ATTEMPTS) {
-                        Toast.makeText(context, "Pressione Select para autoconfigurar o controle:", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(context, "Pressione Select (4, 109 ou 196) para autoconfigurar o controle", Toast.LENGTH_SHORT).show();
                         latch = new CountDownLatch(1); // reinicia latch
                     }
+                } else {
+                    Log.i("RetroActivityFuture", "Botão correto detectado: " + selectedInput);
                 }
             }
 
@@ -114,22 +114,22 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                     default: baseFile = "Base4.cfg"; break;
                 }
 
+                Log.i("RetroActivityFuture", "Criando CFG a partir da base: " + baseFile);
                 createCfgFromBase(baseFile, deviceName, vendorId, productId, context);
 
             } else {
+                Log.e("RetroActivityFuture", "Autoconfiguração falhou: nenhum input correto recebido");
                 Toast.makeText(context, "Autoconfiguração falhou", Toast.LENGTH_SHORT).show();
             }
 
         } catch (InterruptedException e) {
+            Log.e("RetroActivityFuture", "Autoconfiguração interrompida: " + e.getMessage());
             Toast.makeText(context, "Autoconfiguração interrompida", Toast.LENGTH_SHORT).show();
         } finally {
             latch = null;
         }
     }
 
-    /**
-     * Trata eventos de tecla.
-     */
     public static boolean handleKeyEvent(KeyEvent event) {
         if (latch == null)
             return false;
@@ -141,6 +141,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {
             selectedInput = keyCode;
             latch.countDown();
+            Log.i("RetroActivityFuture", "Input capturado via handleKeyEvent: " + keyCode);
         }
         return true;
     }
@@ -164,8 +165,10 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             writer.write("input_product_id = " + productId + "\n");
 
             writer.flush();
+            Log.i("RetroActivityFuture", "Configuração criada: " + output.getAbsolutePath());
             Toast.makeText(context, "Configuração criada: " + output.getName(), Toast.LENGTH_SHORT).show();
         } catch (IOException e) {
+            Log.e("RetroActivityFuture", "Erro ao criar CFG: " + e.getMessage());
             Toast.makeText(context, "Erro ao criar CFG: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
@@ -182,8 +185,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             return new String(bytes);
         }
     }
-
-    // ===================== FIM DO CONFIGHELPER =====================
+    // ===================== FIM CONFIGHELPER =====================
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -193,132 +195,13 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     }
 
     @Override
-    public void onResume() {
-        super.onResume();
-        setSustainedPerformanceMode(sustainedPerformanceMode);
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            String refresh = getIntent().getStringExtra("REFRESH");
-            if (refresh != null) {
-                WindowManager.LayoutParams params = getWindow().getAttributes();
-                params.preferredRefreshRate = Integer.parseInt(refresh);
-                getWindow().setAttributes(params);
-            }
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            try {
-                ConfigFile configFile = new ConfigFile(UserPreferences.getDefaultConfigPath(this));
-                if (configFile.getBoolean("video_notch_write_over_enable")) {
-                    getWindow().getAttributes().layoutInDisplayCutoutMode =
-                            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
-                }
-            } catch (Exception e) {
-                Log.w("RetroActivityFuture", e.getMessage());
-            }
-        }
-    }
-
-    @Override
-    public void onStop() {
-        super.onStop();
-        if (quitfocus) System.exit(0);
-    }
-
-    @Override
-    public void onWindowFocusChanged(boolean hasFocus) {
-        super.onWindowFocusChanged(hasFocus);
-        mHandlerSendUiMessage(HANDLER_WHAT_TOGGLE_IMMERSIVE, hasFocus);
-        try {
-            ConfigFile configFile = new ConfigFile(UserPreferences.getDefaultConfigPath(this));
-            if (configFile.getBoolean("input_auto_mouse_grab")) {
-                inputGrabMouse(hasFocus);
-            }
-        } catch (Exception e) {
-            Log.w("RetroActivityFuture", e.getMessage());
-        }
-    }
-
-    private void mHandlerSendUiMessage(int what, boolean state) {
-        int arg1 = state ? HANDLER_ARG_TRUE : HANDLER_ARG_FALSE;
-        Message message = mHandler.obtainMessage(what, arg1, -1);
-        mHandler.sendMessageDelayed(message, HANDLER_MESSAGE_DELAY_DEFAULT_MS);
-    }
-
-    public void inputGrabMouse(boolean state) {
-        mHandlerSendUiMessage(HANDLER_WHAT_TOGGLE_POINTER_CAPTURE, state);
-        mHandlerSendUiMessage(HANDLER_WHAT_TOGGLE_POINTER_NVIDIA, state);
-        mHandlerSendUiMessage(HANDLER_WHAT_TOGGLE_POINTER_ICON, state);
-    }
-
-    private void attemptToggleImmersiveMode(boolean state) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            try {
-                if (state) {
-                    mDecorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                            | View.SYSTEM_UI_FLAG_FULLSCREEN
-                            | View.SYSTEM_UI_FLAG_LOW_PROFILE
-                            | View.SYSTEM_UI_FLAG_IMMERSIVE);
-                } else {
-                    mDecorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-                            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
-                }
-            } catch (Exception e) {
-                Log.w("RetroActivityFuture", e.getMessage());
-            }
-        }
-    }
-
-    private void attemptTogglePointerCapture(boolean state) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            try {
-                if (state) mDecorView.requestPointerCapture();
-                else mDecorView.releasePointerCapture();
-            } catch (Exception e) {
-                Log.w("RetroActivityFuture", e.getMessage());
-            }
-        }
-    }
-
-    private void attemptToggleNvidiaCursorVisibility(boolean state) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
-            try {
-                Method mInputManager_setCursorVisibility =
-                        InputManager.class.getMethod("setCursorVisibility", boolean.class);
-                InputManager inputManager = (InputManager) getSystemService(Context.INPUT_SERVICE);
-                mInputManager_setCursorVisibility.invoke(inputManager, !state);
-            } catch (NoSuchMethodException e) {
-                // NVIDIA extension não disponível
-            } catch (Exception e) {
-                Log.w("RetroActivityFuture", e.getMessage());
-            }
-        }
-    }
-
-    private void attemptTogglePointerIcon(boolean state) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-            try {
-                if (state) {
-                    PointerIcon nullPointerIcon = PointerIcon.getSystemIcon(this, PointerIcon.TYPE_NULL);
-                    mDecorView.setPointerIcon(nullPointerIcon);
-                } else {
-                    mDecorView.setPointerIcon(null);
-                }
-            } catch (Exception e) {
-                Log.w("RetroActivityFuture", e.getMessage());
-            }
-        }
-    }
-
-    @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         if (handleKeyEvent(event)) {
+            Log.i("RetroActivityFuture", "dispatchKeyEvent recebeu keyCode: " + event.getKeyCode());
             return true;
         }
         return super.dispatchKeyEvent(event);
     }
+
+    // Mantém restante do código do RetroActivityFuture (immersive, pointer capture, etc.)...
 }

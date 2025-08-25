@@ -55,7 +55,7 @@
 #include <dirent.h>   // para opendir/readdir/closedir
 #include <limits.h>   // para PATH_MAX
 
-#define INPUT_AUTOCONFIG_DIR "/sdcard/emulated/0/Android/media/com.retroarch/autoconfig/android"
+#define INPUT_AUTOCONFIG_DIR "/storage/emulated/0/Android/media/com.retroarch/autoconfig/android"
 
 #define RARCH_LOG(...)   __android_log_print(ANDROID_LOG_INFO, "RetroArch", __VA_ARGS__)
 #define RARCH_WARN(...)  __android_log_print(ANDROID_LOG_WARN, "RetroArch", __VA_ARGS__)
@@ -1185,7 +1185,7 @@ static void handle_hotplug(android_input_t *android,
        }
        else
        {
-           jclass cls = (*env)->FindClass(env, "com/retroarch/browser/RetroActivityFuture");
+           jclass cls = (*env)->FindClass(env, "com/retroarch/browser/retroactivity/RetroActivityFuture");
            if (!cls)
            {
                RARCH_ERR("Classe Java RetroActivityFuture não encontrada\n");

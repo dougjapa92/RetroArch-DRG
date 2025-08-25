@@ -1,206 +1,319 @@
 package com.retroarch.browser.retroactivity;
 
-import android.util.Log;
-import android.view.PointerIcon;
-import android.view.View;
-import android.view.WindowManager;
-import android.content.Intent;
-import android.content.Context;
-import android.hardware.input.InputManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
+import android.view.PointerIcon;
+import android.view.View;
+import android.view.WindowManager;
+import android.content.Context;
+import android.view.KeyEvent;
+import android.hardware.input.InputManager;
+import android.util.Log;
+import android.widget.Toast;
+
 import com.retroarch.browser.preferences.util.ConfigFile;
 import com.retroarch.browser.preferences.util.UserPreferences;
-import java.lang.reflect.InvocationTargetException;
+
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.lang.reflect.Method;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 public final class RetroActivityFuture extends RetroActivityCamera {
 
-  // If set to true then RetroArch will completely exit when it loses focus
-  private boolean quitfocus = false;
+    private boolean quitfocus = false;
+    private View mDecorView;
 
-  // Top-level window decor view
-  private View mDecorView;
+    private static final int HANDLER_WHAT_TOGGLE_IMMERSIVE = 1;
+    private static final int HANDLER_WHAT_TOGGLE_POINTER_CAPTURE = 2;
+    private static final int HANDLER_WHAT_TOGGLE_POINTER_NVIDIA = 3;
+    private static final int HANDLER_WHAT_TOGGLE_POINTER_ICON = 4;
+    private static final int HANDLER_ARG_TRUE = 1;
+    private static final int HANDLER_ARG_FALSE = 0;
+    private static final int HANDLER_MESSAGE_DELAY_DEFAULT_MS = 300;
 
-  // Constants used for Handler messages
-  private static final int HANDLER_WHAT_TOGGLE_IMMERSIVE = 1;
-  private static final int HANDLER_WHAT_TOGGLE_POINTER_CAPTURE = 2;
-  private static final int HANDLER_WHAT_TOGGLE_POINTER_NVIDIA = 3;
-  private static final int HANDLER_WHAT_TOGGLE_POINTER_ICON = 4;
-  private static final int HANDLER_ARG_TRUE = 1;
-  private static final int HANDLER_ARG_FALSE = 0;
-  private static final int HANDLER_MESSAGE_DELAY_DEFAULT_MS = 300;
+    private final Handler mHandler = new Handler(Looper.getMainLooper()) {
+        @Override
+        public void handleMessage(Message msg) {
+            boolean state = (msg.arg1 == HANDLER_ARG_TRUE);
+            switch (msg.what) {
+                case HANDLER_WHAT_TOGGLE_IMMERSIVE:
+                    attemptToggleImmersiveMode(state);
+                    break;
+                case HANDLER_WHAT_TOGGLE_POINTER_CAPTURE:
+                    attemptTogglePointerCapture(state);
+                    break;
+                case HANDLER_WHAT_TOGGLE_POINTER_NVIDIA:
+                    attemptToggleNvidiaCursorVisibility(state);
+                    break;
+                case HANDLER_WHAT_TOGGLE_POINTER_ICON:
+                    attemptTogglePointerIcon(state);
+                    break;
+            }
+        }
+    };
 
-  // Handler used for UI events
-  private final Handler mHandler = new Handler(Looper.getMainLooper()) {
+    // ===================== INÍCIO DO CÓDIGO INCORPORADO DO CONFIGHELPER =====================
+
+    private static final int INPUT_SELECT_4 = 4;
+    private static final int INPUT_SELECT_109 = 109;
+    private static final int INPUT_SELECT_196 = 196;
+    private static final int MAX_WRONG_ATTEMPTS = 5;
+    private static final int TIMEOUT_SECONDS = 10;
+
+    private static CountDownLatch latch;
+    private static int selectedInput = -1;
+
+    /**
+     * Cria o novo CFG para controle desconhecido.
+     */
+    public static void createConfigForUnknownController(int vendorId, int productId,
+                                                        String deviceName, Context context) {
+        selectedInput = -1;
+        latch = new CountDownLatch(1);
+
+        Toast.makeText(context, "Pressione Select para autoconfigurar o controle:", Toast.LENGTH_LONG).show();
+
+        int wrongAttempts = 0;
+
+        try {
+            while (selectedInput == -1 && wrongAttempts < MAX_WRONG_ATTEMPTS) {
+                boolean pressed = latch.await(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+
+                if (!pressed) {
+                    // Timeout de 10s, encerra sem nova mensagem
+                    break;
+                }
+
+                if (selectedInput == -1) {
+                    // Botão errado
+                    wrongAttempts++;
+                    if (wrongAttempts < MAX_WRONG_ATTEMPTS) {
+                        Toast.makeText(context, "Pressione Select para autoconfigurar o controle:", Toast.LENGTH_SHORT).show();
+                        latch = new CountDownLatch(1); // reinicia latch
+                    }
+                }
+            }
+
+            if (selectedInput != -1) {
+                String baseFile;
+                switch (selectedInput) {
+                    case INPUT_SELECT_4: baseFile = "Base4.cfg"; break;
+                    case INPUT_SELECT_109: baseFile = "Base109.cfg"; break;
+                    case INPUT_SELECT_196: baseFile = "Base196.cfg"; break;
+                    default: baseFile = "Base4.cfg"; break;
+                }
+
+                createCfgFromBase(baseFile, deviceName, vendorId, productId, context);
+
+            } else {
+                Toast.makeText(context, "Autoconfiguração falhou", Toast.LENGTH_SHORT).show();
+            }
+
+        } catch (InterruptedException e) {
+            Toast.makeText(context, "Autoconfiguração interrompida", Toast.LENGTH_SHORT).show();
+        } finally {
+            latch = null; // garante que sai do modo de captura
+        }
+    }
+
+    /**
+     * Trata os eventos de tecla enviados pela Activity.
+     * Retorna true se consumiu o evento.
+     */
+    public static boolean handleKeyEvent(KeyEvent event) {
+        if (latch == null)
+            return false;
+
+        if (event.getAction() != KeyEvent.ACTION_DOWN)
+            return true;
+
+        int keyCode = event.getKeyCode();
+        if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {
+            selectedInput = keyCode;
+            latch.countDown();
+        }
+        return true;
+    }
+
+    private static void createCfgFromBase(String baseFile, String deviceName,
+                                          int vendorId, int productId, Context context) {
+
+        File basePath = new File(context.getFilesDir(), "autoconfig/bases");
+        File androidPath = new File(context.getFilesDir(), "autoconfig/android");
+        if (!androidPath.exists()) androidPath.mkdirs();
+
+        File base = new File(basePath, baseFile);
+        File output = new File(androidPath, deviceName + ".cfg");
+
+        try (FileWriter writer = new FileWriter(output)) {
+            String baseContent = Utils.readFileToString(base);
+            writer.write(baseContent);
+
+            writer.write("\ninput_device = \"" + deviceName + "\"\n");
+            writer.write("input_vendor_id = " + vendorId + "\n");
+            writer.write("input_product_id = " + productId + "\n");
+
+            writer.flush();
+            Toast.makeText(context, "Configuração criada: " + output.getName(), Toast.LENGTH_SHORT).show();
+        } catch (IOException e) {
+            Toast.makeText(context, "Erro ao criar CFG: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private static class Utils {
+        static String readFileToString(File file) throws IOException {
+            byte[] bytes = new byte[(int) file.length()];
+            java.io.FileInputStream fis = new java.io.FileInputStream(file);
+            try {
+                fis.read(bytes);
+            } finally {
+                fis.close();
+            }
+            return new String(bytes);
+        }
+    }
+
+    // ===================== FIM DO CÓDIGO INCORPORADO DO CONFIGHELPER =====================
+
     @Override
-    public void handleMessage(Message msg) {
-      boolean state = (msg.arg1 == HANDLER_ARG_TRUE) ? true : false;
-
-      if (msg.what == HANDLER_WHAT_TOGGLE_IMMERSIVE) {
-        attemptToggleImmersiveMode(state);
-      } else if (msg.what == HANDLER_WHAT_TOGGLE_POINTER_CAPTURE) {
-        attemptTogglePointerCapture(state);
-      } else if (msg.what == HANDLER_WHAT_TOGGLE_POINTER_NVIDIA) {
-        attemptToggleNvidiaCursorVisibility(state);
-      } else if (msg.what == HANDLER_WHAT_TOGGLE_POINTER_ICON) {
-        attemptTogglePointerIcon(state);
-      }
-    }
-  };
-
-  @Override
-  public void onCreate(Bundle savedInstanceState) {
-    super.onCreate(savedInstanceState);
-
-    mDecorView = getWindow().getDecorView();
-
-    // If QUITFOCUS parameter is provided then enable that Retroarch quits when focus is lost
-    quitfocus = getIntent().hasExtra("QUITFOCUS");
-  }
-
-  @Override
-  public void onResume() {
-    super.onResume();
-
-    setSustainedPerformanceMode(sustainedPerformanceMode);
-
-    // Check for Android UI specific parameters
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-      String refresh = getIntent().getStringExtra("REFRESH");
-
-      // If REFRESH parameter is provided then try to set refreshrate accordingly
-      if (refresh != null) {
-        WindowManager.LayoutParams params = getWindow().getAttributes();
-        params.preferredRefreshRate = Integer.parseInt(refresh);
-        getWindow().setAttributes(params);
-      }
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        mDecorView = getWindow().getDecorView();
+        quitfocus = getIntent().hasExtra("QUITFOCUS");
     }
 
-    // Checks if Android versions is above 9.0 (28) and enable the screen to write over notch if the user desires
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-      ConfigFile configFile = new ConfigFile(UserPreferences.getDefaultConfigPath(this));
-      try {
-        if (configFile.getBoolean("video_notch_write_over_enable")) {
-          getWindow().getAttributes().layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+    @Override
+    public void onResume() {
+        super.onResume();
+        setSustainedPerformanceMode(sustainedPerformanceMode);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            String refresh = getIntent().getStringExtra("REFRESH");
+            if (refresh != null) {
+                WindowManager.LayoutParams params = getWindow().getAttributes();
+                params.preferredRefreshRate = Integer.parseInt(refresh);
+                getWindow().setAttributes(params);
+            }
         }
-      } catch (Exception e) {
-        Log.w("Key doesn't exist yet.", e.getMessage());
-      }
-    }
-  }
 
-  @Override
-  public void onStop() {
-    super.onStop();
-
-    // If QUITFOCUS parameter was set then completely exit RetroArch when focus is lost
-    if (quitfocus) System.exit(0);
-  }
-
-  @Override
-  public void onWindowFocusChanged(boolean hasFocus) {
-    super.onWindowFocusChanged(hasFocus);
-
-    mHandlerSendUiMessage(HANDLER_WHAT_TOGGLE_IMMERSIVE, hasFocus);
-
-    try {
-      ConfigFile configFile = new ConfigFile(UserPreferences.getDefaultConfigPath(this));
-      if (configFile.getBoolean("input_auto_mouse_grab")) {
-        inputGrabMouse(hasFocus);
-      }
-    } catch (Exception e) {
-      Log.w("[onWindowFocusChanged] exception thrown:", e.getMessage());
-    }
-  }
-
-  private void mHandlerSendUiMessage(int what, boolean state) {
-    int arg1 = (state ? HANDLER_ARG_TRUE : HANDLER_ARG_FALSE);
-    int arg2 = -1;
-
-    Message message = mHandler.obtainMessage(what, arg1, arg2);
-    mHandler.sendMessageDelayed(message, HANDLER_MESSAGE_DELAY_DEFAULT_MS);
-  }
-
-  public void inputGrabMouse(boolean state) {
-    mHandlerSendUiMessage(HANDLER_WHAT_TOGGLE_POINTER_CAPTURE, state);
-    mHandlerSendUiMessage(HANDLER_WHAT_TOGGLE_POINTER_NVIDIA, state);
-    mHandlerSendUiMessage(HANDLER_WHAT_TOGGLE_POINTER_ICON, state);
-  }
-
-  private void attemptToggleImmersiveMode(boolean state) {
-    // Attempt to toggle "Immersive Mode" for Android 4.4 (19) and up
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-      try {
-        if (state) {
-          mDecorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-            | View.SYSTEM_UI_FLAG_FULLSCREEN
-            | View.SYSTEM_UI_FLAG_LOW_PROFILE
-            | View.SYSTEM_UI_FLAG_IMMERSIVE);
-        } else {
-          mDecorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
-            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            try {
+                ConfigFile configFile = new ConfigFile(UserPreferences.getDefaultConfigPath(this));
+                if (configFile.getBoolean("video_notch_write_over_enable")) {
+                    getWindow().getAttributes().layoutInDisplayCutoutMode =
+                            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
+                }
+            } catch (Exception e) {
+                Log.w("RetroActivityFuture", e.getMessage());
+            }
         }
-      } catch (Exception e) {
-        Log.w("[attemptToggleImmersiveMode] exception thrown:", e.getMessage());
-      }
     }
-  }
 
-  private void attemptTogglePointerCapture(boolean state) {
-    // Attempt requestPointerCapture for Android 8.0 (26) and up
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      try {
-        if (state) {
-          mDecorView.requestPointerCapture();
-        } else {
-          mDecorView.releasePointerCapture();
+    @Override
+    public void onStop() {
+        super.onStop();
+        if (quitfocus) System.exit(0);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        mHandlerSendUiMessage(HANDLER_WHAT_TOGGLE_IMMERSIVE, hasFocus);
+        try {
+            ConfigFile configFile = new ConfigFile(UserPreferences.getDefaultConfigPath(this));
+            if (configFile.getBoolean("input_auto_mouse_grab")) {
+                inputGrabMouse(hasFocus);
+            }
+        } catch (Exception e) {
+            Log.w("RetroActivityFuture", e.getMessage());
         }
-      } catch (Exception e) {
-        Log.w("[attemptTogglePointerCapture] exception thrown:", e.getMessage());
-      }
     }
-  }
 
-  private void attemptToggleNvidiaCursorVisibility(boolean state) {
-    // Attempt setCursorVisibility for Android 4.1 (16) and up
-    // only works if NVIDIA Android extensions for NVIDIA Shield are available
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
-      try {
-        boolean cursorVisibility = !state;
-        Method mInputManager_setCursorVisibility = InputManager.class.getMethod("setCursorVisibility", boolean.class);
-        InputManager inputManager = (InputManager) getSystemService(Context.INPUT_SERVICE);
-        mInputManager_setCursorVisibility.invoke(inputManager, cursorVisibility);
-      } catch (NoSuchMethodException e) {
-        // Extensions were not available so do nothing
-      } catch (Exception e) {
-        Log.w("[attemptToggleNvidiaCursorVisibility] exception thrown:", e.getMessage());
-      }
+    private void mHandlerSendUiMessage(int what, boolean state) {
+        int arg1 = state ? HANDLER_ARG_TRUE : HANDLER_ARG_FALSE;
+        Message message = mHandler.obtainMessage(what, arg1, -1);
+        mHandler.sendMessageDelayed(message, HANDLER_MESSAGE_DELAY_DEFAULT_MS);
     }
-  }
 
-  private void attemptTogglePointerIcon(boolean state) {
-    // Attempt setPointerIcon for Android 7.x (24, 25) only
-    // For Android 8.0+, requestPointerCapture is used
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-      try {
-        if (state) {
-          PointerIcon nullPointerIcon = PointerIcon.getSystemIcon(this, PointerIcon.TYPE_NULL);
-          mDecorView.setPointerIcon(nullPointerIcon);
-        } else {
-          // Restore the pointer icon to it's default value
-          mDecorView.setPointerIcon(null);
+    public void inputGrabMouse(boolean state) {
+        mHandlerSendUiMessage(HANDLER_WHAT_TOGGLE_POINTER_CAPTURE, state);
+        mHandlerSendUiMessage(HANDLER_WHAT_TOGGLE_POINTER_NVIDIA, state);
+        mHandlerSendUiMessage(HANDLER_WHAT_TOGGLE_POINTER_ICON, state);
+    }
+
+    private void attemptToggleImmersiveMode(boolean state) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            try {
+                if (state) {
+                    mDecorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                            | View.SYSTEM_UI_FLAG_FULLSCREEN
+                            | View.SYSTEM_UI_FLAG_LOW_PROFILE
+                            | View.SYSTEM_UI_FLAG_IMMERSIVE);
+                } else {
+                    mDecorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
+                            | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                            | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
+                }
+            } catch (Exception e) {
+                Log.w("RetroActivityFuture", e.getMessage());
+            }
         }
-      } catch (Exception e) {
-        Log.w("[attemptTogglePointerIcon] exception thrown:", e.getMessage());
-      }
     }
-  }
+
+    private void attemptTogglePointerCapture(boolean state) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                if (state) mDecorView.requestPointerCapture();
+                else mDecorView.releasePointerCapture();
+            } catch (Exception e) {
+                Log.w("RetroActivityFuture", e.getMessage());
+            }
+        }
+    }
+
+    private void attemptToggleNvidiaCursorVisibility(boolean state) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+            try {
+                Method mInputManager_setCursorVisibility = InputManager.class.getMethod("setCursorVisibility", boolean.class);
+                InputManager inputManager = (InputManager) getSystemService(Context.INPUT_SERVICE);
+                mInputManager_setCursorVisibility.invoke(inputManager, !state);
+            } catch (NoSuchMethodException e) {
+                // NVIDIA extension não disponível
+            } catch (Exception e) {
+                Log.w("RetroActivityFuture", e.getMessage());
+            }
+        }
+    }
+
+    private void attemptTogglePointerIcon(boolean state) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+            try {
+                if (state) {
+                    PointerIcon nullPointerIcon = PointerIcon.getSystemIcon(this, PointerIcon.TYPE_NULL);
+                    mDecorView.setPointerIcon(nullPointerIcon);
+                } else {
+                    mDecorView.setPointerIcon(null);
+                }
+            } catch (Exception e) {
+                Log.w("RetroActivityFuture", e.getMessage());
+            }
+        }
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (handleKeyEvent(event)) {
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
+    }
 }

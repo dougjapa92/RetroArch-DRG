@@ -71,7 +71,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
 
     /** Wrapper chamado via JNI */
     public void createConfigForUnknownController(int vendorId, int productId, String deviceName) {
-        new Thread(() -> createConfigForUnknownControllerInternal(vendorId, productId, deviceName, this)).start();
+        createConfigForUnknownControllerInternal(vendorId, productId, deviceName, this);
     }
 
     /** Método interno com AlertDialog + CountDownLatch */
@@ -79,32 +79,37 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                                                                  String deviceName, Context context) {
         selectedInput = -1;
         latch = new CountDownLatch(1);
+
         Log.i("RetroActivityFuture", "Iniciando criação de CFG para: " + deviceName);
 
         final CountDownLatch dialogLatch = new CountDownLatch(1);
 
         new Handler(Looper.getMainLooper()).post(() -> {
             Log.i("RetroActivityFuture", "Criando AlertDialog na UI thread");
-            AlertDialog.Builder builder = new AlertDialog.Builder(context);
+
+            AlertDialog.Builder builder = new AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Light_Dialog_Alert);
             builder.setTitle("Autoconfiguração de Controle");
-            builder.setMessage("Pressione Select (4, 109 ou 196) no controle ou cancele.");
+            builder.setMessage("Pressione Select para autoconfigurar o controle.");
             builder.setCancelable(false);
             builder.setNegativeButton("Cancelar", (dialog, which) -> {
                 Log.i("RetroActivityFuture", "Usuário cancelou o diálogo");
+                selectedInput = -1;
                 latch.countDown();
-                dialogLatch.countDown();
             });
 
             AlertDialog dialog = builder.create();
             dialog.show();
+
+            // Força fundo branco
+            dialog.getWindow().setBackgroundDrawableResource(android.R.color.white);
+
             Log.i("RetroActivityFuture", "Dialog exibido, aguardando input...");
 
-            // Thread que fecha o diálogo quando input é recebido
             new Thread(() -> {
                 try {
-                    latch.await();
+                    latch.await(); // Aguarda input físico ou cancelamento
                     Log.i("RetroActivityFuture", "Input recebido ou cancelado, fechando diálogo");
-                    dialog.dismiss();
+                    new Handler(Looper.getMainLooper()).post(dialog::dismiss);
                 } catch (InterruptedException e) {
                     Log.i("RetroActivityFuture", "Thread de input interrompida");
                 } finally {
@@ -113,11 +118,9 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             }).start();
         });
 
-        // Aguarda thread de diálogo
         try {
             if (!dialogLatch.await(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 Log.i("RetroActivityFuture", "Timeout aguardando input do usuário");
-                latch.countDown();
             }
         } catch (InterruptedException e) {
             Log.i("RetroActivityFuture", "Espera do diálogo interrompida");
@@ -207,6 +210,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     public void onResume() {
         super.onResume();
         setSustainedPerformanceMode(sustainedPerformanceMode);
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             String refresh = getIntent().getStringExtra("REFRESH");
             if (refresh != null) {
@@ -215,6 +219,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 getWindow().setAttributes(params);
             }
         }
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             try {
                 ConfigFile configFile = new ConfigFile(UserPreferences.getDefaultConfigPath(this));

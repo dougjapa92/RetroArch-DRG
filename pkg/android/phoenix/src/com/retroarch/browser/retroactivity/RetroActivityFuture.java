@@ -1,19 +1,18 @@
 package com.retroarch.browser.retroactivity;
 
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.PointerIcon;
 import android.view.View;
-import android.view.WindowManager;
 import android.content.Context;
-import android.view.KeyEvent;
-import android.hardware.input.InputManager;
 import android.util.Log;
 import android.widget.Toast;
-import android.app.AlertDialog;
+import androidx.annotation.NonNull;
+import androidx.fragment.app.DialogFragment;
+import androidx.appcompat.app.AlertDialog;
 import android.graphics.drawable.GradientDrawable;
+import android.view.WindowManager;
+import android.view.KeyEvent;
 
 import com.retroarch.browser.preferences.util.ConfigFile;
 import com.retroarch.browser.preferences.util.UserPreferences;
@@ -21,7 +20,6 @@ import com.retroarch.browser.preferences.util.UserPreferences;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.lang.reflect.Method;
 
 public final class RetroActivityFuture extends RetroActivityCamera {
 
@@ -29,125 +27,112 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     private View mDecorView;
     private static int selectedInput = -1;
 
-    private static final int HANDLER_WHAT_TOGGLE_IMMERSIVE = 1;
-    private static final int HANDLER_WHAT_TOGGLE_POINTER_CAPTURE = 2;
-    private static final int HANDLER_WHAT_TOGGLE_POINTER_NVIDIA = 3;
-    private static final int HANDLER_WHAT_TOGGLE_POINTER_ICON = 4;
-    private static final int HANDLER_ARG_TRUE = 1;
-    private static final int HANDLER_ARG_FALSE = 0;
-    private static final int HANDLER_MESSAGE_DELAY_DEFAULT_MS = 300;
-
-    private final Handler mHandler = new Handler(Looper.getMainLooper()) {
-        @Override
-        public void handleMessage(android.os.Message msg) {
-            boolean state = (msg.arg1 == HANDLER_ARG_TRUE);
-            switch (msg.what) {
-                case HANDLER_WHAT_TOGGLE_IMMERSIVE: attemptToggleImmersiveMode(state); break;
-                case HANDLER_WHAT_TOGGLE_POINTER_CAPTURE: attemptTogglePointerCapture(state); break;
-                case HANDLER_WHAT_TOGGLE_POINTER_NVIDIA: attemptToggleNvidiaCursorVisibility(state); break;
-                case HANDLER_WHAT_TOGGLE_POINTER_ICON: attemptTogglePointerIcon(state); break;
-            }
-        }
-    };
-
-    // Input constants
     private static final int INPUT_SELECT_4 = 4;
     private static final int INPUT_SELECT_109 = 109;
     private static final int INPUT_SELECT_196 = 196;
     private static final int TIMEOUT_SECONDS = 10;
 
-    /** Wrapper chamado via JNI */
+    /** Método chamado via JNI */
     public void createConfigForUnknownController(int vendorId, int productId, String deviceName) {
-        createConfigForUnknownControllerInternal(vendorId, productId, deviceName, this);
+        ControllerConfigDialogFragment.newInstance(deviceName, vendorId, productId)
+                .show(getSupportFragmentManager(), "controller_config");
     }
 
-    /** AlertDialog com bordas arredondadas, largura ajustada e timeout */
-    private static void createConfigForUnknownControllerInternal(int vendorId, int productId,
-                                                                 String deviceName, Context context) {
-        selectedInput = -1;
-        Log.i("RetroActivityFuture", "Iniciando criação de CFG para: " + deviceName);
+    /** DialogFragment para captura de input físico */
+    public static class ControllerConfigDialogFragment extends DialogFragment {
 
-        new Handler(Looper.getMainLooper()).post(() -> {
-            AlertDialog.Builder builder = new AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Light_Dialog_Alert);
+        private int vendorId, productId;
+        private String deviceName;
+        private int remaining = TIMEOUT_SECONDS;
+        private final Handler handler = new Handler(Looper.getMainLooper());
+
+        public static ControllerConfigDialogFragment newInstance(String deviceName, int vendorId, int productId) {
+            ControllerConfigDialogFragment f = new ControllerConfigDialogFragment();
+            Bundle args = new Bundle();
+            args.putString("deviceName", deviceName);
+            args.putInt("vendorId", vendorId);
+            args.putInt("productId", productId);
+            f.setArguments(args);
+            return f;
+        }
+
+        @NonNull
+        @Override
+        public AlertDialog onCreateDialog(Bundle savedInstanceState) {
+            deviceName = getArguments().getString("deviceName");
+            vendorId = getArguments().getInt("vendorId");
+            productId = getArguments().getInt("productId");
+
+            AlertDialog.Builder builder = new AlertDialog.Builder(requireActivity());
             builder.setTitle("Autoconfiguração de Controle");
+            builder.setMessage("Pressione Select (4,109,196) no controle.\nTimeout: " + TIMEOUT_SECONDS + "s");
+            builder.setCancelable(false);
+            builder.setNegativeButton("Cancelar", (d, which) -> {
+                Log.i("ControllerConfigDialog", "Cancelado pelo usuário");
+                selectedInput = -1;
+                Toast.makeText(getActivity(), "Autoconfiguração cancelada", Toast.LENGTH_SHORT).show();
+                dismiss();
+            });
 
             AlertDialog dialog = builder.create();
-            dialog.show();
 
-            // Bordas arredondadas e largura ajustada
-            if (dialog.getWindow() != null) {
-                GradientDrawable bg = new GradientDrawable();
-                bg.setColor(0xFFFFFFFF);
-                bg.setCornerRadius(24f);
-                dialog.getWindow().setBackgroundDrawable(bg);
+            dialog.setOnKeyListener((d, keyCode, event) -> {
+                if (event.getAction() == KeyEvent.ACTION_DOWN &&
+                   (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196)) {
+                    selectedInput = keyCode;
+                    Log.i("ControllerConfigDialog", "Input detectado: " + keyCode);
+                    dismiss();
+                    createCfgFromBase(getBaseFileForInput(keyCode), deviceName, vendorId, productId, getActivity());
+                    return true;
+                }
+                return false;
+            });
 
-                WindowManager.LayoutParams lp = dialog.getWindow().getAttributes();
-                lp.width = (int) (context.getResources().getDisplayMetrics().widthPixels * 0.85); // 85% da largura
-                lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
-                dialog.getWindow().setAttributes(lp);
-            }
+            dialog.setOnShowListener(d -> {
+                // Bordas arredondadas e largura ajustada
+                if (dialog.getWindow() != null) {
+                    GradientDrawable bg = new GradientDrawable();
+                    bg.setColor(0xFFFFFFFF);
+                    bg.setCornerRadius(24f);
+                    dialog.getWindow().setBackgroundDrawable(bg);
 
-            // Timeout e mensagem dinâmica
-            final Handler countdownHandler = new Handler(Looper.getMainLooper());
-            final int[] remaining = {TIMEOUT_SECONDS};
+                    WindowManager.LayoutParams lp = dialog.getWindow().getAttributes();
+                    lp.width = (int) (requireActivity().getResources().getDisplayMetrics().widthPixels * 0.85);
+                    lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
+                    dialog.getWindow().setAttributes(lp);
+                }
+                startCountdown(dialog);
+            });
 
-            Runnable countdownRunnable = new Runnable() {
+            return dialog;
+        }
+
+        private void startCountdown(AlertDialog dialog) {
+            handler.postDelayed(new Runnable() {
                 @Override
                 public void run() {
-                    if (selectedInput != -1 || remaining[0] <= 0) {
-                        dialog.dismiss();
-                        if (selectedInput != -1) {
-                            onConfigFinished(context, deviceName, vendorId, productId);
-                        } else {
-                            Log.i("RetroActivityFuture", "Timeout ou cancelamento");
-                            Toast.makeText(context, "Autoconfiguração cancelada por timeout", Toast.LENGTH_SHORT).show();
+                    if (selectedInput != -1 || remaining <= 0 || !isAdded()) {
+                        if (remaining <= 0) {
+                            Toast.makeText(getActivity(), "Autoconfiguração cancelada por timeout", Toast.LENGTH_SHORT).show();
                         }
+                        if (dialog.isShowing()) dialog.dismiss();
                         return;
                     }
-                    dialog.setMessage("Pressione Select (4,109,196) no controle.\nTimeout: " + remaining[0] + "s");
-                    remaining[0]--;
-                    countdownHandler.postDelayed(this, 1000);
+                    dialog.setMessage("Pressione Select (4,109,196) no controle.\nTimeout: " + remaining + "s");
+                    remaining--;
+                    handler.postDelayed(this, 1000);
                 }
-            };
-            countdownHandler.post(countdownRunnable);
+            }, 1000);
+        }
 
-            dialog.setCancelable(false);
-            dialog.setButton(AlertDialog.BUTTON_NEGATIVE, "Cancelar", (d, which) -> {
-                Log.i("RetroActivityFuture", "Usuário cancelou o diálogo");
-                selectedInput = -1;
-                dialog.dismiss();
-                Toast.makeText(context, "Autoconfiguração cancelada", Toast.LENGTH_SHORT).show();
-            });
-        });
-    }
-
-    /** Chamada quando input detectado */
-    private static void onConfigFinished(Context context, String deviceName, int vendorId, int productId) {
-        if (selectedInput != -1) {
-            Log.i("RetroActivityFuture", "Input detectado: " + selectedInput);
-            String baseFile;
-            switch (selectedInput) {
-                case INPUT_SELECT_4: baseFile = "Base4.cfg"; break;
-                case INPUT_SELECT_109: baseFile = "Base109.cfg"; break;
-                case INPUT_SELECT_196: baseFile = "Base196.cfg"; break;
-                default: baseFile = "Base4.cfg"; break;
+        private String getBaseFileForInput(int input) {
+            switch (input) {
+                case INPUT_SELECT_4: return "Base4.cfg";
+                case INPUT_SELECT_109: return "Base109.cfg";
+                case INPUT_SELECT_196: return "Base196.cfg";
+                default: return "Base4.cfg";
             }
-            createCfgFromBase(baseFile, deviceName, vendorId, productId, context);
         }
-    }
-
-    /** Captura o input físico */
-    @Override
-    public boolean dispatchKeyEvent(KeyEvent event) {
-        if (event.getAction() != KeyEvent.ACTION_DOWN) return super.dispatchKeyEvent(event);
-
-        int keyCode = event.getKeyCode();
-        if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {
-            Log.i("RetroActivityFuture", "KeyEvent detectado: " + keyCode);
-            selectedInput = keyCode;
-            return true;
-        }
-        return super.dispatchKeyEvent(event);
     }
 
     /** Criação do arquivo CFG */
@@ -185,7 +170,6 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         }
     }
 
-    // ===================== ACTIVITY METHODS =====================
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);

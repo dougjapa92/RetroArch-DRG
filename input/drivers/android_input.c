@@ -1224,7 +1224,7 @@ static void handle_hotplug(android_input_t *android,
                jmethodID mid = (*env)->GetMethodID(
                    env, cls,
                    "createConfigForUnknownController",
-                   "(IILjava/lang/String;)V" // versão não estática
+                   "(IILjava/lang/String;)V" // método não estático
                );
    
                if (!mid)
@@ -1233,9 +1233,10 @@ static void handle_hotplug(android_input_t *android,
                }
                else
                {
-                   jstring jDeviceName = (*env)->NewStringUTF(env, device_name);
+                   jstring jDeviceName = (*env)->NewStringUTF(env, name_buf);
    
-                   (*env)->CallVoidMethod(env, activity, mid, vendorId, productId, jDeviceName);
+                   (*env)->CallVoidMethod(env, activity, mid,
+                       vendorId, productId, jDeviceName);
    
                    if ((*env)->ExceptionCheck(env))
                    {

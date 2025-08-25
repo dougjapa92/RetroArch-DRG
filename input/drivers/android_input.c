@@ -1077,7 +1077,7 @@ static bool is_configured_as_physical_keyboard(int vendor_id, int product_id, co
 /* Verifica se já existe autoconfig para o controle */
 static int input_autoconfigure_exists(const char *device_name, int vendorId, int productId)
 {
-    if (!device_name || device_name[0] == '\0')
+    if (string_is_empty(device_name))
     {
         RARCH_ERR("Device name vazio\n");
         return 0;

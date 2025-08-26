@@ -74,7 +74,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     private int selectedInput = -1;
 
     /** Método chamado via JNI de forma síncrona */
-    public void createConfigForUnknownControllerSync(int vendorId, int productId, String deviceName) {
+    public boolean createConfigForUnknownControllerSync(int vendorId, int productId, String deviceName) {
         selectedInput = -1;
         latch = new CountDownLatch(1);
     
@@ -112,6 +112,8 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             dialog.dismiss();
         }
     
+        boolean cfgCreated = false;
+    
         if (selectedInput != -1) {
             String baseFile;
             switch (selectedInput) {
@@ -129,12 +131,15 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                     break;
             }
             createCfgFromBase(baseFile, deviceName, vendorId, productId, this);
+            cfgCreated = true; // CFG criado
         } else {
             Log.i("RetroActivityFuture", "Autoconfiguração cancelada ou sem input");
             Toast.makeText(this, "Autoconfiguração cancelada ou sem input", Toast.LENGTH_SHORT).show();
         }
     
         latch = null;
+    
+        return cfgCreated; // retorna true se criou, false se não
     }
 
     /** Criação do arquivo CFG */

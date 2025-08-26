@@ -267,45 +267,46 @@ public final class MainMenuActivity extends PreferenceActivity {
             finalStartup();
         }
 
+        /** Verifica se a pasta contém imagens */
+        private boolean hasImages(File dir) {
+            if (dir == null || !dir.exists() || !dir.isDirectory()) return false;
+    
+            String[] images = dir.list((d, name) -> {
+                String lower = name.toLowerCase();
+                return lower.endsWith(".jpg") || lower.endsWith(".png") || lower.endsWith(".bmp") || 
+                       lower.endsWith(".svg") || lower.endsWith(".cpt");
+            });
+    
+            return images != null && images.length > 0;
+        }
+    
         /** Cria .nomedia em uma pasta se encontrar ao menos uma imagem, e continua nas subpastas */
         private void processFolderForImages(File dir) {
             if (dir == null || !dir.exists() || !dir.isDirectory()) return;
-
-            String[] images = dir.list((d, name) -> {
-                String lower = name.toLowerCase();
-                return lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png");
-            });
-
-            if (images != null && images.length > 0) {
+    
+            if (hasImages(dir)) {
                 File nomedia = new File(dir, ".nomedia");
                 try { if (!nomedia.exists()) nomedia.createNewFile(); } 
                 catch (IOException e) { e.printStackTrace(); }
             }
-
+    
             File[] subDirs = dir.listFiles(File::isDirectory);
             if (subDirs != null) {
                 for (File subDir : subDirs) processFolderForImages(subDir);
             }
         }
-
+    
         /** Conta pastas que terão .nomedia, incluindo subpastas */
         private int countFoldersWithImages(File dir) {
             if (dir == null || !dir.exists() || !dir.isDirectory()) return 0;
-
-            int count = 0;
-
-            String[] images = dir.list((d, name) -> {
-                String lower = name.toLowerCase();
-                return lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png");
-            });
-
-            if (images != null && images.length > 0) count++;
-
+    
+            int count = hasImages(dir) ? 1 : 0;
+    
             File[] subDirs = dir.listFiles(File::isDirectory);
             if (subDirs != null) {
                 for (File subDir : subDirs) count += countFoldersWithImages(subDir);
             }
-
+    
             return count;
         }
 
@@ -480,4 +481,4 @@ public final class MainMenuActivity extends PreferenceActivity {
         String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
         retro.putExtra("EXTERNAL", external);
     }
-}  
+}

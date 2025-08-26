@@ -1,138 +1,100 @@
-package com.retroarch.browser.retroactivity;
-
-import android.os.Bundle;
-import android.os.Handler;
-import android.os.Looper;
-import android.view.View;
-import android.content.Context;
-import android.util.Log;
-import android.widget.Toast;
-import androidx.annotation.NonNull;
-import androidx.fragment.app.DialogFragment;
-import androidx.appcompat.app.AlertDialog;
-import android.graphics.drawable.GradientDrawable;
-import android.view.WindowManager;
-import android.view.KeyEvent;
-
-import com.retroarch.browser.preferences.util.ConfigFile;
-import com.retroarch.browser.preferences.util.UserPreferences;
-
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
-
 public final class RetroActivityFuture extends RetroActivityCamera {
 
     private boolean quitfocus = false;
     private View mDecorView;
-    private static int selectedInput = -1;
 
+    private static final int HANDLER_WHAT_TOGGLE_IMMERSIVE = 1;
+    private static final int HANDLER_WHAT_TOGGLE_POINTER_CAPTURE = 2;
+    private static final int HANDLER_WHAT_TOGGLE_POINTER_NVIDIA = 3;
+    private static final int HANDLER_WHAT_TOGGLE_POINTER_ICON = 4;
+    private static final int HANDLER_ARG_TRUE = 1;
+    private static final int HANDLER_ARG_FALSE = 0;
+    private static final int HANDLER_MESSAGE_DELAY_DEFAULT_MS = 300;
+
+    private final Handler mHandler = new Handler(Looper.getMainLooper()) {
+        @Override
+        public void handleMessage(Message msg) {
+            boolean state = (msg.arg1 == HANDLER_ARG_TRUE);
+            switch (msg.what) {
+                case HANDLER_WHAT_TOGGLE_IMMERSIVE:
+                    attemptToggleImmersiveMode(state);
+                    break;
+                case HANDLER_WHAT_TOGGLE_POINTER_CAPTURE:
+                    attemptTogglePointerCapture(state);
+                    break;
+                case HANDLER_WHAT_TOGGLE_POINTER_NVIDIA:
+                    attemptToggleNvidiaCursorVisibility(state);
+                    break;
+                case HANDLER_WHAT_TOGGLE_POINTER_ICON:
+                    attemptTogglePointerIcon(state);
+                    break;
+            }
+        }
+    };
+
+    // ===================== AUTOCONFIGURATION =====================
     private static final int INPUT_SELECT_4 = 4;
     private static final int INPUT_SELECT_109 = 109;
     private static final int INPUT_SELECT_196 = 196;
     private static final int TIMEOUT_SECONDS = 10;
 
-    /** Método chamado via JNI */
-    public void createConfigForUnknownController(int vendorId, int productId, String deviceName) {
-        ControllerConfigDialogFragment.newInstance(deviceName, vendorId, productId)
-                .show(getSupportFragmentManager(), "controller_config");
-    }
+    private AlertDialog dialog;
+    private CountDownLatch latch;
+    private int selectedInput = -1;
 
-    /** DialogFragment para captura de input físico */
-    public static class ControllerConfigDialogFragment extends DialogFragment {
+    /** Método chamado via JNI de forma síncrona */
+    public void createConfigForUnknownControllerSync(int vendorId, int productId, String deviceName) {
+        selectedInput = -1;
+        latch = new CountDownLatch(1);
 
-        private int vendorId, productId;
-        private String deviceName;
-        private int remaining = TIMEOUT_SECONDS;
-        private final Handler handler = new Handler(Looper.getMainLooper());
-
-        public static ControllerConfigDialogFragment newInstance(String deviceName, int vendorId, int productId) {
-            ControllerConfigDialogFragment f = new ControllerConfigDialogFragment();
-            Bundle args = new Bundle();
-            args.putString("deviceName", deviceName);
-            args.putInt("vendorId", vendorId);
-            args.putInt("productId", productId);
-            f.setArguments(args);
-            return f;
-        }
-
-        @NonNull
-        @Override
-        public AlertDialog onCreateDialog(Bundle savedInstanceState) {
-            deviceName = getArguments().getString("deviceName");
-            vendorId = getArguments().getInt("vendorId");
-            productId = getArguments().getInt("productId");
-
-            AlertDialog.Builder builder = new AlertDialog.Builder(requireActivity());
+        runOnUiThread(() -> {
+            AlertDialog.Builder builder = new AlertDialog.Builder(this);
             builder.setTitle("Autoconfiguração de Controle");
-            builder.setMessage("Pressione Select (4,109,196) no controle.\nTimeout: " + TIMEOUT_SECONDS + "s");
+            builder.setMessage("Pressione Select (4, 109 ou 196) ou cancele.");
             builder.setCancelable(false);
-            builder.setNegativeButton("Cancelar", (d, which) -> {
-                Log.i("ControllerConfigDialog", "Cancelado pelo usuário");
-                selectedInput = -1;
-                Toast.makeText(getActivity(), "Autoconfiguração cancelada", Toast.LENGTH_SHORT).show();
-                dismiss();
+            builder.setNegativeButton("Cancelar", (d, w) -> {
+                latch.countDown();
             });
 
-            AlertDialog dialog = builder.create();
-
+            dialog = builder.create();
             dialog.setOnKeyListener((d, keyCode, event) -> {
                 if (event.getAction() == KeyEvent.ACTION_DOWN &&
-                   (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196)) {
+                    (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196)) {
                     selectedInput = keyCode;
-                    Log.i("ControllerConfigDialog", "Input detectado: " + keyCode);
-                    dismiss();
-                    createCfgFromBase(getBaseFileForInput(keyCode), deviceName, vendorId, productId, getActivity());
+                    latch.countDown();
+                    dialog.dismiss();
                     return true;
                 }
                 return false;
             });
 
-            dialog.setOnShowListener(d -> {
-                // Bordas arredondadas e largura ajustada
-                if (dialog.getWindow() != null) {
-                    GradientDrawable bg = new GradientDrawable();
-                    bg.setColor(0xFFFFFFFF);
-                    bg.setCornerRadius(24f);
-                    dialog.getWindow().setBackgroundDrawable(bg);
+            dialog.show();
+        });
 
-                    WindowManager.LayoutParams lp = dialog.getWindow().getAttributes();
-                    lp.width = (int) (requireActivity().getResources().getDisplayMetrics().widthPixels * 0.85);
-                    lp.height = WindowManager.LayoutParams.WRAP_CONTENT;
-                    dialog.getWindow().setAttributes(lp);
-                }
-                startCountdown(dialog);
-            });
-
-            return dialog;
+        try {
+            latch.await(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            Log.e("RetroActivityFuture", "Interrompido durante espera");
         }
 
-        private void startCountdown(AlertDialog dialog) {
-            handler.postDelayed(new Runnable() {
-                @Override
-                public void run() {
-                    if (selectedInput != -1 || remaining <= 0 || !isAdded()) {
-                        if (remaining <= 0) {
-                            Toast.makeText(getActivity(), "Autoconfiguração cancelada por timeout", Toast.LENGTH_SHORT).show();
-                        }
-                        if (dialog.isShowing()) dialog.dismiss();
-                        return;
-                    }
-                    dialog.setMessage("Pressione Select (4,109,196) no controle.\nTimeout: " + remaining + "s");
-                    remaining--;
-                    handler.postDelayed(this, 1000);
-                }
-            }, 1000);
+        if (dialog != null && dialog.isShowing()) {
+            dialog.dismiss();
         }
 
-        private String getBaseFileForInput(int input) {
-            switch (input) {
-                case INPUT_SELECT_4: return "Base4.cfg";
-                case INPUT_SELECT_109: return "Base109.cfg";
-                case INPUT_SELECT_196: return "Base196.cfg";
-                default: return "Base4.cfg";
-            }
+        if (selectedInput != -1) {
+            String baseFile = switch (selectedInput) {
+                case INPUT_SELECT_4 -> "Base4.cfg";
+                case INPUT_SELECT_109 -> "Base109.cfg";
+                case INPUT_SELECT_196 -> "Base196.cfg";
+                default -> "Base4.cfg";
+            };
+            createCfgFromBase(baseFile, deviceName, vendorId, productId, this);
+        } else {
+            Log.i("RetroActivityFuture", "Autoconfiguração cancelada ou sem input");
+            Toast.makeText(this, "Autoconfiguração cancelada ou sem input", Toast.LENGTH_SHORT).show();
         }
+
+        latch = null;
     }
 
     /** Criação do arquivo CFG */
@@ -165,11 +127,16 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         static String readFileToString(File file) throws IOException {
             byte[] bytes = new byte[(int) file.length()];
             java.io.FileInputStream fis = new java.io.FileInputStream(file);
-            try { fis.read(bytes); } finally { fis.close(); }
+            try {
+                fis.read(bytes);
+            } finally {
+                fis.close();
+            }
             return new String(bytes);
         }
     }
 
+    // ===================== ACTIVITY METHODS =====================
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -181,7 +148,6 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     public void onResume() {
         super.onResume();
         setSustainedPerformanceMode(sustainedPerformanceMode);
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             String refresh = getIntent().getStringExtra("REFRESH");
             if (refresh != null) {
@@ -190,7 +156,6 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 getWindow().setAttributes(params);
             }
         }
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
             try {
                 ConfigFile configFile = new ConfigFile(UserPreferences.getDefaultConfigPath(this));
@@ -198,7 +163,9 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                     getWindow().getAttributes().layoutInDisplayCutoutMode =
                             WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
                 }
-            } catch (Exception e) { Log.w("RetroActivityFuture", e.getMessage()); }
+            } catch (Exception e) {
+                Log.w("RetroActivityFuture", e.getMessage());
+            }
         }
     }
 
@@ -214,13 +181,17 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         mHandlerSendUiMessage(HANDLER_WHAT_TOGGLE_IMMERSIVE, hasFocus);
         try {
             ConfigFile configFile = new ConfigFile(UserPreferences.getDefaultConfigPath(this));
-            if (configFile.getBoolean("input_auto_mouse_grab")) inputGrabMouse(hasFocus);
-        } catch (Exception e) { Log.w("RetroActivityFuture", e.getMessage()); }
+            if (configFile.getBoolean("input_auto_mouse_grab")) {
+                inputGrabMouse(hasFocus);
+            }
+        } catch (Exception e) {
+            Log.w("RetroActivityFuture", e.getMessage());
+        }
     }
 
     private void mHandlerSendUiMessage(int what, boolean state) {
         int arg1 = state ? HANDLER_ARG_TRUE : HANDLER_ARG_FALSE;
-        android.os.Message message = mHandler.obtainMessage(what, arg1, -1);
+        Message message = mHandler.obtainMessage(what, arg1, -1);
         mHandler.sendMessageDelayed(message, HANDLER_MESSAGE_DELAY_DEFAULT_MS);
     }
 
@@ -246,7 +217,9 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                             | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
                             | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN);
                 }
-            } catch (Exception e) { Log.w("RetroActivityFuture", e.getMessage()); }
+            } catch (Exception e) {
+                Log.w("RetroActivityFuture", e.getMessage());
+            }
         }
     }
 
@@ -255,7 +228,9 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             try {
                 if (state) mDecorView.requestPointerCapture();
                 else mDecorView.releasePointerCapture();
-            } catch (Exception e) { Log.w("RetroActivityFuture", e.getMessage()); }
+            } catch (Exception e) {
+                Log.w("RetroActivityFuture", e.getMessage());
+            }
         }
     }
 
@@ -265,17 +240,40 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 Method m = InputManager.class.getMethod("setCursorVisibility", boolean.class);
                 InputManager im = (InputManager) getSystemService(Context.INPUT_SERVICE);
                 m.invoke(im, !state);
-            } catch (NoSuchMethodException e) { }
-            catch (Exception e) { Log.w("RetroActivityFuture", e.getMessage()); }
+            } catch (NoSuchMethodException e) {
+                // Método não existe — provavelmente não é NVIDIA
+            } catch (Exception e) {
+                Log.w("RetroActivityFuture", e.getMessage());
+            }
         }
     }
 
     private void attemptTogglePointerIcon(boolean state) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             try {
-                if (state) mDecorView.setPointerIcon(PointerIcon.getSystemIcon(this, PointerIcon.TYPE_NULL));
-                else mDecorView.setPointerIcon(null);
-            } catch (Exception e) { Log.w("RetroActivityFuture", e.getMessage()); }
+                if (state) {
+                    PointerIcon nullPointerIcon = PointerIcon.getSystemIcon(this, PointerIcon.TYPE_NULL);
+                    mDecorView.setPointerIcon(nullPointerIcon);
+                } else {
+                    mDecorView.setPointerIcon(null);
+                }
+            } catch (Exception e) {
+                Log.w("RetroActivityFuture", e.getMessage());
+            }
         }
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        if (latch != null && event.getAction() == KeyEvent.ACTION_DOWN) {
+            int keyCode = event.getKeyCode();
+            if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {
+                selectedInput = keyCode;
+                latch.countDown();
+                if (dialog != null && dialog.isShowing()) dialog.dismiss();
+                return true;
+            }
+        }
+        return super.dispatchKeyEvent(event);
     }
 }

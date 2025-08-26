@@ -1,3 +1,22 @@
+package com.retroarch.browser.retroactivity;
+
+import android.util.Log;
+import android.view.PointerIcon;
+import android.view.View;
+import android.view.WindowManager;
+import android.content.Intent;
+import android.content.Context;
+import android.hardware.input.InputManager;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
+import android.os.Message;
+import com.retroarch.browser.preferences.util.ConfigFile;
+import com.retroarch.browser.preferences.util.UserPreferences;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+
 public final class RetroActivityFuture extends RetroActivityCamera {
 
     private boolean quitfocus = false;

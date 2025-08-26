@@ -17,6 +17,18 @@ import com.retroarch.browser.preferences.util.UserPreferences;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
+// Android framework
+import android.app.AlertDialog;
+import android.view.KeyEvent;
+import android.widget.Toast;
+
+// Java standard library
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+
 public final class RetroActivityFuture extends RetroActivityCamera {
 
     private boolean quitfocus = false;

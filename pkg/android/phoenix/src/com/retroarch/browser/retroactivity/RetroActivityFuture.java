@@ -46,16 +46,16 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     public void createConfigForUnknownControllerSync(int vendorId, int productId, String deviceName) {
         selectedInput = -1;
         latch = new CountDownLatch(1);
-
+    
         runOnUiThread(() -> {
             AlertDialog.Builder builder = new AlertDialog.Builder(this);
             builder.setTitle("Autoconfiguração de Controle");
-            builder.setMessage("Pressione Select (4, 109 ou 196) ou cancele.");
+            builder.setMessage("Pressione Select (Options) para autoconfigurar o controle.");
             builder.setCancelable(false);
             builder.setNegativeButton("Cancelar", (d, w) -> {
                 latch.countDown();
             });
-
+    
             dialog = builder.create();
             dialog.setOnKeyListener((d, keyCode, event) -> {
                 if (event.getAction() == KeyEvent.ACTION_DOWN &&
@@ -67,33 +67,42 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 }
                 return false;
             });
-
+    
             dialog.show();
         });
-
+    
         try {
             latch.await(TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             Log.e("RetroActivityFuture", "Interrompido durante espera");
         }
-
+    
         if (dialog != null && dialog.isShowing()) {
             dialog.dismiss();
         }
-
+    
         if (selectedInput != -1) {
-            String baseFile = switch (selectedInput) {
-                case INPUT_SELECT_4 -> "Base4.cfg";
-                case INPUT_SELECT_109 -> "Base109.cfg";
-                case INPUT_SELECT_196 -> "Base196.cfg";
-                default -> "Base4.cfg";
-            };
+            String baseFile;
+            switch (selectedInput) {
+                case INPUT_SELECT_4:
+                    baseFile = "Base4.cfg";
+                    break;
+                case INPUT_SELECT_109:
+                    baseFile = "Base109.cfg";
+                    break;
+                case INPUT_SELECT_196:
+                    baseFile = "Base196.cfg";
+                    break;
+                default:
+                    baseFile = "Base4.cfg";
+                    break;
+            }
             createCfgFromBase(baseFile, deviceName, vendorId, productId, this);
         } else {
             Log.i("RetroActivityFuture", "Autoconfiguração cancelada ou sem input");
             Toast.makeText(this, "Autoconfiguração cancelada ou sem input", Toast.LENGTH_SHORT).show();
         }
-
+    
         latch = null;
     }
 

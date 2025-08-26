@@ -1213,28 +1213,19 @@ static void handle_hotplug(android_input_t *android,
        else
        {
            jobject activity = g_android->activity->clazz;
-           jclass cls = (*env)->GetObjectClass(env, activity); // pega a classe da Activity diretamente
+           jclass cls = (*env)->GetObjectClass(env, activity);
    
-           if (!cls)
+           if (cls)
            {
-               RARCH_ERR("Classe da Activity não encontrada\n");
-           }
-           else
-           {
-               jmethodID mid = (*env)->GetMethodID(
-                   env, cls,
-                   "createConfigForUnknownController",
-                   "(IILjava/lang/String;)V" // método não estático
-               );
+               jmethodID mid = (*env)->GetMethodID(env, cls,
+                   "createConfigForUnknownControllerSync",
+                   "(IILjava/lang/String;)V");
    
-               if (!mid)
-               {
-                   RARCH_ERR("Método createConfigForUnknownController não encontrado\n");
-               }
-               else
+               if (mid)
                {
                    jstring jDeviceName = (*env)->NewStringUTF(env, name_buf);
    
+                   // Essa chamada bloqueia até o Java concluir
                    (*env)->CallVoidMethod(env, activity, mid,
                        vendorId, productId, jDeviceName);
    
@@ -1242,19 +1233,20 @@ static void handle_hotplug(android_input_t *android,
                    {
                        (*env)->ExceptionDescribe(env);
                        (*env)->ExceptionClear(env);
-                       RARCH_ERR("Exceção lançada durante createConfigForUnknownController\n");
+                       RARCH_ERR("Exceção durante criação de CFG\n");
                    }
    
                    (*env)->DeleteLocalRef(env, jDeviceName);
                }
                (*env)->DeleteLocalRef(env, cls);
            }
+           else
+           {
+               RARCH_ERR("Classe da Activity não encontrada\n");
+           }
+   
            (*g_vm)->DetachCurrentThread(g_vm);
        }
-   }
-   else
-   {
-       RARCH_LOG("CFG já existente, não chamando Java: %s\n", name_buf);
    }
 
     input_autoconfigure_connect(name_buf, NULL, android_joypad.ident, *port, vendorId, productId);

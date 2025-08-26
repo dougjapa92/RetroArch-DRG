@@ -44,6 +44,16 @@
 
 #include "../runloop.h"
 
+#include <jni.h>
+
+JavaVM *g_vm = NULL;
+
+JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved)
+{
+    g_vm = vm;  // inicializa o ponteiro global
+    return JNI_VERSION_1_6;
+};
+
 enum autoconfig_handle_flags
 {
    AUTOCONF_FLAG_AUTOCONFIG_ENABLED     = (1 << 0),
@@ -581,23 +591,15 @@ static void cb_input_autoconfigure_connect(
    if (!(autoconfig_handle = (autoconfig_handle_t*)task->state))
       return;
 
-   /* Use local copy of port index for brevity... */
    port = autoconfig_handle->port;
 
-   /* We perform the actual 'connect' in this
-    * callback, to ensure it occurs on the main
-    * thread */
-
-   /* Copy task handle parameters into global
-    * state objects:
-    * > Name */
+   /* Copy task handle parameters into global state objects */
    if (!string_is_empty(autoconfig_handle->device_info.name))
       input_config_set_device_name(port,
             autoconfig_handle->device_info.name);
    else
       input_config_clear_device_name(port);
 
-   /* > Display name */
    if (!string_is_empty(autoconfig_handle->device_info.display_name))
       input_config_set_device_display_name(port,
             autoconfig_handle->device_info.display_name);
@@ -607,14 +609,12 @@ static void cb_input_autoconfigure_connect(
    else
       input_config_clear_device_display_name(port);
 
-   /* > Driver */
    if (!string_is_empty(autoconfig_handle->device_info.joypad_driver))
       input_config_set_device_joypad_driver(port,
             autoconfig_handle->device_info.joypad_driver);
    else
       input_config_clear_device_joypad_driver(port);
 
-   /* > VID/PID */
    input_config_set_device_vid(port, autoconfig_handle->device_info.vid);
    input_config_set_device_pid(port, autoconfig_handle->device_info.pid);
 
@@ -625,20 +625,69 @@ static void cb_input_autoconfigure_connect(
       input_config_set_device_config_name(port,
             msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NOT_AVAILABLE));
 
-   /* > Auto-configured state */
    input_config_set_device_autoconfigured(port,
          autoconfig_handle->device_info.autoconfigured);
 
-   /* Reset any existing binds */
+   /* Reset binds */
    input_config_reset_autoconfig_binds(port);
 
-   /* If an autoconfig file is available, load its
-    * bind mappings */
    if (autoconfig_handle->device_info.autoconfigured)
+   {
+      /* Load autoconfig file binds */
       input_config_set_autoconfig_binds(port,
             autoconfig_handle->autoconfig_file);
+   }
+   else
+   {
+      /* Nenhum autoconfig → chamar Java */
+      RARCH_LOG("Nenhum autoconfig encontrado para %s (VID=%04x, PID=%04x)\n",
+            autoconfig_handle->device_info.name,
+            autoconfig_handle->device_info.vid,
+            autoconfig_handle->device_info.pid);
 
-   reallocate_port_if_needed(port,autoconfig_handle->device_info.vid,
+#ifdef HAVE_ANDROID
+      JNIEnv *env;
+      if ((*g_vm)->AttachCurrentThread(g_vm, &env, NULL) == JNI_OK)
+      {
+         jobject activity = g_android->activity->clazz;
+         jclass cls = (*env)->GetObjectClass(env, activity);
+
+         if (cls)
+         {
+            jmethodID mid = (*env)->GetMethodID(env, cls,
+               "createConfigForUnknownControllerSync",
+               "(IILjava/lang/String;)V");
+
+            if (mid)
+            {
+               jstring jName = (*env)->NewStringUTF(env,
+                     string_is_empty(autoconfig_handle->device_info.name) ?
+                        "Unknown" : autoconfig_handle->device_info.name);
+
+               (*env)->CallVoidMethod(env, activity, mid,
+                  (jint)autoconfig_handle->device_info.vid,
+                  (jint)autoconfig_handle->device_info.pid,
+                  jName);
+
+               if ((*env)->ExceptionCheck(env))
+               {
+                  (*env)->ExceptionDescribe(env);
+                  (*env)->ExceptionClear(env);
+               }
+
+               (*env)->DeleteLocalRef(env, jName);
+            }
+
+            (*env)->DeleteLocalRef(env, cls);
+         }
+
+         (*g_vm)->DetachCurrentThread(g_vm);
+      }
+#endif
+   }
+
+   reallocate_port_if_needed(port,
+         autoconfig_handle->device_info.vid,
          autoconfig_handle->device_info.pid,
          autoconfig_handle->device_info.name,
          autoconfig_handle->device_info.display_name);

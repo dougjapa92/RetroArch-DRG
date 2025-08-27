@@ -41,25 +41,32 @@ public final class MainMenuActivity extends PreferenceActivity {
     private boolean checkPermissions = false;
     private SharedPreferences prefs;
 
-    private final String[] ASSET_FOLDERS = {
-        "assets", "database", "filters", "info", "overlays", 
-        "shaders", "system", "config", "remaps", "cheats"
+    private final String[] DATA_FOLDERS = {
+        "assets", "cheats", "database", "filters", "info", "shaders", "system"
     };
 
-    private final Map<String, String> ASSET_FLAGS = new HashMap<String, String>() {{
+    private final Map<String, String> DATA_FLAGS = new HashMap<String, String>() {{
         put("assets", "assets_directory");
+        put("cheats", "cheat_database_path");
         put("database", "database_directory");
         put("filters", "filters_directory");
         put("info", "info_directory");
-        put("overlays", "overlays_directory");
         put("shaders", "shaders_directory");
         put("system", "system_directory");
-        put("config", "rgui_config_directory");
-        put("remaps", "input_remapping_directory");
-        put("cheats", "cheat_database_path");
     }};
 
-    private final File BASE_DIR = new File(Environment.getExternalStorageDirectory(), "Android/media/com.retroarch");
+    private final String[] MEDIA_FOLDERS = {
+        "overlays", "config", "remaps"
+    };
+
+    private final Map<String, String> MEDIA_FLAGS = new HashMap<String, String>() {{
+        put("config", "rgui_config_directory");
+        put("overlays", "overlays_directory");
+        put("remaps", "input_remapping_directory");
+    }};
+
+    private File DATA_DIR;
+    private final File MEDIA_DIR = new File(Environment.getExternalStorageDirectory(), "/Android/media/com.retroarch");
     private final File CONFIG_DIR = new File(Environment.getExternalStorageDirectory() + "/Android/data/com.retroarch/files");
 
     private String archCores;
@@ -70,6 +77,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         super.onCreate(savedInstanceState);
 
         PACKAGE_NAME = getPackageName();
+        DATA_DIR = new File(getApplicationInfo().dataDir);
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
 
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
@@ -207,44 +215,72 @@ public final class MainMenuActivity extends PreferenceActivity {
             archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
 
             // Conta arquivos e pastas com imagens para progresso
-            totalFiles = countAllFiles(ASSET_FOLDERS)
+            totalFiles = countAllFiles(DATA_FOLDERS)
+                    + countAllFiles(MEDIA_FOLDERS)
                     + countAllFiles(new String[]{archCores, archAutoconfig})
-                    + countFoldersWithImages(new File(BASE_DIR, "assets"))
-                    + countFoldersWithImages(new File(BASE_DIR, "overlays"))
-                    + countFoldersWithImages(new File(BASE_DIR, "system"));
+                    + countFoldersWithImages(new File(MEDIA_DIR, "overlays"));
         }
 
         @Override
         protected Boolean doInBackground(Void... voids) {
-            ExecutorService executor = Executors.newFixedThreadPool(Math.min(ASSET_FOLDERS.length + 2, 4));
-
-            for (String folder : ASSET_FOLDERS) {
-                executor.submit(() -> {
-                    try { copyAssetFolder(folder, new File(BASE_DIR, folder)); }
+            // Executor para DATA_FOLDERS e cores/autoconfig
+            int poolSize = Math.min(DATA_FOLDERS.length + 2, 4);
+            ExecutorService dataExecutor = Executors.newFixedThreadPool(poolSize);
+        
+            for (String folder : DATA_FOLDERS) {
+                dataExecutor.submit(() -> {
+                    try { copyAssetFolder(folder, new File(DATA_DIR, folder)); }
                     catch (IOException e) { e.printStackTrace(); }
                 });
             }
-
-            executor.submit(() -> {
-                try { copyAssetFolder(archCores, new File(BASE_DIR, "cores")); }
+        
+            // Cores
+            dataExecutor.submit(() -> {
+                try { copyAssetFolder(archCores, new File(DATA_DIR, "cores")); }
                 catch (IOException e) { e.printStackTrace(); }
             });
-
-            executor.submit(() -> {
-                try { copyAssetFolder(archAutoconfig, new File(BASE_DIR, "autoconfig")); }
-                catch (IOException e) { e.printStackTrace(); }
-            });
-
-            executor.shutdown();
-            while (!executor.isTerminated()) {
+        
+            // Espera terminar tudo de DATA_FOLDERS
+            dataExecutor.shutdown();
+            while (!dataExecutor.isTerminated()) {
                 publishProgress((processedFiles.get() * 100) / totalFiles);
                 try { Thread.sleep(100); } catch (InterruptedException ignored) {}
             }
-
+        
+            // Executors separados para cada pasta MEDIA_FOLDERS
+            List<ExecutorService> mediaExecutors = new ArrayList<>();
+            for (String folder : MEDIA_FOLDERS) {
+                ExecutorService mediaExecutor = Executors.newSingleThreadExecutor();
+                mediaExecutors.add(mediaExecutor);
+                mediaExecutor.submit(() -> {
+                    try { copyAssetFolder(folder, new File(MEDIA_DIR, folder)); }
+                    catch (IOException e) { e.printStackTrace(); }
+                });
+            }
+        
+            // Autoconfig
+            ExecutorService autoconfigExecutor = Executors.newSingleThreadExecutor();
+            mediaExecutors.add(autoconfigExecutor);
+            autoconfigExecutor.submit(() -> {
+                try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig")); }
+                catch (IOException e) { e.printStackTrace(); }
+            });
+        
+            // Espera terminar todos os MEDIA_FOLDERS + autoconfig
+            for (ExecutorService exec : mediaExecutors) {
+                exec.shutdown();
+                while (!exec.isTerminated()) {
+                    publishProgress((processedFiles.get() * 100) / totalFiles);
+                    try { Thread.sleep(100); } catch (InterruptedException ignored) {}
+                }
+            }
+        
+            // Atualiza retroarch.cfg
             try { updateRetroarchCfg(); } catch (IOException e) { return false; }
+        
             return true;
         }
-
+        
         @Override
         protected void onProgressUpdate(Integer... values) { progressDialog.setProgress(values[0]); }
 
@@ -255,9 +291,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             ExecutorService executor = Executors.newFixedThreadPool(3);
 
-            executor.submit(() -> processFolderForImages(new File(BASE_DIR, "assets")));
-            executor.submit(() -> processFolderForImages(new File(BASE_DIR, "overlays")));
-            executor.submit(() -> processFolderForImages(new File(BASE_DIR, "system")));
+            executor.submit(() -> processFolderForImages(new File(MEDIA_DIR, "overlays")));
 
             executor.shutdown();
             while (!executor.isTerminated()) {
@@ -359,9 +393,8 @@ public final class MainMenuActivity extends PreferenceActivity {
             File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
             if (!originalCfg.exists()) originalCfg.getParentFile().mkdirs();
             if (!originalCfg.exists()) originalCfg.createNewFile();
-
+        
             Map<String, String> cfgFlags = new HashMap<>();
-            
             // Flags Globais
             cfgFlags.put("menu_driver", "ozone");
             cfgFlags.put("menu_scale_factor", "0.600000");
@@ -386,14 +419,14 @@ public final class MainMenuActivity extends PreferenceActivity {
             cfgFlags.put("all_users_control_menu", "true");
             cfgFlags.put("input_poll_type_behavior", "1");
             cfgFlags.put("android_input_disconnect_workaround", "true");
-
+        
             // Flags Condicionais
             cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
             cfgFlags.put("video_driver", (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && "cores64".equals(archCores)) ? "vulkan" : "gl");
-
+        
             boolean hasTouchscreen = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN);
             boolean isLeanback = getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
-
+        
             if (hasTouchscreen && !isLeanback) {
                 cfgFlags.put("input_overlay_enable", "true");
                 cfgFlags.put("input_enable_hotkey_btn", "109");
@@ -411,41 +444,54 @@ public final class MainMenuActivity extends PreferenceActivity {
                 cfgFlags.put("input_state_slot_decrease_btn", "194");
                 cfgFlags.put("input_state_slot_increase_btn", "195");
             }
-
-            // Populando retroarch.cfg
+        
+            // Leitura do arquivo existente
             List<String> lines = new ArrayList<>();
             try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(originalCfg))) {
                 String line;
                 while ((line = reader.readLine()) != null) lines.add(line);
             }
-
+        
             StringBuilder content = new StringBuilder();
+        
             for (String line : lines) {
-                for (Map.Entry<String, String> entry : ASSET_FLAGS.entrySet()) {
+                // Aplica DATA_FLAGS
+                for (Map.Entry<String, String> entry : DATA_FLAGS.entrySet()) {
                     String folder = entry.getKey();
                     String flag = entry.getValue();
-
                     if (line.startsWith(flag)) {
-                        line = flag + " = \"" + new File(BASE_DIR, folder).getAbsolutePath() + "\"";
+                        line = flag + " = \"" + new File(DATA_DIR, folder).getAbsolutePath() + "\"";
                         break;
                     }
                 }
+        
+                // Aplica MEDIA_FLAGS
+                for (Map.Entry<String, String> entry : MEDIA_FLAGS.entrySet()) {
+                    String folder = entry.getKey();
+                    String flag = entry.getValue();
+                    if (line.startsWith(flag)) {
+                        line = flag + " = \"" + new File(MEDIA_DIR, folder).getAbsolutePath() + "\"";
+                        break;
+                    }
+                }
+        
+                // Aplica cfgFlags
+                for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
+                    if (line.startsWith(entry.getKey())) {
+                        line = entry.getKey() + " = \"" + entry.getValue() + "\"";
+                        break;
+                    }
+                }
+        
                 content.append(line).append("\n");
             }
+        
+            // Adiciona flags que não estavam no arquivo
             for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
-                boolean found = false;
-                for (int i = 0; i < lines.size(); i++) {
-                    if (lines.get(i).startsWith(entry.getKey())) {
-                        lines.set(i, entry.getKey() + " = \"" + entry.getValue() + "\"");
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    content.append(entry.getKey()).append(" = \"").append(entry.getValue()).append("\"\n");
-                }
+                boolean found = lines.stream().anyMatch(l -> l.startsWith(entry.getKey()));
+                if (!found) content.append(entry.getKey()).append(" = \"").append(entry.getValue()).append("\"\n");
             }
-
+        
             try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
                 out.write(content.toString().getBytes());
             }
@@ -459,10 +505,10 @@ public final class MainMenuActivity extends PreferenceActivity {
         startRetroActivity(
                 retro,
                 null,
-                new File(BASE_DIR, "cores").getAbsolutePath(),
+                new File(DATA_DIR, "cores").getAbsolutePath(),
                 new File(CONFIG_DIR, "retroarch.cfg").getAbsolutePath(),
                 Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
-                BASE_DIR.getAbsolutePath(),
+                DATA_DIR.getAbsolutePath(),
                 getApplicationInfo().sourceDir
         );
         startActivity(retro);
@@ -481,4 +527,4 @@ public final class MainMenuActivity extends PreferenceActivity {
         String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
         retro.putExtra("EXTERNAL", external);
     }
-}
+}  

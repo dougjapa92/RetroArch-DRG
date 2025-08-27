@@ -223,61 +223,46 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         @Override
         protected Boolean doInBackground(Void... voids) {
-            // Executor para DATA_FOLDERS e cores/autoconfig
-            int poolSize = Math.min(DATA_FOLDERS.length + 2, 4);
-            ExecutorService dataExecutor = Executors.newFixedThreadPool(poolSize);
+            // Limita o número de threads para não saturar o dispositivo
+            int poolSize = Math.min(DATA_FOLDERS.length + MEDIA_FOLDERS.length + 2, 4);
+            ExecutorService executor = Executors.newFixedThreadPool(poolSize);
         
+            // DATA_FOLDERS
             for (String folder : DATA_FOLDERS) {
-                dataExecutor.submit(() -> {
+                executor.submit(() -> {
                     try { copyAssetFolder(folder, new File(DATA_DIR, folder)); }
                     catch (IOException e) { e.printStackTrace(); }
                 });
             }
         
-            // Cores
-            dataExecutor.submit(() -> {
-                try { copyAssetFolder(archCores, new File(DATA_DIR, "cores")); }
-                catch (IOException e) { e.printStackTrace(); }
-            });
-        
-            // Espera terminar tudo de DATA_FOLDERS
-            dataExecutor.shutdown();
-            while (!dataExecutor.isTerminated()) {
-                publishProgress((processedFiles.get() * 100) / totalFiles);
-                try { Thread.sleep(100); } catch (InterruptedException ignored) {}
-            }
-        
-            // Executors separados para cada pasta MEDIA_FOLDERS
-            List<ExecutorService> mediaExecutors = new ArrayList<>();
+            // MEDIA_FOLDERS
             for (String folder : MEDIA_FOLDERS) {
-                ExecutorService mediaExecutor = Executors.newSingleThreadExecutor();
-                mediaExecutors.add(mediaExecutor);
-                mediaExecutor.submit(() -> {
+                executor.submit(() -> {
                     try { copyAssetFolder(folder, new File(MEDIA_DIR, folder)); }
                     catch (IOException e) { e.printStackTrace(); }
                 });
             }
         
-            // Autoconfig
-            ExecutorService autoconfigExecutor = Executors.newSingleThreadExecutor();
-            mediaExecutors.add(autoconfigExecutor);
-            autoconfigExecutor.submit(() -> {
+            // cores
+            executor.submit(() -> {
+                try { copyAssetFolder(archCores, new File(DATA_DIR, "cores")); }
+                catch (IOException e) { e.printStackTrace(); }
+            });
+
+            // autoconfig
+            executor.submit(() -> {
                 try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig")); }
                 catch (IOException e) { e.printStackTrace(); }
             });
         
-            // Espera terminar todos os MEDIA_FOLDERS + autoconfig
-            for (ExecutorService exec : mediaExecutors) {
-                exec.shutdown();
-                while (!exec.isTerminated()) {
-                    publishProgress((processedFiles.get() * 100) / totalFiles);
-                    try { Thread.sleep(100); } catch (InterruptedException ignored) {}
-                }
+            // Aguarda todas as tasks finalizarem
+            executor.shutdown();
+            while (!executor.isTerminated()) {
+                publishProgress((processedFiles.get() * 100) / totalFiles);
+                try { Thread.sleep(100); } catch (InterruptedException ignored) {}
             }
         
-            // Atualiza retroarch.cfg
             try { updateRetroarchCfg(); } catch (IOException e) { return false; }
-        
             return true;
         }
         

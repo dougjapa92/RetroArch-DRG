@@ -41,11 +41,11 @@ public final class MainMenuActivity extends PreferenceActivity {
     private boolean checkPermissions = false;
     private SharedPreferences prefs;
 
-    private final String[] DATA_FOLDERS = {
+    private final String[] ROOT_FOLDERS = {
         "assets", "cheats", "database", "filters", "info", "shaders", "system"
     };
 
-    private final Map<String, String> DATA_FLAGS = new HashMap<String, String>() {{
+    private final Map<String, String> ROOT_FLAGS = new HashMap<String, String>() {{
         put("assets", "assets_directory");
         put("cheats", "cheat_database_path");
         put("database", "database_directory");
@@ -65,7 +65,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         put("remaps", "input_remapping_directory");
     }};
 
-    private File DATA_DIR;
+    private File ROOT_DIR;
     private final File MEDIA_DIR = new File(Environment.getExternalStorageDirectory(), "/Android/media/com.retroarch");
     private final File CONFIG_DIR = new File(Environment.getExternalStorageDirectory() + "/Android/data/com.retroarch/files");
 
@@ -77,7 +77,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         super.onCreate(savedInstanceState);
 
         PACKAGE_NAME = getPackageName();
-        DATA_DIR = new File(getApplicationInfo().dataDir);
+        ROOT_DIR = new File(getApplicationInfo().dataDir);
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
 
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
@@ -215,7 +215,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
 
             // Conta arquivos e pastas com imagens para progresso
-            totalFiles = countAllFiles(DATA_FOLDERS)
+            totalFiles = countAllFiles(ROOT_FOLDERS)
                     + countAllFiles(MEDIA_FOLDERS)
                     + countAllFiles(new String[]{archCores, archAutoconfig})
                     + countFoldersWithImages(new File(MEDIA_DIR, "overlays"));
@@ -224,13 +224,13 @@ public final class MainMenuActivity extends PreferenceActivity {
         @Override
         protected Boolean doInBackground(Void... voids) {
             // Limita o número de threads para não saturar o dispositivo
-            int poolSize = Math.min(DATA_FOLDERS.length + MEDIA_FOLDERS.length + 2, 4);
+            int poolSize = Math.min(ROOT_FOLDERS.length + MEDIA_FOLDERS.length + 2, 4);
             ExecutorService executor = Executors.newFixedThreadPool(poolSize);
         
-            // DATA_FOLDERS
-            for (String folder : DATA_FOLDERS) {
+            // ROOT_FOLDERS
+            for (String folder : ROOT_FOLDERS) {
                 executor.submit(() -> {
-                    try { copyAssetFolder(folder, new File(DATA_DIR, folder)); }
+                    try { copyAssetFolder(folder, new File(ROOT_DIR, folder)); }
                     catch (IOException e) { e.printStackTrace(); }
                 });
             }
@@ -245,7 +245,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         
             // cores
             executor.submit(() -> {
-                try { copyAssetFolder(archCores, new File(DATA_DIR, "cores")); }
+                try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores")); }
                 catch (IOException e) { e.printStackTrace(); }
             });
 
@@ -440,12 +440,12 @@ public final class MainMenuActivity extends PreferenceActivity {
             StringBuilder content = new StringBuilder();
         
             for (String line : lines) {
-                // Aplica DATA_FLAGS
-                for (Map.Entry<String, String> entry : DATA_FLAGS.entrySet()) {
+                // Aplica ROOT_FLAGS
+                for (Map.Entry<String, String> entry : ROOT_FLAGS.entrySet()) {
                     String folder = entry.getKey();
                     String flag = entry.getValue();
                     if (line.startsWith(flag)) {
-                        line = flag + " = \"" + new File(DATA_DIR, folder).getAbsolutePath() + "\"";
+                        line = flag + " = \"" + new File(ROOT_DIR, folder).getAbsolutePath() + "\"";
                         break;
                     }
                 }
@@ -490,10 +490,10 @@ public final class MainMenuActivity extends PreferenceActivity {
         startRetroActivity(
                 retro,
                 null,
-                new File(DATA_DIR, "cores").getAbsolutePath(),
+                new File(ROOT_DIR, "cores").getAbsolutePath(),
                 new File(CONFIG_DIR, "retroarch.cfg").getAbsolutePath(),
                 Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
-                DATA_DIR.getAbsolutePath(),
+                ROOT_DIR.getAbsolutePath(),
                 getApplicationInfo().sourceDir
         );
         startActivity(retro);
@@ -512,4 +512,4 @@ public final class MainMenuActivity extends PreferenceActivity {
         String external = Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files";
         retro.putExtra("EXTERNAL", external);
     }
-}  
+}

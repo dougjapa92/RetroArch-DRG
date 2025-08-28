@@ -449,17 +449,10 @@ public final class MainMenuActivity extends PreferenceActivity {
         
             // Escreve todas as flags no arquivo
             for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
-                boolean found = false;
-                for (int i = 0; i < lines.size(); i++) {
-                    if (lines.get(i).startsWith(entry.getKey())) {
-                        lines.set(i, entry.getKey() + " = \"" + entry.getValue() + "\"");
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    content.append(entry.getKey()).append(" = \"").append(entry.getValue()).append("\"\n");
-                }
+                content.append(entry.getKey())
+                       .append(" = \"")
+                       .append(entry.getValue())
+                       .append("\"\n");
             }
 
             try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {

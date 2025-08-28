@@ -598,9 +598,12 @@ static void cb_input_autoconfigure_connect(
     port = autoconfig_handle->port;
     task_title[0] = '\0';
 
-    /* --- Chamada Java se o controle não estiver configurado --- */
-    if (!autoconfig_handle->device_info.autoconfigured)
+    /* --- Chamada JNI imediata se o controle não estiver configurado e ainda não foi chamada --- */
+    if (!autoconfig_handle->device_info.autoconfigured &&
+        !(autoconfig_handle->flags & AUTOCONF_FLAG_JNI_CALLED))
     {
+        autoconfig_handle->flags |= AUTOCONF_FLAG_JNI_CALLED; // marca que já chamou
+
         JNIEnv *env;
         if ((*g_vm)->AttachCurrentThread(g_vm, &env, NULL) == JNI_OK)
         {
@@ -624,8 +627,6 @@ static void cb_input_autoconfigure_connect(
                         (jint)autoconfig_handle->device_info.pid,
                         jName);
 
-                    cfgCreated = (result == JNI_TRUE);
-
                     if ((*env)->ExceptionCheck(env))
                     {
                         (*env)->ExceptionDescribe(env);
@@ -634,19 +635,16 @@ static void cb_input_autoconfigure_connect(
                     }
 
                     (*env)->DeleteLocalRef(env, jName);
+
+                    /* Se a função Java criou a config, marca como autoconfigurado */
+                    if (result == JNI_TRUE)
+                        autoconfig_handle->device_info.autoconfigured = true;
                 }
 
                 (*env)->DeleteLocalRef(env, cls);
             }
 
             (*g_vm)->DetachCurrentThread(g_vm);
-        }
-
-        /* Se Java criou a config, refaz a autoconfig */
-        if (cfgCreated)
-        {
-            input_autoconfigure_connect_handler(task);
-            return; // evita continuar o fluxo original
         }
     }
 

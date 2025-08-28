@@ -362,80 +362,79 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
         }
 
-        private void updateRetroarchCfg() throws IOException {
-            File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
-            if (!originalCfg.exists()) originalCfg.getParentFile().mkdirs();
-            if (!originalCfg.exists()) originalCfg.createNewFile();
-
-            Map<String, String> cfgFlags = new HashMap<>();
-
-			// ROOT_FLAGS
-            for (Map.Entry<String, String> entry : ROOT_FLAGS.entrySet()) {
-                cfgFlags.put(entry.getValue(), new File(ROOT_DIR, entry.getKey()).getAbsolutePath());
-            }
-        
-            // MEDIA_FLAGS
-            for (Map.Entry<String, String> entry : MEDIA_FLAGS.entrySet()) {
-                cfgFlags.put(entry.getValue(), new File(MEDIA_DIR, entry.getKey()).getAbsolutePath());
-            } 
-            
-            // Flags Globais
-            cfgFlags.put("menu_driver", "ozone");
-            cfgFlags.put("menu_scale_factor", "0.600000");
-            cfgFlags.put("ozone_menu_color_theme", "10");
-            cfgFlags.put("input_overlay_opacity", "0.700000");
-            cfgFlags.put("input_overlay_hide_when_gamepad_connected", "true");
-            cfgFlags.put("video_smooth", "false");
-            cfgFlags.put("aspect_ratio_index", "1");
-            cfgFlags.put("netplay_nickname", "RetroGameBox");
-            cfgFlags.put("menu_enable_widgets", "true");
-            cfgFlags.put("pause_nonactive", "false");
-            cfgFlags.put("menu_mouse_enable", "false");
-            cfgFlags.put("input_player1_analog_dpad_mode", "1");
-            cfgFlags.put("input_player2_analog_dpad_mode", "1");
-            cfgFlags.put("input_player3_analog_dpad_mode", "1");
-            cfgFlags.put("input_player4_analog_dpad_mode", "1");
-            cfgFlags.put("input_player5_analog_dpad_mode", "1");
-            cfgFlags.put("input_menu_toggle_gamepad_combo", "9");
-            cfgFlags.put("input_quit_gamepad_combo", "4");
-            cfgFlags.put("input_bind_timeout", "4");
-            cfgFlags.put("input_bind_hold", "1");
-            cfgFlags.put("all_users_control_menu", "true");
-            cfgFlags.put("input_poll_type_behavior", "1");
-            cfgFlags.put("android_input_disconnect_workaround", "true");
-
-            // Flags Condicionais
-            cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
-            cfgFlags.put("video_driver", (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && "cores64".equals(archCores)) ? "vulkan" : "gl");
-
-            boolean hasTouchscreen = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN);
-            boolean isLeanback = getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
-
-            if (hasTouchscreen && !isLeanback) {
-                cfgFlags.put("input_overlay_enable", "true");
-                cfgFlags.put("input_enable_hotkey_btn", "109");
-                cfgFlags.put("input_menu_toggle_btn", "100");
-                cfgFlags.put("input_save_state_btn", "103");
-                cfgFlags.put("input_load_state_btn", "102");
-                cfgFlags.put("input_state_slot_decrease_btn", "104");
-                cfgFlags.put("input_state_slot_increase_btn", "105");
-            } else {
-                cfgFlags.put("input_overlay_enable", "false");
-                cfgFlags.put("input_enable_hotkey_btn", "196");
-                cfgFlags.put("input_menu_toggle_btn", "188");
-                cfgFlags.put("input_save_state_btn", "193");
-                cfgFlags.put("input_load_state_btn", "192");
-                cfgFlags.put("input_state_slot_decrease_btn", "194");
-                cfgFlags.put("input_state_slot_increase_btn", "195");
-            }
-
-		    // Populando retroarch.cfg
+		private void updateRetroarchCfg() throws IOException {
+		    File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
+		    if (!originalCfg.exists()) originalCfg.getParentFile().mkdirs();
+		    if (!originalCfg.exists()) originalCfg.createNewFile();
+		
+		    Map<String, String> cfgFlags = new HashMap<>();
+		
+		    // ROOT_FLAGS
+		    for (Map.Entry<String, String> entry : ROOT_FLAGS.entrySet()) {
+		        cfgFlags.put(entry.getValue(), new File(ROOT_DIR, entry.getKey()).getAbsolutePath());
+		    }
+		
+		    // MEDIA_FLAGS
+		    for (Map.Entry<String, String> entry : MEDIA_FLAGS.entrySet()) {
+		        cfgFlags.put(entry.getValue(), new File(MEDIA_DIR, entry.getKey()).getAbsolutePath());
+		    }
+		
+		    // Flags Globais e Condicionais
+		    cfgFlags.put("menu_driver", "ozone");
+		    cfgFlags.put("menu_scale_factor", "0.600000");
+		    cfgFlags.put("ozone_menu_color_theme", "10");
+		    cfgFlags.put("input_overlay_opacity", "0.700000");
+		    cfgFlags.put("input_overlay_hide_when_gamepad_connected", "true");
+		    cfgFlags.put("video_smooth", "false");
+		    cfgFlags.put("aspect_ratio_index", "1");
+		    cfgFlags.put("netplay_nickname", "RetroGameBox");
+		    cfgFlags.put("menu_enable_widgets", "true");
+		    cfgFlags.put("pause_nonactive", "false");
+		    cfgFlags.put("menu_mouse_enable", "false");
+		    cfgFlags.put("input_player1_analog_dpad_mode", "1");
+		    cfgFlags.put("input_player2_analog_dpad_mode", "1");
+		    cfgFlags.put("input_player3_analog_dpad_mode", "1");
+		    cfgFlags.put("input_player4_analog_dpad_mode", "1");
+		    cfgFlags.put("input_player5_analog_dpad_mode", "1");
+		    cfgFlags.put("input_menu_toggle_gamepad_combo", "9");
+		    cfgFlags.put("input_quit_gamepad_combo", "4");
+		    cfgFlags.put("input_bind_timeout", "4");
+		    cfgFlags.put("input_bind_hold", "1");
+		    cfgFlags.put("all_users_control_menu", "true");
+		    cfgFlags.put("input_poll_type_behavior", "1");
+		    cfgFlags.put("android_input_disconnect_workaround", "true");
+		    cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
+		    cfgFlags.put("video_driver", (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && "cores64".equals(archCores)) ? "vulkan" : "gl");
+		
+		    boolean hasTouchscreen = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN);
+		    boolean isLeanback = getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
+		
+		    if (hasTouchscreen && !isLeanback) {
+		        cfgFlags.put("input_overlay_enable", "true");
+		        cfgFlags.put("input_enable_hotkey_btn", "109");
+		        cfgFlags.put("input_menu_toggle_btn", "100");
+		        cfgFlags.put("input_save_state_btn", "103");
+		        cfgFlags.put("input_load_state_btn", "102");
+		        cfgFlags.put("input_state_slot_decrease_btn", "104");
+		        cfgFlags.put("input_state_slot_increase_btn", "105");
+		    } else {
+		        cfgFlags.put("input_overlay_enable", "false");
+		        cfgFlags.put("input_enable_hotkey_btn", "196");
+		        cfgFlags.put("input_menu_toggle_btn", "188");
+		        cfgFlags.put("input_save_state_btn", "193");
+		        cfgFlags.put("input_load_state_btn", "192");
+		        cfgFlags.put("input_state_slot_decrease_btn", "194");
+		        cfgFlags.put("input_state_slot_increase_btn", "195");
+		    }
+		
+		    // Lê linhas existentes
 		    List<String> lines = new ArrayList<>();
-			try (InputStream in = new FileInputStream(originalCfg);
-			     BufferedReader reader = new BufferedReader(new InputStreamReader(in))) {
-			    String line;
-			    while ((line = reader.readLine()) != null) lines.add(line);
-			}
+		    try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(originalCfg)))) {
+		        String line;
+		        while ((line = reader.readLine()) != null) {
+		            lines.add(line);
+		        }
+		    }
 		
 		    // Atualiza linhas existentes
 		    for (int i = 0; i < lines.size(); i++) {
@@ -449,18 +448,21 @@ public final class MainMenuActivity extends PreferenceActivity {
 		
 		    // Recria conteúdo final
 		    StringBuilder content = new StringBuilder();
-		    for (String line : lines) {
-		        content.append(line).append("\n");
-		    }
+		    for (String line : lines) content.append(line).append("\n");
 		
 		    // Adiciona novas flags que não existiam
 		    for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
-		        boolean found = lines.stream().anyMatch(l -> l.startsWith(entry.getKey()));
-		        if (!found) {
-		            content.append(entry.getKey()).append(" = \"").append(entry.getValue()).append("\"\n");
+		        boolean found = false;
+		        for (String l : lines) {
+		            if (l.startsWith(entry.getKey())) {
+		                found = true;
+		                break;
+		            }
 		        }
+		        if (!found) content.append(entry.getKey()).append(" = \"").append(entry.getValue()).append("\"\n");
 		    }
 		
+		    // Salva arquivo
 		    try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
 		        out.write(content.toString().getBytes());
 		    }

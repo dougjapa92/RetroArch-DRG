@@ -22,6 +22,8 @@ import android.text.SpannableString;
 import android.text.style.StyleSpan;
 import android.graphics.Typeface;
 
+import java.io.BufferedReader;
+import java.io.FileReader;
 import java.io.File;
 import java.io.InputStream;
 import java.io.FileOutputStream;

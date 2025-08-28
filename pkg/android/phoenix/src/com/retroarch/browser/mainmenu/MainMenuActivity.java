@@ -426,32 +426,43 @@ public final class MainMenuActivity extends PreferenceActivity {
                 cfgFlags.put("input_state_slot_increase_btn", "195");
             }
 
-            // Populando retroarch.cfg
-            List<String> lines = new ArrayList<>();
-            try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(originalCfg))) {
-                String line;
-                while ((line = reader.readLine()) != null) lines.add(line);
-            }
-
-            StringBuilder content = new StringBuilder();
-            for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
-                boolean found = false;
-                for (int i = 0; i < lines.size(); i++) {
-                    if (lines.get(i).startsWith(entry.getKey())) {
-                        lines.set(i, entry.getKey() + " = \"" + entry.getValue() + "\"");
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    content.append(entry.getKey()).append(" = \"").append(entry.getValue()).append("\"\n");
-                }
-            }
-
-            try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
-                out.write(content.toString().getBytes());
-            }
-        }
+		    // Populando retroarch.cfg
+		    List<String> lines = new ArrayList<>();
+		    try (BufferedReader reader = new BufferedReader(new FileReader(originalCfg))) {
+		        String line;
+		        while ((line = reader.readLine()) != null) {
+		            lines.add(line);
+		        }
+		    }
+		
+		    // Atualiza linhas existentes
+		    for (int i = 0; i < lines.size(); i++) {
+		        for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
+		            if (lines.get(i).startsWith(entry.getKey())) {
+		                lines.set(i, entry.getKey() + " = \"" + entry.getValue() + "\"");
+		                break;
+		            }
+		        }
+		    }
+		
+		    // Recria conteúdo final
+		    StringBuilder content = new StringBuilder();
+		    for (String line : lines) {
+		        content.append(line).append("\n");
+		    }
+		
+		    // Adiciona novas flags que não existiam
+		    for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
+		        boolean found = lines.stream().anyMatch(l -> l.startsWith(entry.getKey()));
+		        if (!found) {
+		            content.append(entry.getKey()).append(" = \"").append(entry.getValue()).append("\"\n");
+		        }
+		    }
+		
+		    try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
+		        out.write(content.toString().getBytes());
+		    }
+		}
     }
 
     public void finalStartup() {

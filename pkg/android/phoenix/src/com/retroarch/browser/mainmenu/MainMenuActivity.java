@@ -376,10 +376,13 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         private void updateRetroarchCfg() throws IOException {
             File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
-            if (!originalCfg.exists()) originalCfg.getParentFile().mkdirs();
-            if (!originalCfg.exists()) originalCfg.createNewFile();
+            if (!originalCfg.exists()) {
+                originalCfg.getParentFile().mkdirs();
+                originalCfg.createNewFile();
+            }
         
             Map<String, String> cfgFlags = new HashMap<>();
+        
             // Flags Globais
             cfgFlags.put("menu_driver", "ozone");
             cfgFlags.put("menu_scale_factor", "0.600000");
@@ -405,9 +408,11 @@ public final class MainMenuActivity extends PreferenceActivity {
             cfgFlags.put("input_poll_type_behavior", "1");
             cfgFlags.put("android_input_disconnect_workaround", "true");
         
-            // Flags Condicionais
+            // Flags condicionais
             cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
-            cfgFlags.put("video_driver", (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && "cores64".equals(archCores)) ? "vulkan" : "gl");
+            cfgFlags.put("video_driver",
+                    (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && "cores64".equals(archCores))
+                            ? "vulkan" : "gl");
         
             boolean hasTouchscreen = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN);
             boolean isLeanback = getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
@@ -430,54 +435,25 @@ public final class MainMenuActivity extends PreferenceActivity {
                 cfgFlags.put("input_state_slot_increase_btn", "195");
             }
         
-            // Leitura do arquivo existente
-            List<String> lines = new ArrayList<>();
-            try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(originalCfg))) {
-                String line;
-                while ((line = reader.readLine()) != null) lines.add(line);
+            // ROOT_FLAGS
+            for (Map.Entry<String, String> entry : ROOT_FLAGS.entrySet()) {
+                cfgFlags.put(entry.getValue(), new File(ROOT_DIR, entry.getKey()).getAbsolutePath());
             }
         
-            StringBuilder content = new StringBuilder();
-        
-            for (String line : lines) {
-                // Aplica ROOT_FLAGS
-                for (Map.Entry<String, String> entry : ROOT_FLAGS.entrySet()) {
-                    String folder = entry.getKey();
-                    String flag = entry.getValue();
-                    if (line.startsWith(flag)) {
-                        line = flag + " = \"" + new File(ROOT_DIR, folder).getAbsolutePath() + "\"";
-                        break;
-                    }
-                }
-        
-                // Aplica MEDIA_FLAGS
-                for (Map.Entry<String, String> entry : MEDIA_FLAGS.entrySet()) {
-                    String folder = entry.getKey();
-                    String flag = entry.getValue();
-                    if (line.startsWith(flag)) {
-                        line = flag + " = \"" + new File(MEDIA_DIR, folder).getAbsolutePath() + "\"";
-                        break;
-                    }
-                }
-        
-                // Aplica cfgFlags
-                for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
-                    if (line.startsWith(entry.getKey())) {
-                        line = entry.getKey() + " = \"" + entry.getValue() + "\"";
-                        break;
-                    }
-                }
-        
-                content.append(line).append("\n");
+            // MEDIA_FLAGS
+            for (Map.Entry<String, String> entry : MEDIA_FLAGS.entrySet()) {
+                cfgFlags.put(entry.getValue(), new File(MEDIA_DIR, entry.getKey()).getAbsolutePath());
             }
         
-            // Adiciona flags que não estavam no arquivo
-            for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
-                boolean found = lines.stream().anyMatch(l -> l.startsWith(entry.getKey()));
-                if (!found) content.append(entry.getKey()).append(" = \"").append(entry.getValue()).append("\"\n");
-            }
-        
+            // Escreve todas as flags no arquivo
             try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
+                StringBuilder content = new StringBuilder();
+                for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
+                    content.append(entry.getKey())
+                           .append(" = \"")
+                           .append(entry.getValue())
+                           .append("\"\n");
+                }
                 out.write(content.toString().getBytes());
             }
         }

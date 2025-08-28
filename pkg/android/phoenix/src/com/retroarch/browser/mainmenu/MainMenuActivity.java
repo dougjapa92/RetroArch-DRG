@@ -204,50 +204,58 @@ public final class MainMenuActivity extends PreferenceActivity {
 	    AtomicInteger processedFiles = new AtomicInteger(0);
 	    int totalFiles = 0;
 	
-	    @Override
-	    protected void onPreExecute() {
-	        AlertDialog.Builder builder = new AlertDialog.Builder(MainMenuActivity.this);
-	        builder.setTitle("Configurando RetroArch DRG...");
-	        builder.setCancelable(false);
-	
-	        String archMessage = archCores.equals("cores64") ?
-	                "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)" :
-	                "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
-	        String message = archMessage + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do Retro Game Box.";
-	
-	        SpannableString spannable = new SpannableString(message);
-	        int start = message.indexOf("\"Sair\"");
-	        int end = start + "\"Sair\"".length();
-	        spannable.setSpan(new StyleSpan(Typeface.BOLD), start, end, 0);
-	
-	        TextView messageView = new TextView(MainMenuActivity.this);
-	        messageView.setText(spannable);
-	        messageView.setPadding(50, 30, 50, 30);
-	
-	        progressBar = new ProgressBar(MainMenuActivity.this, null, android.R.attr.progressBarStyleHorizontal);
-	        progressBar.setMax(100);
-	        progressBar.setProgress(0);
-	        progressBar.setLayoutParams(new LinearLayout.LayoutParams(
-	                LinearLayout.LayoutParams.MATCH_PARENT,
-	                LinearLayout.LayoutParams.WRAP_CONTENT
-	        ));
-	
-	        LinearLayout layout = new LinearLayout(MainMenuActivity.this);
-	        layout.setOrientation(LinearLayout.VERTICAL);
-	        layout.addView(messageView);
-	        layout.addView(progressBar);
-	
-	        builder.setView(layout);
-	        alertDialog = builder.create();
-	        alertDialog.show();
-	
-	        archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
-	
-	        // Conta arquivos e pastas com imagens para progresso
-	        totalFiles = countAllFiles(ROOT_FOLDERS)
-	                + countAllFiles(MEDIA_FOLDERS)
-	                + countAllFiles(new String[]{archCores, archAutoconfig});
-	    }
+        @Override
+        protected void onPreExecute() {
+            AlertDialog.Builder builder = new AlertDialog.Builder(MainMenuActivity.this);
+            builder.setTitle("Configurando RetroArch DRG...");
+            builder.setCancelable(false);
+        
+            String archMessage = archCores.equals("cores64") ?
+                    "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)" :
+                    "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
+            String message = archMessage + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do Retro Game Box.";
+        
+            SpannableString spannable = new SpannableString(message);
+            int start = message.indexOf("\"Sair\"");
+            int end = start + "\"Sair\"".length();
+            spannable.setSpan(new StyleSpan(Typeface.BOLD), start, end, 0);
+        
+            TextView messageView = new TextView(MainMenuActivity.this);
+            messageView.setText(spannable);
+            messageView.setTextSize(16); // aumenta o tamanho do texto para ficar mais parecido
+            int padding = (int) (16 * getResources().getDisplayMetrics().density); // padding em dp
+            messageView.setPadding(padding, padding, padding, padding);
+        
+            progressBar = new ProgressBar(MainMenuActivity.this, null, android.R.attr.progressBarStyleHorizontal);
+            progressBar.setMax(100);
+            progressBar.setProgress(0);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+            );
+            params.setMargins(padding, padding, padding, padding); // deixa a barra com espaço das bordas
+            progressBar.setLayoutParams(params);
+        
+            LinearLayout layout = new LinearLayout(MainMenuActivity.this);
+            layout.setOrientation(LinearLayout.VERTICAL);
+            layout.addView(messageView);
+            layout.addView(progressBar);
+        
+            builder.setView(layout);
+        
+            alertDialog = builder.create();
+        
+            // Aplica estilo de título maior como o ProgressDialog
+            alertDialog.show();
+            TextView textView = alertDialog.findViewById(android.R.id.title);
+            if (textView != null) textView.setTextSize(20); // aumenta título
+        
+            archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
+        
+            totalFiles = countAllFiles(ROOT_FOLDERS)
+                    + countAllFiles(MEDIA_FOLDERS)
+                    + countAllFiles(new String[]{archCores, archAutoconfig});
+		} 
 	
 	    @Override
 	    protected Boolean doInBackground(Void... voids) {

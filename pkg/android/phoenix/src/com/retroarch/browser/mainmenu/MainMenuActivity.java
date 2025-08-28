@@ -382,6 +382,16 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
         
             Map<String, String> cfgFlags = new HashMap<>();
+
+            // ROOT_FLAGS
+            for (Map.Entry<String, String> entry : ROOT_FLAGS.entrySet()) {
+                cfgFlags.put(entry.getValue(), new File(ROOT_DIR, entry.getKey()).getAbsolutePath());
+            }
+        
+            // MEDIA_FLAGS
+            for (Map.Entry<String, String> entry : MEDIA_FLAGS.entrySet()) {
+                cfgFlags.put(entry.getValue(), new File(MEDIA_DIR, entry.getKey()).getAbsolutePath());
+            } 
         
             // Flags Globais
             cfgFlags.put("menu_driver", "ozone");
@@ -435,25 +445,18 @@ public final class MainMenuActivity extends PreferenceActivity {
                 cfgFlags.put("input_state_slot_increase_btn", "195");
             }
         
-            // ROOT_FLAGS
-            for (Map.Entry<String, String> entry : ROOT_FLAGS.entrySet()) {
-                cfgFlags.put(entry.getValue(), new File(ROOT_DIR, entry.getKey()).getAbsolutePath());
-            }
-        
-            // MEDIA_FLAGS
-            for (Map.Entry<String, String> entry : MEDIA_FLAGS.entrySet()) {
-                cfgFlags.put(entry.getValue(), new File(MEDIA_DIR, entry.getKey()).getAbsolutePath());
-            }
-        
             // Escreve todas as flags no arquivo
-            try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
-                StringBuilder content = new StringBuilder();
-                for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
+            for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
+                if (!appliedFlags.contains(entry.getKey())) {
                     content.append(entry.getKey())
                            .append(" = \"")
                            .append(entry.getValue())
                            .append("\"\n");
                 }
+            }
+            
+            // Grava no arquivo
+            try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
                 out.write(content.toString().getBytes());
             }
         }

@@ -73,7 +73,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     private final Map<String, String> ROOT_FLAGS = new HashMap<String, String>() {{
         put("assets", "assets_directory");
         put("cheats", "cheat_database_path");
-        put("database", "dataROOT_DIRectory");
+        put("database", "database_directory");
         put("filters", "filters_directory");
         put("info", "info_directory");
         put("shaders", "shaders_directory");
@@ -86,7 +86,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     private final Map<String, String> MEDIA_FLAGS = new HashMap<String, String>() {{
         put("config", "rgui_config_directory");
-        put("overlays", "overlays_directory");
+        put("overlays", "overlay_directory");
         put("remaps", "input_remapping_directory");
     }};
 
@@ -431,6 +431,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 		    cfgFlags.put("all_users_control_menu", "true");
 		    cfgFlags.put("input_poll_type_behavior", "1");
 		    cfgFlags.put("android_input_disconnect_workaround", "true");
+			cfgFlags.put("joypad_autoconfig_directory", MEDIA_DIR + "/autoconfig");
 		    cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
 		    cfgFlags.put("video_driver", (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && "cores64".equals(archCores)) ? "vulkan" : "gl");
 		

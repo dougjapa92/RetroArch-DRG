@@ -46,6 +46,7 @@
 
 #include <jni.h>
 
+#define AUTOCONF_FLAG_JNI_CALLED  (1 << 0)
 JavaVM *g_vm = NULL;
 
 JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved)

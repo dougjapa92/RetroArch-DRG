@@ -431,7 +431,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 		    cfgFlags.put("all_users_control_menu", "true");
 		    cfgFlags.put("input_poll_type_behavior", "1");
 		    cfgFlags.put("android_input_disconnect_workaround", "true");
-			cfgFlags.put("joypad_autoconfig_directory", MEDIA_DIR + "/autoconfig");
+			cfgFlags.put("joypad_autoconfig_directory", new File(MEDIA_DIR, "autoconfig").getAbsolutePath());
 		    cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
 		    cfgFlags.put("video_driver", (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && "cores64".equals(archCores)) ? "vulkan" : "gl");
 		

@@ -22,14 +22,19 @@ import android.text.SpannableString;
 import android.text.style.StyleSpan;
 import android.graphics.Typeface;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.Set;
+import java.util.HashSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -48,7 +53,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     private final Map<String, String> ROOT_FLAGS = new HashMap<String, String>() {{
         put("assets", "assets_directory");
         put("cheats", "cheat_database_path");
-        put("database", "database_directory");
+        put("database", "dataROOT_DIRectory");
         put("filters", "filters_directory");
         put("info", "info_directory");
         put("shaders", "shaders_directory");
@@ -77,7 +82,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         super.onCreate(savedInstanceState);
 
         PACKAGE_NAME = getPackageName();
-        ROOT_DIR = new File(getApplicationInfo().dataDir);
+		ROOT_DIR = new File(getApplicationInfo().dataDir);
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
 
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
@@ -216,9 +221,8 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             // Conta arquivos e pastas com imagens para progresso
             totalFiles = countAllFiles(ROOT_FOLDERS)
-                    + countAllFiles(MEDIA_FOLDERS)
-                    + countAllFiles(new String[]{archCores, archAutoconfig})
-                    + countFoldersWithImages(new File(MEDIA_DIR, "overlays"));
+					+ countAllFiles(MEDIA_FOLDERS)
+                    + countAllFiles(new String[]{archCores, archAutoconfig});
         }
 
         @Override
@@ -243,13 +247,13 @@ public final class MainMenuActivity extends PreferenceActivity {
                 });
             }
         
-            // cores
+            // Cores
             executor.submit(() -> {
                 try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores")); }
                 catch (IOException e) { e.printStackTrace(); }
             });
 
-            // autoconfig
+            // Autoconfig
             executor.submit(() -> {
                 try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig")); }
                 catch (IOException e) { e.printStackTrace(); }
@@ -265,7 +269,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             try { updateRetroarchCfg(); } catch (IOException e) { return false; }
             return true;
         }
-        
+
         @Override
         protected void onProgressUpdate(Integer... values) { progressDialog.setProgress(values[0]); }
 
@@ -278,10 +282,16 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             executor.submit(() -> processFolderForImages(new File(MEDIA_DIR, "overlays")));
 
-            executor.shutdown();
-            while (!executor.isTerminated()) {
-                try { Thread.sleep(100); } catch (InterruptedException e) { e.printStackTrace(); }
-            }
+			executor.shutdown();
+			try {
+			    // Aguarda até 3 minutos
+			    if (!executor.awaitTermination(3, TimeUnit.MINUTES)) {
+			        executor.shutdownNow(); // força encerramento se não terminar
+			    }
+			} catch (InterruptedException e) {
+			    executor.shutdownNow();
+			    Thread.currentThread().interrupt();
+			}
 
             finalStartup();
         }
@@ -313,20 +323,6 @@ public final class MainMenuActivity extends PreferenceActivity {
             if (subDirs != null) {
                 for (File subDir : subDirs) processFolderForImages(subDir);
             }
-        }
-    
-        /** Conta pastas que terão .nomedia, incluindo subpastas */
-        private int countFoldersWithImages(File dir) {
-            if (dir == null || !dir.exists() || !dir.isDirectory()) return 0;
-    
-            int count = hasImages(dir) ? 1 : 0;
-    
-            File[] subDirs = dir.listFiles(File::isDirectory);
-            if (subDirs != null) {
-                for (File subDir : subDirs) count += countFoldersWithImages(subDir);
-            }
-    
-            return count;
         }
 
         private int countAllFiles(String[] folders) {
@@ -374,113 +370,106 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
         }
 
-        private void updateRetroarchCfg() throws IOException {
-            File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
-            if (!originalCfg.exists()) originalCfg.getParentFile().mkdirs();
-            if (!originalCfg.exists()) originalCfg.createNewFile();
-        
-            Map<String, String> cfgFlags = new HashMap<>();
-            // Flags Globais
-            cfgFlags.put("menu_driver", "ozone");
-            cfgFlags.put("menu_scale_factor", "0.600000");
-            cfgFlags.put("ozone_menu_color_theme", "10");
-            cfgFlags.put("input_overlay_opacity", "0.700000");
-            cfgFlags.put("input_overlay_hide_when_gamepad_connected", "true");
-            cfgFlags.put("video_smooth", "false");
-            cfgFlags.put("aspect_ratio_index", "1");
-            cfgFlags.put("netplay_nickname", "RetroGameBox");
-            cfgFlags.put("menu_enable_widgets", "true");
-            cfgFlags.put("pause_nonactive", "false");
-            cfgFlags.put("menu_mouse_enable", "false");
-            cfgFlags.put("input_player1_analog_dpad_mode", "1");
-            cfgFlags.put("input_player2_analog_dpad_mode", "1");
-            cfgFlags.put("input_player3_analog_dpad_mode", "1");
-            cfgFlags.put("input_player4_analog_dpad_mode", "1");
-            cfgFlags.put("input_player5_analog_dpad_mode", "1");
-            cfgFlags.put("input_menu_toggle_gamepad_combo", "9");
-            cfgFlags.put("input_quit_gamepad_combo", "4");
-            cfgFlags.put("input_bind_timeout", "4");
-            cfgFlags.put("input_bind_hold", "1");
-            cfgFlags.put("all_users_control_menu", "true");
-            cfgFlags.put("input_poll_type_behavior", "1");
-            cfgFlags.put("android_input_disconnect_workaround", "true");
-        
-            // Flags Condicionais
-            cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
-            cfgFlags.put("video_driver", (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && "cores64".equals(archCores)) ? "vulkan" : "gl");
-        
-            boolean hasTouchscreen = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN);
-            boolean isLeanback = getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
-        
-            if (hasTouchscreen && !isLeanback) {
-                cfgFlags.put("input_overlay_enable", "true");
-                cfgFlags.put("input_enable_hotkey_btn", "109");
-                cfgFlags.put("input_menu_toggle_btn", "100");
-                cfgFlags.put("input_save_state_btn", "103");
-                cfgFlags.put("input_load_state_btn", "102");
-                cfgFlags.put("input_state_slot_decrease_btn", "104");
-                cfgFlags.put("input_state_slot_increase_btn", "105");
-            } else {
-                cfgFlags.put("input_overlay_enable", "false");
-                cfgFlags.put("input_enable_hotkey_btn", "196");
-                cfgFlags.put("input_menu_toggle_btn", "188");
-                cfgFlags.put("input_save_state_btn", "193");
-                cfgFlags.put("input_load_state_btn", "192");
-                cfgFlags.put("input_state_slot_decrease_btn", "194");
-                cfgFlags.put("input_state_slot_increase_btn", "195");
-            }
-        
-            // Leitura do arquivo existente
+		private void updateRetroarchCfg() throws IOException {
+		    File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
+		    if (!originalCfg.exists()) originalCfg.getParentFile().mkdirs();
+		    if (!originalCfg.exists()) originalCfg.createNewFile();
+		
+		    Map<String, String> cfgFlags = new HashMap<>();
+		
+		    // ROOT_FLAGS
+		    for (Map.Entry<String, String> entry : ROOT_FLAGS.entrySet()) {
+		        cfgFlags.put(entry.getValue(), new File(ROOT_DIR, entry.getKey()).getAbsolutePath());
+		    }
+		
+		    // MEDIA_FLAGS
+		    for (Map.Entry<String, String> entry : MEDIA_FLAGS.entrySet()) {
+		        cfgFlags.put(entry.getValue(), new File(MEDIA_DIR, entry.getKey()).getAbsolutePath());
+		    }
+		
+		    // Flags Globais e Condicionais
+		    cfgFlags.put("menu_driver", "ozone");
+		    cfgFlags.put("menu_scale_factor", "0.600000");
+		    cfgFlags.put("ozone_menu_color_theme", "10");
+		    cfgFlags.put("input_overlay_opacity", "0.700000");
+		    cfgFlags.put("input_overlay_hide_when_gamepad_connected", "true");
+		    cfgFlags.put("video_smooth", "false");
+		    cfgFlags.put("aspect_ratio_index", "1");
+		    cfgFlags.put("netplay_nickname", "RetroGameBox");
+		    cfgFlags.put("menu_enable_widgets", "true");
+		    cfgFlags.put("pause_nonactive", "false");
+		    cfgFlags.put("menu_mouse_enable", "false");
+		    cfgFlags.put("input_player1_analog_dpad_mode", "1");
+		    cfgFlags.put("input_player2_analog_dpad_mode", "1");
+		    cfgFlags.put("input_player3_analog_dpad_mode", "1");
+		    cfgFlags.put("input_player4_analog_dpad_mode", "1");
+		    cfgFlags.put("input_player5_analog_dpad_mode", "1");
+		    cfgFlags.put("input_menu_toggle_gamepad_combo", "9");
+		    cfgFlags.put("input_quit_gamepad_combo", "4");
+		    cfgFlags.put("input_bind_timeout", "4");
+		    cfgFlags.put("input_bind_hold", "1");
+		    cfgFlags.put("all_users_control_menu", "true");
+		    cfgFlags.put("input_poll_type_behavior", "1");
+		    cfgFlags.put("android_input_disconnect_workaround", "true");
+		    cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
+		    cfgFlags.put("video_driver", (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && "cores64".equals(archCores)) ? "vulkan" : "gl");
+		
+		    boolean hasTouchscreen = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN);
+		    boolean isLeanback = getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
+		
+		    if (hasTouchscreen && !isLeanback) {
+		        cfgFlags.put("input_overlay_enable", "true");
+		        cfgFlags.put("input_enable_hotkey_btn", "109");
+		        cfgFlags.put("input_menu_toggle_btn", "100");
+		        cfgFlags.put("input_save_state_btn", "103");
+		        cfgFlags.put("input_load_state_btn", "102");
+		        cfgFlags.put("input_state_slot_decrease_btn", "104");
+		        cfgFlags.put("input_state_slot_increase_btn", "105");
+		    } else {
+		        cfgFlags.put("input_overlay_enable", "false");
+		        cfgFlags.put("input_enable_hotkey_btn", "196");
+		        cfgFlags.put("input_menu_toggle_btn", "188");
+		        cfgFlags.put("input_save_state_btn", "193");
+		        cfgFlags.put("input_load_state_btn", "192");
+		        cfgFlags.put("input_state_slot_decrease_btn", "194");
+		        cfgFlags.put("input_state_slot_increase_btn", "195");
+		    }
+		
+		    // Lê linhas existentes
             List<String> lines = new ArrayList<>();
-            try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(originalCfg))) {
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(originalCfg)))) {
                 String line;
                 while ((line = reader.readLine()) != null) lines.add(line);
             }
         
+            Set<String> processedKeys = new HashSet<>();
             StringBuilder content = new StringBuilder();
         
+            // Atualiza linhas existentes e marca flags processadas
             for (String line : lines) {
-                // Aplica ROOT_FLAGS
-                for (Map.Entry<String, String> entry : ROOT_FLAGS.entrySet()) {
-                    String folder = entry.getKey();
-                    String flag = entry.getValue();
-                    if (line.startsWith(flag)) {
-                        line = flag + " = \"" + new File(ROOT_DIR, folder).getAbsolutePath() + "\"";
-                        break;
-                    }
-                }
-        
-                // Aplica MEDIA_FLAGS
-                for (Map.Entry<String, String> entry : MEDIA_FLAGS.entrySet()) {
-                    String folder = entry.getKey();
-                    String flag = entry.getValue();
-                    if (line.startsWith(flag)) {
-                        line = flag + " = \"" + new File(MEDIA_DIR, folder).getAbsolutePath() + "\"";
-                        break;
-                    }
-                }
-        
-                // Aplica cfgFlags
+                boolean replaced = false;
                 for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
                     if (line.startsWith(entry.getKey())) {
-                        line = entry.getKey() + " = \"" + entry.getValue() + "\"";
+                        content.append(entry.getKey()).append(" = \"").append(entry.getValue()).append("\"\n");
+                        processedKeys.add(entry.getKey());
+                        replaced = true;
                         break;
                     }
                 }
-        
-                content.append(line).append("\n");
+                if (!replaced) content.append(line).append("\n");
             }
         
-            // Adiciona flags que não estavam no arquivo
+            // Adiciona flags novas que ainda não foram processadas
             for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
-                boolean found = lines.stream().anyMatch(l -> l.startsWith(entry.getKey()));
-                if (!found) content.append(entry.getKey()).append(" = \"").append(entry.getValue()).append("\"\n");
+                if (!processedKeys.contains(entry.getKey())) {
+                    content.append(entry.getKey()).append(" = \"").append(entry.getValue()).append("\"\n");
+                }
             }
         
             try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
                 out.write(content.toString().getBytes());
             }
-        }
+		}
     }
 
     public void finalStartup() {

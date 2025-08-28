@@ -198,120 +198,122 @@ public final class MainMenuActivity extends PreferenceActivity {
         else finalStartup();
     }
 
-    private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
-        ProgressDialog progressDialog;
-        AtomicInteger processedFiles = new AtomicInteger(0);
-        int totalFiles = 0;
-
-		@Override
-		protected void onPreExecute() {
-		    AlertDialog.Builder builder = new AlertDialog.Builder(MainMenuActivity.this);
-		    builder.setTitle("Configurando RetroArch DRG...");
-		    builder.setCancelable(false);
-		    String archMessage = archCores.equals("cores64") ?
-		            "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)" :
-		            "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
-		    String message = archMessage + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do Retro Game Box.";
-		    SpannableString spannable = new SpannableString(message);
-		    int start = message.indexOf("\"Sair\"");
-		    int end = start + "\"Sair\"".length();
-		    spannable.setSpan(new StyleSpan(Typeface.BOLD), start, end, 0);
-		    TextView messageView = new TextView(MainMenuActivity.this);
-		    messageView.setText(spannable);
-		    messageView.setPadding(50, 30, 50, 30);
-		    ProgressBar progressBar = new ProgressBar(MainMenuActivity.this, null, android.R.attr.progressBarStyleHorizontal);
-		    progressBar.setMax(100);
-		    progressBar.setProgress(0);
-		    progressBar.setLayoutParams(new LinearLayout.LayoutParams(
-		            LinearLayout.LayoutParams.MATCH_PARENT,
-		            LinearLayout.LayoutParams.WRAP_CONTENT
-		    ));
-		    LinearLayout layout = new LinearLayout(MainMenuActivity.this);
-		    layout.setOrientation(LinearLayout.VERTICAL);
-		    layout.addView(messageView);
-		    layout.addView(progressBar);
-		    builder.setView(layout);
-		    alertDialog = builder.create();
-		    alertDialog.show();
-		
-		    archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
-		
-		    // Conta arquivos e pastas com imagens para progresso
-		    totalFiles = countAllFiles(ROOT_FOLDERS)
-		            + countAllFiles(MEDIA_FOLDERS)
-		            + countAllFiles(new String[]{archCores, archAutoconfig});
-		}
-
-        @Override
-        protected Boolean doInBackground(Void... voids) {
-            // Limita o número de threads para não saturar o dispositivo
-            int poolSize = Math.min(ROOT_FOLDERS.length + MEDIA_FOLDERS.length + 2, 4);
-            ExecutorService executor = Executors.newFixedThreadPool(poolSize);
-        
-            // ROOT_FOLDERS
-            for (String folder : ROOT_FOLDERS) {
-                executor.submit(() -> {
-                    try { copyAssetFolder(folder, new File(ROOT_DIR, folder)); }
-                    catch (IOException e) { e.printStackTrace(); }
-                });
-            }
-        
-            // MEDIA_FOLDERS
-            for (String folder : MEDIA_FOLDERS) {
-                executor.submit(() -> {
-                    try { copyAssetFolder(folder, new File(MEDIA_DIR, folder)); }
-                    catch (IOException e) { e.printStackTrace(); }
-                });
-            }
-        
-            // Cores
-            executor.submit(() -> {
-                try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores")); }
-                catch (IOException e) { e.printStackTrace(); }
-            });
-
-            // Autoconfig
-            executor.submit(() -> {
-                try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig")); }
-                catch (IOException e) { e.printStackTrace(); }
-            });
-        
-            // Aguarda todas as tasks finalizarem
-            executor.shutdown();
-            while (!executor.isTerminated()) {
-                publishProgress((processedFiles.get() * 100) / totalFiles);
-                try { Thread.sleep(100); } catch (InterruptedException ignored) {}
-            }
-        
-            try { updateRetroarchCfg(); } catch (IOException e) { return false; }
-            return true;
-        }
-
-        @Override
-        protected void onProgressUpdate(Integer... values) { progressDialog.setProgress(values[0]); }
-
-        @Override
-        protected void onPostExecute(Boolean result) {
-            progressDialog.dismiss();
-            prefs.edit().putBoolean("firstRun", false).apply();
-
-            ExecutorService executor = Executors.newFixedThreadPool(3);
-
-            executor.submit(() -> processFolderForImages(new File(MEDIA_DIR, "overlays")));
-
-			executor.shutdown();
-			try {
-			    // Aguarda até 3 minutos
-			    if (!executor.awaitTermination(3, TimeUnit.MINUTES)) {
-			        executor.shutdownNow(); // força encerramento se não terminar
-			    }
-			} catch (InterruptedException e) {
-			    executor.shutdownNow();
-			    Thread.currentThread().interrupt();
-			}
-
-            finalStartup();
-        }
+	private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
+	    AlertDialog alertDialog;
+	    ProgressBar progressBar;
+	    AtomicInteger processedFiles = new AtomicInteger(0);
+	    int totalFiles = 0;
+	
+	    @Override
+	    protected void onPreExecute() {
+	        AlertDialog.Builder builder = new AlertDialog.Builder(MainMenuActivity.this);
+	        builder.setTitle("Configurando RetroArch DRG...");
+	        builder.setCancelable(false);
+	
+	        String archMessage = archCores.equals("cores64") ?
+	                "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)" :
+	                "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
+	        String message = archMessage + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do Retro Game Box.";
+	
+	        SpannableString spannable = new SpannableString(message);
+	        int start = message.indexOf("\"Sair\"");
+	        int end = start + "\"Sair\"".length();
+	        spannable.setSpan(new StyleSpan(Typeface.BOLD), start, end, 0);
+	
+	        TextView messageView = new TextView(MainMenuActivity.this);
+	        messageView.setText(spannable);
+	        messageView.setPadding(50, 30, 50, 30);
+	
+	        progressBar = new ProgressBar(MainMenuActivity.this, null, android.R.attr.progressBarStyleHorizontal);
+	        progressBar.setMax(100);
+	        progressBar.setProgress(0);
+	        progressBar.setLayoutParams(new LinearLayout.LayoutParams(
+	                LinearLayout.LayoutParams.MATCH_PARENT,
+	                LinearLayout.LayoutParams.WRAP_CONTENT
+	        ));
+	
+	        LinearLayout layout = new LinearLayout(MainMenuActivity.this);
+	        layout.setOrientation(LinearLayout.VERTICAL);
+	        layout.addView(messageView);
+	        layout.addView(progressBar);
+	
+	        builder.setView(layout);
+	        alertDialog = builder.create();
+	        alertDialog.show();
+	
+	        archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
+	
+	        // Conta arquivos e pastas com imagens para progresso
+	        totalFiles = countAllFiles(ROOT_FOLDERS)
+	                + countAllFiles(MEDIA_FOLDERS)
+	                + countAllFiles(new String[]{archCores, archAutoconfig});
+	    }
+	
+	    @Override
+	    protected Boolean doInBackground(Void... voids) {
+	        int poolSize = Math.min(ROOT_FOLDERS.length + MEDIA_FOLDERS.length + 2, 4);
+	        ExecutorService executor = Executors.newFixedThreadPool(poolSize);
+	
+	        for (String folder : ROOT_FOLDERS) {
+	            executor.submit(() -> {
+	                try { copyAssetFolder(folder, new File(ROOT_DIR, folder)); }
+	                catch (IOException e) { e.printStackTrace(); }
+	            });
+	        }
+	
+	        for (String folder : MEDIA_FOLDERS) {
+	            executor.submit(() -> {
+	                try { copyAssetFolder(folder, new File(MEDIA_DIR, folder)); }
+	                catch (IOException e) { e.printStackTrace(); }
+	            });
+	        }
+	
+	        executor.submit(() -> {
+	            try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores")); }
+	            catch (IOException e) { e.printStackTrace(); }
+	        });
+	
+	        executor.submit(() -> {
+	            try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig")); }
+	            catch (IOException e) { e.printStackTrace(); }
+	        });
+	
+	        executor.shutdown();
+	        while (!executor.isTerminated()) {
+	            publishProgress((processedFiles.get() * 100) / totalFiles);
+	            try { Thread.sleep(100); } catch (InterruptedException ignored) {}
+	        }
+	
+	        try { updateRetroarchCfg(); } catch (IOException e) { return false; }
+	        return true;
+	    }
+	
+	    @Override
+	    protected void onProgressUpdate(Integer... values) {
+	        if (progressBar != null) {
+	            progressBar.setProgress(values[0]);
+	        }
+	    }
+	
+	    @Override
+	    protected void onPostExecute(Boolean result) {
+	        if (alertDialog != null && alertDialog.isShowing()) {
+	            alertDialog.dismiss();
+	        }
+	        prefs.edit().putBoolean("firstRun", false).apply();
+	
+	        ExecutorService executor = Executors.newFixedThreadPool(3);
+	        executor.submit(() -> processFolderForImages(new File(MEDIA_DIR, "overlays")));
+	        executor.shutdown();
+	        try {
+	            if (!executor.awaitTermination(3, TimeUnit.MINUTES)) executor.shutdownNow();
+	        } catch (InterruptedException e) {
+	            executor.shutdownNow();
+	            Thread.currentThread().interrupt();
+	        }
+	
+	        finalStartup();
+	    }
 
         /** Verifica se a pasta contém imagens */
         private boolean hasImages(File dir) {

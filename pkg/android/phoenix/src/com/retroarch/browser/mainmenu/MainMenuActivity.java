@@ -428,44 +428,39 @@ public final class MainMenuActivity extends PreferenceActivity {
 		    }
 		
 		    // Lê linhas existentes
-		    List<String> lines = new ArrayList<>();
-		    try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(originalCfg)))) {
-		        String line;
-		        while ((line = reader.readLine()) != null) {
-		            lines.add(line);
-		        }
-		    }
-		
-		    // Atualiza linhas existentes
-		    for (int i = 0; i < lines.size(); i++) {
-		        for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
-		            if (lines.get(i).startsWith(entry.getKey())) {
-		                lines.set(i, entry.getKey() + " = \"" + entry.getValue() + "\"");
-		                break;
-		            }
-		        }
-		    }
-		
-		    // Recria conteúdo final
-		    StringBuilder content = new StringBuilder();
-		    for (String line : lines) content.append(line).append("\n");
-		
-		    // Adiciona novas flags que não existiam
-		    for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
-		        boolean found = false;
-		        for (String l : lines) {
-		            if (l.startsWith(entry.getKey())) {
-		                found = true;
-		                break;
-		            }
-		        }
-		        if (!found) content.append(entry.getKey()).append(" = \"").append(entry.getValue()).append("\"\n");
-		    }
-		
-		    // Salva arquivo
-		    try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
-		        out.write(content.toString().getBytes());
-		    }
+            List<String> lines = new ArrayList<>();
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(originalCfg)))) {
+                String line;
+                while ((line = reader.readLine()) != null) lines.add(line);
+            }
+        
+            Set<String> processedKeys = new HashSet<>();
+            StringBuilder content = new StringBuilder();
+        
+            // Atualiza linhas existentes e marca flags processadas
+            for (String line : lines) {
+                boolean replaced = false;
+                for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
+                    if (line.startsWith(entry.getKey())) {
+                        content.append(entry.getKey()).append(" = \"").append(entry.getValue()).append("\"\n");
+                        processedKeys.add(entry.getKey());
+                        replaced = true;
+                        break;
+                    }
+                }
+                if (!replaced) content.append(line).append("\n");
+            }
+        
+            // Adiciona flags novas que ainda não foram processadas
+            for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
+                if (!processedKeys.contains(entry.getKey())) {
+                    content.append(entry.getKey()).append(" = \"").append(entry.getValue()).append("\"\n");
+                }
+            }
+        
+            try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
+                out.write(content.toString().getBytes());
+            }
 		}
     }
 

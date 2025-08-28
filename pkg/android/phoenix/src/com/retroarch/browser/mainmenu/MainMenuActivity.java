@@ -444,6 +444,8 @@ public final class MainMenuActivity extends PreferenceActivity {
                 cfgFlags.put("input_state_slot_decrease_btn", "194");
                 cfgFlags.put("input_state_slot_increase_btn", "195");
             }
+
+            StringBuilder content = new StringBuilder();
         
             // Escreve todas as flags no arquivo
             for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {

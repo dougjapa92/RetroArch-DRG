@@ -7,6 +7,25 @@ import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.media.AudioManager;
+import android.os.AsyncTask;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Environment;
+import android.preference.PreferenceActivity;
+import android.preference.PreferenceManager;
+import android.provider.Settings;
+import android.content.pm.PackageManager;
+import android.Manifest;
+import android.net.Uri;
+import android.text.SpannableString;
+import android.text.style.StyleSpan;
+import android.graphics.Typeface;
+
+import android.app.AlertDialog;
+import android.app.ProgressDialog;
+import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Typeface;
 import android.Manifest;
@@ -54,7 +73,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     private final Map<String, String> ROOT_FLAGS = new HashMap<String, String>() {{
         put("assets", "assets_directory");
         put("cheats", "cheat_database_path");
-        put("database", "dataROOT_DIRectory");
+        put("database", "database_directory");
         put("filters", "filters_directory");
         put("info", "info_directory");
         put("shaders", "shaders_directory");
@@ -67,7 +86,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     private final Map<String, String> MEDIA_FLAGS = new HashMap<String, String>() {{
         put("config", "rgui_config_directory");
-        put("overlays", "overlays_directory");
+        put("overlays", "overlay_directory");
         put("remaps", "input_remapping_directory");
     }};
 
@@ -412,6 +431,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 		    cfgFlags.put("all_users_control_menu", "true");
 		    cfgFlags.put("input_poll_type_behavior", "1");
 		    cfgFlags.put("android_input_disconnect_workaround", "true");
+			cfgFlags.put("joypad_autoconfig_directory", new File(MEDIA_DIR, "autoconfig").getAbsolutePath());
 		    cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
 		    cfgFlags.put("video_driver", (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && "cores64".equals(archCores)) ? "vulkan" : "gl");
 		

@@ -412,7 +412,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 		    cfgFlags.put("all_users_control_menu", "true");
 		    cfgFlags.put("input_poll_type_behavior", "1");
 		    cfgFlags.put("android_input_disconnect_workaround", "true");
-			cfgFlags.put("joypad_autoconfig_directory", new File(MEDIA_DIR, "autoconfig").getAbsolutePath());
+			cfgFlags.put("joypad_autoconfig_dir", new File(MEDIA_DIR, "autoconfig/android").getAbsolutePath());
 			cfgFlags.put("osk_overlay_directory", new File(MEDIA_DIR, "overlays/keyboards").getAbsolutePath());
 			cfgFlags.put("input_overlay", new File(MEDIA_DIR, "overlays/gamepads/neo-retropad/neo-retropad.cfg").getAbsolutePath());
 		    cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");

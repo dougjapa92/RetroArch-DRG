@@ -206,7 +206,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 	
         @Override
         protected void onPreExecute() {
-            AlertDialog.Builder builder = new AlertDialog.Builder(MainMenuActivity.this);
+            AlertDialog.Builder builder = new AlertDialog.Builder(MainMenuActivity.this, android.R.style.Theme_Material_Light_Dialog_Alert);
             builder.setTitle("Configurando RetroArch DRG...");
             builder.setCancelable(false);
         
@@ -222,8 +222,9 @@ public final class MainMenuActivity extends PreferenceActivity {
         
             TextView messageView = new TextView(MainMenuActivity.this);
             messageView.setText(spannable);
-            messageView.setTextSize(16); // aumenta o tamanho do texto para ficar mais parecido
-            int padding = (int) (16 * getResources().getDisplayMetrics().density); // padding em dp
+            messageView.setTextSize(16); // tamanho próximo ao ProgressDialog
+            messageView.setTextColor(0xFF000000); // força preto
+            int padding = (int) (24 * getResources().getDisplayMetrics().density); // borda igual ao título
             messageView.setPadding(padding, padding, padding, padding);
         
             progressBar = new ProgressBar(MainMenuActivity.this, null, android.R.attr.progressBarStyleHorizontal);
@@ -233,7 +234,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
             );
-            params.setMargins(padding, padding, padding, padding); // deixa a barra com espaço das bordas
+            params.setMargins(padding, 0, padding, padding); // alinhado com o texto
             progressBar.setLayoutParams(params);
         
             LinearLayout layout = new LinearLayout(MainMenuActivity.this);
@@ -245,17 +246,18 @@ public final class MainMenuActivity extends PreferenceActivity {
         
             alertDialog = builder.create();
         
-            // Aplica estilo de título maior como o ProgressDialog
+            // Mantém tamanho do título grande
             alertDialog.show();
-            TextView textView = alertDialog.findViewById(android.R.id.title);
-            if (textView != null) textView.setTextSize(20); // aumenta título
+            TextView titleView = alertDialog.findViewById(android.R.id.title);
+            if (titleView != null) titleView.setTextSize(20);
         
             archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
         
             totalFiles = countAllFiles(ROOT_FOLDERS)
                     + countAllFiles(MEDIA_FOLDERS)
                     + countAllFiles(new String[]{archCores, archAutoconfig});
-		} 
+		}
+
 	
 	    @Override
 	    protected Boolean doInBackground(Void... voids) {

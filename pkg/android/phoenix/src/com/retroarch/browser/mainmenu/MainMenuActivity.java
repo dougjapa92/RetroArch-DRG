@@ -8,6 +8,7 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.Manifest;
 import android.media.AudioManager;
 import android.net.Uri;
@@ -20,9 +21,9 @@ import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.text.SpannableString;
 import android.text.style.StyleSpan;
+import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.TextView;
-import android.widget.LinearLayout;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -37,10 +38,10 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public final class MainMenuActivity extends PreferenceActivity {
 
@@ -50,7 +51,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     private SharedPreferences prefs;
 
     private final String[] ROOT_FOLDERS = {
-        "assets", "cheats", "database", "filters", "info", "shaders", "system"
+            "assets", "cheats", "database", "filters", "info", "shaders", "system"
     };
 
     private final Map<String, String> ROOT_FLAGS = new HashMap<String, String>() {{
@@ -64,7 +65,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     }};
 
     private final String[] MEDIA_FOLDERS = {
-        "overlays", "config", "remaps"
+            "overlays", "config", "remaps"
     };
 
     private final Map<String, String> MEDIA_FLAGS = new HashMap<String, String>() {{
@@ -85,7 +86,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         super.onCreate(savedInstanceState);
 
         PACKAGE_NAME = getPackageName();
-		ROOT_DIR = new File(getApplicationInfo().dataDir);
+        ROOT_DIR = new File(getApplicationInfo().dataDir);
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
 
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
@@ -198,35 +199,35 @@ public final class MainMenuActivity extends PreferenceActivity {
         else finalStartup();
     }
 
-	private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
-	    AlertDialog alertDialog;
-	    ProgressBar progressBar;
-	    AtomicInteger processedFiles = new AtomicInteger(0);
-	    int totalFiles = 0;
-	
+    private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
+        AlertDialog alertDialog;
+        ProgressBar progressBar;
+        AtomicInteger processedFiles = new AtomicInteger(0);
+        int totalFiles = 0;
+
         @Override
         protected void onPreExecute() {
             AlertDialog.Builder builder = new AlertDialog.Builder(MainMenuActivity.this, android.R.style.Theme_Material_Light_Dialog_Alert);
             builder.setTitle("Configurando RetroArch DRG...");
             builder.setCancelable(false);
-        
+
             String archMessage = archCores.equals("cores64") ?
-                    "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)" :
-                    "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
+                    "Arquitetura dos Cores:\n  - arm64-v8a (64-bit)" :
+                    "Arquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
             String message = archMessage + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do Retro Game Box.";
-        
+
             SpannableString spannable = new SpannableString(message);
             int start = message.indexOf("\"Sair\"");
             int end = start + "\"Sair\"".length();
             spannable.setSpan(new StyleSpan(Typeface.BOLD), start, end, 0);
-        
+
             TextView messageView = new TextView(MainMenuActivity.this);
             messageView.setText(spannable);
-            messageView.setTextSize(16); // tamanho próximo ao ProgressDialog
-            messageView.setTextColor(0xFF000000); // força preto
-            int padding = (int) (24 * getResources().getDisplayMetrics().density); // borda igual ao título
+            messageView.setTextSize(16);
+            messageView.setTextColor(0xFF000000);
+            int padding = (int) (24 * getResources().getDisplayMetrics().density);
             messageView.setPadding(padding, padding, padding, padding);
-        
+
             progressBar = new ProgressBar(MainMenuActivity.this, null, android.R.attr.progressBarStyleHorizontal);
             progressBar.setMax(100);
             progressBar.setProgress(0);
@@ -234,128 +235,123 @@ public final class MainMenuActivity extends PreferenceActivity {
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT
             );
-            params.setMargins(padding, 0, padding, padding); // alinhado com o texto
+            params.setMargins(padding, 0, padding, padding);
             progressBar.setLayoutParams(params);
-        
+
             LinearLayout layout = new LinearLayout(MainMenuActivity.this);
             layout.setOrientation(LinearLayout.VERTICAL);
             layout.addView(messageView);
             layout.addView(progressBar);
-        
+
             builder.setView(layout);
-        
+
             alertDialog = builder.create();
             alertDialog.show();
-        
-            // Ajusta título
+
             TextView titleView = alertDialog.findViewById(android.R.id.title);
             if (titleView != null) titleView.setTextSize(20);
-        
-            // Adiciona cantos arredondados de 5dp
+
             if (alertDialog.getWindow() != null) {
                 GradientDrawable drawable = new GradientDrawable();
-                drawable.setCornerRadius(5 * getResources().getDisplayMetrics().density); // 5dp
-                drawable.setColor(0xFFFFFFFF); // fundo branco
+                drawable.setCornerRadius(5 * getResources().getDisplayMetrics().density);
+                drawable.setColor(0xFFFFFFFF);
                 alertDialog.getWindow().setBackgroundDrawable(drawable);
             }
-        
+
             archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
-        
+
             totalFiles = countAllFiles(ROOT_FOLDERS)
                     + countAllFiles(MEDIA_FOLDERS)
                     + countAllFiles(new String[]{archCores, archAutoconfig});
-		}
+        }
 
-	
-	    @Override
-	    protected Boolean doInBackground(Void... voids) {
-	        int poolSize = Math.min(ROOT_FOLDERS.length + MEDIA_FOLDERS.length + 2, 4);
-	        ExecutorService executor = Executors.newFixedThreadPool(poolSize);
-	
-	        for (String folder : ROOT_FOLDERS) {
-	            executor.submit(() -> {
-	                try { copyAssetFolder(folder, new File(ROOT_DIR, folder)); }
-	                catch (IOException e) { e.printStackTrace(); }
-	            });
-	        }
-	
-	        for (String folder : MEDIA_FOLDERS) {
-	            executor.submit(() -> {
-	                try { copyAssetFolder(folder, new File(MEDIA_DIR, folder)); }
-	                catch (IOException e) { e.printStackTrace(); }
-	            });
-	        }
-	
-	        executor.submit(() -> {
-	            try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores")); }
-	            catch (IOException e) { e.printStackTrace(); }
-	        });
-	
-	        executor.submit(() -> {
-	            try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig")); }
-	            catch (IOException e) { e.printStackTrace(); }
-	        });
-	
-	        executor.shutdown();
-	        while (!executor.isTerminated()) {
-	            publishProgress((processedFiles.get() * 100) / totalFiles);
-	            try { Thread.sleep(100); } catch (InterruptedException ignored) {}
-	        }
-	
-	        try { updateRetroarchCfg(); } catch (IOException e) { return false; }
-	        return true;
-	    }
-	
-	    @Override
-	    protected void onProgressUpdate(Integer... values) {
-	        if (progressBar != null) {
-	            progressBar.setProgress(values[0]);
-	        }
-	    }
-	
-	    @Override
-	    protected void onPostExecute(Boolean result) {
-	        if (alertDialog != null && alertDialog.isShowing()) {
-	            alertDialog.dismiss();
-	        }
-	        prefs.edit().putBoolean("firstRun", false).apply();
-	
-	        ExecutorService executor = Executors.newFixedThreadPool(3);
-	        executor.submit(() -> processFolderForImages(new File(MEDIA_DIR, "overlays")));
-	        executor.shutdown();
-	        try {
-	            if (!executor.awaitTermination(3, TimeUnit.MINUTES)) executor.shutdownNow();
-	        } catch (InterruptedException e) {
-	            executor.shutdownNow();
-	            Thread.currentThread().interrupt();
-	        }
-	
-	        finalStartup();
-	    }
+        @Override
+        protected Boolean doInBackground(Void... voids) {
+            int poolSize = Math.min(ROOT_FOLDERS.length + MEDIA_FOLDERS.length + 2, 4);
+            ExecutorService executor = Executors.newFixedThreadPool(poolSize);
 
-        /** Verifica se a pasta contém imagens */
+            for (String folder : ROOT_FOLDERS) {
+                executor.submit(() -> {
+                    try { copyAssetFolder(folder, new File(ROOT_DIR, folder)); }
+                    catch (IOException e) { e.printStackTrace(); }
+                });
+            }
+
+            for (String folder : MEDIA_FOLDERS) {
+                executor.submit(() -> {
+                    try { copyAssetFolder(folder, new File(MEDIA_DIR, folder)); }
+                    catch (IOException e) { e.printStackTrace(); }
+                });
+            }
+
+            executor.submit(() -> {
+                try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores")); }
+                catch (IOException e) { e.printStackTrace(); }
+            });
+
+            executor.submit(() -> {
+                try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig")); }
+                catch (IOException e) { e.printStackTrace(); }
+            });
+
+            executor.shutdown();
+            while (!executor.isTerminated()) {
+                publishProgress((processedFiles.get() * 100) / totalFiles);
+                try { Thread.sleep(100); } catch (InterruptedException ignored) {}
+            }
+
+            try { updateRetroarchCfg(); } catch (IOException e) { return false; }
+            return true;
+        }
+
+        @Override
+        protected void onProgressUpdate(Integer... values) {
+            if (progressBar != null) {
+                progressBar.setProgress(values[0]);
+            }
+        }
+
+        @Override
+        protected void onPostExecute(Boolean result) {
+            if (alertDialog != null && alertDialog.isShowing()) {
+                alertDialog.dismiss();
+            }
+            prefs.edit().putBoolean("firstRun", false).apply();
+
+            ExecutorService executor = Executors.newFixedThreadPool(3);
+            executor.submit(() -> processFolderForImages(new File(MEDIA_DIR, "overlays")));
+            executor.shutdown();
+            try {
+                if (!executor.awaitTermination(3, TimeUnit.MINUTES)) executor.shutdownNow();
+            } catch (InterruptedException e) {
+                executor.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+
+            finalStartup();
+        }
+
         private boolean hasImages(File dir) {
             if (dir == null || !dir.exists() || !dir.isDirectory()) return false;
-    
+
             String[] images = dir.list((d, name) -> {
                 String lower = name.toLowerCase();
-                return lower.endsWith(".jpg") || lower.endsWith(".png") || lower.endsWith(".bmp") || 
-                       lower.endsWith(".svg") || lower.endsWith(".cpt");
+                return lower.endsWith(".jpg") || lower.endsWith(".png") || lower.endsWith(".bmp") ||
+                        lower.endsWith(".svg") || lower.endsWith(".cpt");
             });
-    
+
             return images != null && images.length > 0;
         }
-    
-        /** Cria .nomedia em uma pasta se encontrar ao menos uma imagem, e continua nas subpastas */
+
         private void processFolderForImages(File dir) {
             if (dir == null || !dir.exists() || !dir.isDirectory()) return;
-    
+
             if (hasImages(dir)) {
                 File nomedia = new File(dir, ".nomedia");
-                try { if (!nomedia.exists()) nomedia.createNewFile(); } 
+                try { if (!nomedia.exists()) nomedia.createNewFile(); }
                 catch (IOException e) { e.printStackTrace(); }
             }
-    
+
             File[] subDirs = dir.listFiles(File::isDirectory);
             if (subDirs != null) {
                 for (File subDir : subDirs) processFolderForImages(subDir);
@@ -407,85 +403,80 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
         }
 
-		private void updateRetroarchCfg() throws IOException {
-		    File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
-		    if (!originalCfg.exists()) originalCfg.getParentFile().mkdirs();
-		    if (!originalCfg.exists()) originalCfg.createNewFile();
-		
-		    Map<String, String> cfgFlags = new HashMap<>();
-		
-		    // ROOT_FLAGS
-		    for (Map.Entry<String, String> entry : ROOT_FLAGS.entrySet()) {
-		        cfgFlags.put(entry.getValue(), new File(ROOT_DIR, entry.getKey()).getAbsolutePath());
-		    }
-		
-		    // MEDIA_FLAGS
-		    for (Map.Entry<String, String> entry : MEDIA_FLAGS.entrySet()) {
-		        cfgFlags.put(entry.getValue(), new File(MEDIA_DIR, entry.getKey()).getAbsolutePath());
-		    }
-		
-		    // Flags Globais e Condicionais
-		    cfgFlags.put("menu_driver", "ozone");
-		    cfgFlags.put("menu_scale_factor", "0.600000");
-		    cfgFlags.put("ozone_menu_color_theme", "10");
-		    cfgFlags.put("input_overlay_opacity", "0.700000");
-		    cfgFlags.put("input_overlay_hide_when_gamepad_connected", "true");
-		    cfgFlags.put("video_smooth", "false");
-		    cfgFlags.put("aspect_ratio_index", "1");
-		    cfgFlags.put("netplay_nickname", "RetroGameBox");
-		    cfgFlags.put("menu_enable_widgets", "true");
-		    cfgFlags.put("pause_nonactive", "false");
-		    cfgFlags.put("menu_mouse_enable", "false");
-		    cfgFlags.put("input_player1_analog_dpad_mode", "1");
-		    cfgFlags.put("input_player2_analog_dpad_mode", "1");
-		    cfgFlags.put("input_player3_analog_dpad_mode", "1");
-		    cfgFlags.put("input_player4_analog_dpad_mode", "1");
-		    cfgFlags.put("input_player5_analog_dpad_mode", "1");
-		    cfgFlags.put("input_menu_toggle_gamepad_combo", "9");
-		    cfgFlags.put("input_quit_gamepad_combo", "4");
-		    cfgFlags.put("input_bind_timeout", "4");
-		    cfgFlags.put("input_bind_hold", "1");
-		    cfgFlags.put("all_users_control_menu", "true");
-		    cfgFlags.put("input_poll_type_behavior", "1");
-		    cfgFlags.put("android_input_disconnect_workaround", "true");
-			cfgFlags.put("joypad_autoconfig_directory", new File(MEDIA_DIR, "autoconfig").getAbsolutePath());
-			cfgFlags.put("osk_overlay_directory", new File(MEDIA_DIR, "overlays/keyboards").getAbsolutePath());
-			cfgFlags.put("input_overlay", new File(MEDIA_DIR, "overlays/gamepads/neo-retropad/neo-retropad.cfg").getAbsolutePath());
-		    cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
-		    cfgFlags.put("video_driver", (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && "cores64".equals(archCores)) ? "vulkan" : "gl");
-		
-		    boolean hasTouchscreen = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN);
-		    boolean isLeanback = getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
-		
-		    if (hasTouchscreen && !isLeanback) {
-		        cfgFlags.put("input_overlay_enable", "true");
-		        cfgFlags.put("input_enable_hotkey_btn", "109");
-		        cfgFlags.put("input_menu_toggle_btn", "100");
-		        cfgFlags.put("input_save_state_btn", "103");
-		        cfgFlags.put("input_load_state_btn", "102");
-		        cfgFlags.put("input_state_slot_decrease_btn", "104");
-		        cfgFlags.put("input_state_slot_increase_btn", "105");
-		    } else {
-		        cfgFlags.put("input_overlay_enable", "false");
-		        cfgFlags.put("input_enable_hotkey_btn", "196");
-		        cfgFlags.put("input_menu_toggle_btn", "188");
-		        cfgFlags.put("input_save_state_btn", "193");
-		        cfgFlags.put("input_load_state_btn", "192");
-		        cfgFlags.put("input_state_slot_decrease_btn", "194");
-		        cfgFlags.put("input_state_slot_increase_btn", "195");
-		    }
-		
-		    // Lê linhas existentes
+        private void updateRetroarchCfg() throws IOException {
+            File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
+            if (!originalCfg.exists()) originalCfg.getParentFile().mkdirs();
+            if (!originalCfg.exists()) originalCfg.createNewFile();
+
+            Map<String, String> cfgFlags = new HashMap<>();
+
+            for (Map.Entry<String, String> entry : ROOT_FLAGS.entrySet()) {
+                cfgFlags.put(entry.getValue(), new File(ROOT_DIR, entry.getKey()).getAbsolutePath());
+            }
+
+            for (Map.Entry<String, String> entry : MEDIA_FLAGS.entrySet()) {
+                cfgFlags.put(entry.getValue(), new File(MEDIA_DIR, entry.getKey()).getAbsolutePath());
+            }
+
+            cfgFlags.put("menu_driver", "ozone");
+            cfgFlags.put("menu_scale_factor", "0.600000");
+            cfgFlags.put("ozone_menu_color_theme", "10");
+            cfgFlags.put("input_overlay_opacity", "0.700000");
+            cfgFlags.put("input_overlay_hide_when_gamepad_connected", "true");
+            cfgFlags.put("video_smooth", "false");
+            cfgFlags.put("aspect_ratio_index", "1");
+            cfgFlags.put("netplay_nickname", "RetroGameBox");
+            cfgFlags.put("menu_enable_widgets", "true");
+            cfgFlags.put("pause_nonactive", "false");
+            cfgFlags.put("menu_mouse_enable", "false");
+            cfgFlags.put("input_player1_analog_dpad_mode", "1");
+            cfgFlags.put("input_player2_analog_dpad_mode", "1");
+            cfgFlags.put("input_player3_analog_dpad_mode", "1");
+            cfgFlags.put("input_player4_analog_dpad_mode", "1");
+            cfgFlags.put("input_player5_analog_dpad_mode", "1");
+            cfgFlags.put("input_menu_toggle_gamepad_combo", "9");
+            cfgFlags.put("input_quit_gamepad_combo", "4");
+            cfgFlags.put("input_bind_timeout", "4");
+            cfgFlags.put("input_bind_hold", "1");
+            cfgFlags.put("all_users_control_menu", "true");
+            cfgFlags.put("input_poll_type_behavior", "1");
+            cfgFlags.put("android_input_disconnect_workaround", "true");
+            cfgFlags.put("joypad_autoconfig_directory", new File(MEDIA_DIR, "autoconfig").getAbsolutePath());
+            cfgFlags.put("osk_overlay_directory", new File(MEDIA_DIR, "overlays/keyboards").getAbsolutePath());
+            cfgFlags.put("input_overlay", new File(MEDIA_DIR, "overlays/gamepads/neo-retropad/neo-retropad.cfg").getAbsolutePath());
+            cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
+            cfgFlags.put("video_driver", (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && "cores64".equals(archCores)) ? "vulkan" : "gl");
+
+            boolean hasTouchscreen = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN);
+            boolean isLeanback = getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
+
+            if (hasTouchscreen && !isLeanback) {
+                cfgFlags.put("input_overlay_enable", "true");
+                cfgFlags.put("input_enable_hotkey_btn", "109");
+                cfgFlags.put("input_menu_toggle_btn", "100");
+                cfgFlags.put("input_save_state_btn", "103");
+                cfgFlags.put("input_load_state_btn", "102");
+                cfgFlags.put("input_state_slot_decrease_btn", "104");
+                cfgFlags.put("input_state_slot_increase_btn", "105");
+            } else {
+                cfgFlags.put("input_overlay_enable", "false");
+                cfgFlags.put("input_enable_hotkey_btn", "196");
+                cfgFlags.put("input_menu_toggle_btn", "188");
+                cfgFlags.put("input_save_state_btn", "193");
+                cfgFlags.put("input_load_state_btn", "192");
+                cfgFlags.put("input_state_slot_decrease_btn", "194");
+                cfgFlags.put("input_state_slot_increase_btn", "195");
+            }
+
             List<String> lines = new ArrayList<>();
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(originalCfg)))) {
                 String line;
                 while ((line = reader.readLine()) != null) lines.add(line);
             }
-        
+
             Set<String> processedKeys = new HashSet<>();
             StringBuilder content = new StringBuilder();
-        
-            // Atualiza linhas existentes e marca flags processadas
+
             for (String line : lines) {
                 boolean replaced = false;
                 for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
@@ -498,18 +489,17 @@ public final class MainMenuActivity extends PreferenceActivity {
                 }
                 if (!replaced) content.append(line).append("\n");
             }
-        
-            // Adiciona flags novas que ainda não foram processadas
+
             for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
                 if (!processedKeys.contains(entry.getKey())) {
                     content.append(entry.getKey()).append(" = \"").append(entry.getValue()).append("\"\n");
                 }
             }
-        
+
             try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
                 out.write(content.toString().getBytes());
             }
-		}
+        }
     }
 
     public void finalStartup() {

@@ -23,7 +23,6 @@ import android.text.style.StyleSpan;
 import android.graphics.Typeface;
 
 import java.io.BufferedReader;
-import java.io.FileReader;
 import java.io.File;
 import java.io.InputStream;
 import java.io.FileOutputStream;
@@ -430,12 +429,11 @@ public final class MainMenuActivity extends PreferenceActivity {
 
 		    // Populando retroarch.cfg
 		    List<String> lines = new ArrayList<>();
-		    try (BufferedReader reader = new BufferedReader(new FileReader(originalCfg))) {
-		        String line;
-		        while ((line = reader.readLine()) != null) {
-		            lines.add(line);
-		        }
-		    }
+			try (InputStream in = new FileInputStream(originalCfg);
+			     BufferedReader reader = new BufferedReader(new InputStreamReader(in))) {
+			    String line;
+			    while ((line = reader.readLine()) != null) lines.add(line);
+			}
 		
 		    // Atualiza linhas existentes
 		    for (int i = 0; i < lines.size(); i++) {

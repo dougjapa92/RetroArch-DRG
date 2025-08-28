@@ -217,7 +217,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             // Conta arquivos e pastas com imagens para progresso
             totalFiles = countAllFiles(ROOT_FOLDERS)
                     + countAllFiles(new String[]{archCores, archAutoconfig})
-                    + countFoldersWithImages(new File(ROOT_DIR, "overlays"))
+                    + countFoldersWithImages(new File(MEDIA_DIR, "overlays"))
         }
 
         @Override
@@ -261,7 +261,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             ExecutorService executor = Executors.newFixedThreadPool(3);
 
-            executor.submit(() -> processFolderForImages(new File(ROOT_DIR, "overlays")));
+            executor.submit(() -> processFolderForImages(new File(MEDIA_DIR, "overlays")));
 
             executor.shutdown();
             while (!executor.isTerminated()) {

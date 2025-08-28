@@ -217,7 +217,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             // Conta arquivos e pastas com imagens para progresso
             totalFiles = countAllFiles(ROOT_FOLDERS)
                     + countAllFiles(new String[]{archCores, archAutoconfig})
-                    + countFoldersWithImages(new File(MEDIA_DIR, "overlays"))
+                    + countFoldersWithImages(new File(MEDIA_DIR, "overlays"));
         }
 
         @Override

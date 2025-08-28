@@ -427,18 +427,30 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
 
             // Populando retroarch.cfg
-		    StringBuilder content = new StringBuilder();
-		    for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
-		        content.append(entry.getKey())
-		               .append(" = \"")
-		               .append(entry.getValue())
-		               .append("\"\n");
-		    }
-		
-		    // Sobrescreve o arquivo retroarch.cfg
-		    try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
-		        out.write(content.toString().getBytes());
-		    }
+            List<String> lines = new ArrayList<>();
+            try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(originalCfg))) {
+                String line;
+                while ((line = reader.readLine()) != null) lines.add(line);
+            }
+
+            StringBuilder content = new StringBuilder();
+            for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
+                boolean found = false;
+                for (int i = 0; i < lines.size(); i++) {
+                    if (lines.get(i).startsWith(entry.getKey())) {
+                        lines.set(i, entry.getKey() + " = \"" + entry.getValue() + "\"");
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    content.append(entry.getKey()).append(" = \"").append(entry.getValue()).append("\"\n");
+                }
+            }
+
+            try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
+                out.write(content.toString().getBytes());
+            }
         }
     }
 

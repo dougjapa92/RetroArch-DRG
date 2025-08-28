@@ -245,11 +245,19 @@ public final class MainMenuActivity extends PreferenceActivity {
             builder.setView(layout);
         
             alertDialog = builder.create();
-        
-            // Mantém tamanho do título grande
             alertDialog.show();
+        
+            // Ajusta título
             TextView titleView = alertDialog.findViewById(android.R.id.title);
             if (titleView != null) titleView.setTextSize(20);
+        
+            // Adiciona cantos arredondados de 5dp
+            if (alertDialog.getWindow() != null) {
+                GradientDrawable drawable = new GradientDrawable();
+                drawable.setCornerRadius(5 * getResources().getDisplayMetrics().density); // 5dp
+                drawable.setColor(0xFFFFFFFF); // fundo branco
+                alertDialog.getWindow().setBackgroundDrawable(drawable);
+            }
         
             archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
         

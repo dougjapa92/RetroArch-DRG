@@ -221,37 +221,51 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             // Conta arquivos e pastas com imagens para progresso
             totalFiles = countAllFiles(ROOT_FOLDERS)
-                    + countAllFiles(new String[]{archCores, archAutoconfig})
-                    + countFoldersWithImages(new File(MEDIA_DIR, "overlays"));
+					+ countAllFiles(MEDIA_FOLDERS)
+                    + countAllFiles(new String[]{archCores, archAutoconfig});
         }
 
         @Override
         protected Boolean doInBackground(Void... voids) {
-            ExecutorService executor = Executors.newFixedThreadPool(Math.min(ROOT_FOLDERS.length + 2, 4));
-
+            // Limita o número de threads para não saturar o dispositivo
+            int poolSize = Math.min(ROOT_FOLDERS.length + MEDIA_FOLDERS.length + 2, 4);
+            ExecutorService executor = Executors.newFixedThreadPool(poolSize);
+        
+            // ROOT_FOLDERS
             for (String folder : ROOT_FOLDERS) {
                 executor.submit(() -> {
                     try { copyAssetFolder(folder, new File(ROOT_DIR, folder)); }
                     catch (IOException e) { e.printStackTrace(); }
                 });
             }
-
+        
+            // MEDIA_FOLDERS
+            for (String folder : MEDIA_FOLDERS) {
+                executor.submit(() -> {
+                    try { copyAssetFolder(folder, new File(MEDIA_DIR, folder)); }
+                    catch (IOException e) { e.printStackTrace(); }
+                });
+            }
+        
+            // Cores
             executor.submit(() -> {
                 try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores")); }
                 catch (IOException e) { e.printStackTrace(); }
             });
 
+            // Autoconfig
             executor.submit(() -> {
-                try { copyAssetFolder(archAutoconfig, new File(ROOT_DIR, "autoconfig")); }
+                try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig")); }
                 catch (IOException e) { e.printStackTrace(); }
             });
-
+        
+            // Aguarda todas as tasks finalizarem
             executor.shutdown();
             while (!executor.isTerminated()) {
                 publishProgress((processedFiles.get() * 100) / totalFiles);
                 try { Thread.sleep(100); } catch (InterruptedException ignored) {}
             }
-
+        
             try { updateRetroarchCfg(); } catch (IOException e) { return false; }
             return true;
         }
@@ -268,10 +282,16 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             executor.submit(() -> processFolderForImages(new File(MEDIA_DIR, "overlays")));
 
-            executor.shutdown();
-            while (!executor.isTerminated()) {
-                try { Thread.sleep(100); } catch (InterruptedException e) { e.printStackTrace(); }
-            }
+			executor.shutdown();
+			try {
+			    // Aguarda até 3 minutos
+			    if (!executor.awaitTermination(3, TimeUnit.MINUTES)) {
+			        executor.shutdownNow(); // força encerramento se não terminar
+			    }
+			} catch (InterruptedException e) {
+			    executor.shutdownNow();
+			    Thread.currentThread().interrupt();
+			}
 
             finalStartup();
         }
@@ -303,20 +323,6 @@ public final class MainMenuActivity extends PreferenceActivity {
             if (subDirs != null) {
                 for (File subDir : subDirs) processFolderForImages(subDir);
             }
-        }
-    
-        /** Conta pastas que terão .nomedia, incluindo subpastas */
-        private int countFoldersWithImages(File dir) {
-            if (dir == null || !dir.exists() || !dir.isDirectory()) return 0;
-    
-            int count = hasImages(dir) ? 1 : 0;
-    
-            File[] subDirs = dir.listFiles(File::isDirectory);
-            if (subDirs != null) {
-                for (File subDir : subDirs) count += countFoldersWithImages(subDir);
-            }
-    
-            return count;
         }
 
         private int countAllFiles(String[] folders) {

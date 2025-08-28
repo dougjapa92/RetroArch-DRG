@@ -365,6 +365,16 @@ public final class MainMenuActivity extends PreferenceActivity {
             if (!originalCfg.exists()) originalCfg.createNewFile();
 
             Map<String, String> cfgFlags = new HashMap<>();
+
+			// ROOT_FLAGS
+            for (Map.Entry<String, String> entry : ROOT_FLAGS.entrySet()) {
+                cfgFlags.put(entry.getValue(), new File(ROOT_DIR, entry.getKey()).getAbsolutePath());
+            }
+        
+            // MEDIA_FLAGS
+            for (Map.Entry<String, String> entry : MEDIA_FLAGS.entrySet()) {
+                cfgFlags.put(entry.getValue(), new File(MEDIA_DIR, entry.getKey()).getAbsolutePath());
+            } 
             
             // Flags Globais
             cfgFlags.put("menu_driver", "ozone");
@@ -417,42 +427,18 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
 
             // Populando retroarch.cfg
-            List<String> lines = new ArrayList<>();
-            try (java.io.BufferedReader reader = new java.io.BufferedReader(new java.io.FileReader(originalCfg))) {
-                String line;
-                while ((line = reader.readLine()) != null) lines.add(line);
-            }
-
-            StringBuilder content = new StringBuilder();
-            for (String line : lines) {
-                for (Map.Entry<String, String> entry : ROOT_FLAGS.entrySet()) {
-                    String folder = entry.getKey();
-                    String flag = entry.getValue();
-
-                    if (line.startsWith(flag)) {
-                        line = flag + " = \"" + new File(ROOT_DIR, folder).getAbsolutePath() + "\"";
-                        break;
-                    }
-                }
-                content.append(line).append("\n");
-            }
-            for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
-                boolean found = false;
-                for (int i = 0; i < lines.size(); i++) {
-                    if (lines.get(i).startsWith(entry.getKey())) {
-                        lines.set(i, entry.getKey() + " = \"" + entry.getValue() + "\"");
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    content.append(entry.getKey()).append(" = \"").append(entry.getValue()).append("\"\n");
-                }
-            }
-
-            try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
-                out.write(content.toString().getBytes());
-            }
+		    StringBuilder content = new StringBuilder();
+		    for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
+		        content.append(entry.getKey())
+		               .append(" = \"")
+		               .append(entry.getValue())
+		               .append("\"\n");
+		    }
+		
+		    // Sobrescreve o arquivo retroarch.cfg
+		    try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
+		        out.write(content.toString().getBytes());
+		    }
         }
     }
 

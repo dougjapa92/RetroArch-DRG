@@ -88,7 +88,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         Log.d("RetroActivityFuture", "[Autoconf] Iniciando autoconfiguração para dispositivo: " + deviceName);
     
         runOnUiThread(() -> {
-            AlertDialog.Builder builder = new AlertDialog.Builder(this, android.R.style.Theme_Material_Light_Dialog_Alert);
+            AlertDialog.Builder builder = new AlertDialog.Builder(this);
     
             // Título
             SpannableString title = new SpannableString("Autoconfiguração de Controle");
@@ -181,8 +181,8 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     private static void createCfgFromBase(String baseFile, String deviceName,
                                           int vendorId, int productId, Context context) {
 
-        File basePath = new File(context.getFilesDir(), "autoconfig/bases");
-        File androidPath = new File(context.getFilesDir(), "autoconfig/android");
+        File basePath = new File(context.getExternalMediaDirs()[0], "autoconfig/bases");
+        File androidPath = new File(context.getExternalMediaDirs()[0], "autoconfig/android");
         if (!androidPath.exists()) androidPath.mkdirs();
 
         File base = new File(basePath, baseFile);

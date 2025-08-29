@@ -46,6 +46,9 @@
 
 #include <jni.h>
 
+#include <android/log.h>
+#define LOGD(fmt, ...) __android_log_print(ANDROID_LOG_DEBUG, "RetroArchJNI", fmt, ##__VA_ARGS__)
+
 #define AUTOCONF_FLAG_JNI_CALLED  (1 << 0)
 JavaVM *g_vm = NULL;
 

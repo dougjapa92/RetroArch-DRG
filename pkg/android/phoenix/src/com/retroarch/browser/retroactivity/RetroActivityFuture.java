@@ -91,46 +91,54 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             AlertDialog.Builder builder = new AlertDialog.Builder(this);
     
             // Título
-            SpannableString title = new SpannableString("Autoconfiguração de Controle");
-            title.setSpan(new AbsoluteSizeSpan(20, true), 0, title.length(), 0);
-            title.setSpan(new StyleSpan(Typeface.BOLD), 0, title.length(), 0);
-            builder.setTitle(title);
+            SpannableString spannableTitle = new SpannableString("Autoconfiguração de Controle");
+            spannableTitle.setSpan(new StyleSpan(Typeface.BOLD), 0, spannableTitle.length(), 0);
     
-            // Mensagem
-            TextView message = new TextView(this);
-            message.setText("Pressione Select (Options) para autoconfigurar o controle.");
-            message.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-            message.setPadding(50, 20, 50, 20);
-            builder.setView(message);
+            // Mensagem inicial
+            final TextView messageView = new TextView(this);
+            messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\nTentativas restantes: " + attemptsLeft[0]);
+            messageView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+            messageView.setGravity(Gravity.CENTER_HORIZONTAL);
+            int padding = (int) TypedValue.applyDimension(
+                    TypedValue.COMPLEX_UNIT_DIP, 16, getResources().getDisplayMetrics());
+            messageView.setPadding(padding, padding, padding, padding);
     
+            // Layout vertical
+            LinearLayout layout = new LinearLayout(this);
+            layout.setOrientation(LinearLayout.VERTICAL);
+            layout.addView(messageView);
+    
+            builder.setTitle(spannableTitle);
+            builder.setView(layout);
             builder.setCancelable(false);
     
             dialog = builder.create();
+    
             dialog.setOnKeyListener((d, keyCode, event) -> {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                    Log.d("RetroActivityFuture", "[Autoconf] Tecla pressionada: " + keyCode);
                     if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {
                         selectedInput = keyCode;
-                        Log.d("RetroActivityFuture", "[Autoconf] Select pressionado: " + keyCode + ", criando CFG...");
                         latch.countDown();
                         dialog.dismiss();
                         return true;
                     } else {
                         attemptsLeft[0]--;
-                        Log.d("RetroActivityFuture", "[Autoconf] Botão inválido. Tentativas restantes: " + attemptsLeft[0]);
+                        messageView.setText("Botão inválido! Tentativas restantes: " + attemptsLeft[0]);
                         if (attemptsLeft[0] <= 0) {
-                            Log.d("RetroActivityFuture", "[Autoconf] Tentativas esgotadas. Fechando diálogo.");
                             latch.countDown();
                             dialog.dismiss();
                         }
-                        return true; // evita ações do sistema Android
+                        return true;
                     }
                 }
                 return false;
             });
     
             dialog.show();
-            Log.d("RetroActivityFuture", "[Autoconf] Diálogo mostrado. Aguardando input do usuário...");
+    
+            // Ajuste tamanho do título após mostrar
+            TextView titleView = dialog.findViewById(android.R.id.title);
+            if (titleView != null) titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
         });
     
         try {
@@ -176,7 +184,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         Log.d("RetroActivityFuture", "[Autoconf] createConfigForUnknownControllerSync retornando: " + cfgCreated);
         return cfgCreated;
     }
-
+    
     /** Criação do arquivo CFG */
     private static void createCfgFromBase(String baseFile, String deviceName,
                                           int vendorId, int productId, Context context) {

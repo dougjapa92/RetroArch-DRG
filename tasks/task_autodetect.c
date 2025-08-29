@@ -680,8 +680,12 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
 
     LOGD("[Autoconf] Initial autoconfigured: %d\n", autoconfig_handle->device_info.autoconfigured);
 
-    /* --- Chamada Java apenas se ainda não estiver configurado --- */
-    if (!autoconfig_handle->device_info.autoconfigured)
+    /* --- Primeiro verifica se já existe CFG --- */
+    if (!(match_found = input_autoconfigure_scan_config_files_external(autoconfig_handle)))
+        match_found = input_autoconfigure_scan_config_files_internal(autoconfig_handle);
+
+    /* --- Se não houver configuração, chama Java --- */
+    if (!match_found && !autoconfig_handle->device_info.autoconfigured)
     {
         JNIEnv *env;
         if ((*g_vm)->AttachCurrentThread(g_vm, &env, NULL) == JNI_OK)
@@ -725,7 +729,6 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
 
         if (cfgCreated)
         {
-            /* Atualiza flag para puxar a configuração criada */
             autoconfig_handle->device_info.autoconfigured = true;
             LOGD("[Autoconf] Java created config, autoconfigured set to true\n");
 
@@ -735,10 +738,7 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
         }
     }
 
-    /* --- Fluxo original --- */
-    if (!(match_found = input_autoconfigure_scan_config_files_external(autoconfig_handle)))
-        match_found = input_autoconfigure_scan_config_files_internal(autoconfig_handle);
-
+    /* --- Se ainda não encontrou configuração, aplica fallback --- */
     if (!match_found)
     {
         const char *fallback_device_name = NULL;

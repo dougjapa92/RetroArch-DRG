@@ -75,40 +75,56 @@ public final class RetroActivityFuture extends RetroActivityCamera {
 
     /** Método chamado via JNI de forma síncrona */
     public boolean createConfigForUnknownControllerSync(int vendorId, int productId, String deviceName) {
+        final int MAX_ATTEMPTS = 3;
         selectedInput = -1;
+        int attemptsLeft = MAX_ATTEMPTS;
         latch = new CountDownLatch(1);
+    
+        Log.d("RetroActivityFuture", "[Autoconf] Iniciando autoconfiguração para dispositivo: " + deviceName);
     
         runOnUiThread(() -> {
             AlertDialog.Builder builder = new AlertDialog.Builder(this);
             builder.setTitle("Autoconfiguração de Controle");
             builder.setMessage("Pressione Select (Options) para autoconfigurar o controle.");
-            builder.setCancelable(false);
-            builder.setNegativeButton("Cancelar", (d, w) -> {
-                latch.countDown();
-            });
+            builder.setCancelable(false); // Sem botão Cancelar
     
             dialog = builder.create();
             dialog.setOnKeyListener((d, keyCode, event) -> {
-                if (event.getAction() == KeyEvent.ACTION_DOWN &&
-                    (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196)) {
-                    selectedInput = keyCode;
-                    latch.countDown();
-                    dialog.dismiss();
-                    return true;
+                if (event.getAction() == KeyEvent.ACTION_DOWN) {
+                    Log.d("RetroActivityFuture", "[Autoconf] Tecla pressionada: " + keyCode);
+                    if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {
+                        selectedInput = keyCode;
+                        Log.d("RetroActivityFuture", "[Autoconf] Select pressionado: " + keyCode + ", criando CFG...");
+                        latch.countDown();
+                        dialog.dismiss();
+                        return true;
+                    } else {
+                        attemptsLeft--;
+                        Log.d("RetroActivityFuture", "[Autoconf] Botão inválido. Tentativas restantes: " + attemptsLeft);
+                        if (attemptsLeft <= 0) {
+                            Log.d("RetroActivityFuture", "[Autoconf] Tentativas esgotadas. Fechando diálogo.");
+                            latch.countDown();
+                            dialog.dismiss();
+                        }
+                        return true; // evita ações do sistema Android
+                    }
                 }
                 return false;
             });
     
             dialog.show();
+            Log.d("RetroActivityFuture", "[Autoconf] Diálogo mostrado. Aguardando input do usuário...");
         });
     
         try {
             latch.await(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            Log.d("RetroActivityFuture", "[Autoconf] Espera finalizada ou timeout atingido.");
         } catch (InterruptedException e) {
-            Log.e("RetroActivityFuture", "Interrompido durante espera");
+            Log.e("RetroActivityFuture", "[Autoconf] Interrompido durante espera", e);
         }
     
         if (dialog != null && dialog.isShowing()) {
+            Log.d("RetroActivityFuture", "[Autoconf] Diálogo ainda aberto. Fechando...");
             dialog.dismiss();
         }
     
@@ -130,16 +146,18 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                     baseFile = "Base4.cfg";
                     break;
             }
+            Log.d("RetroActivityFuture", "[Autoconf] Criando CFG com base: " + baseFile);
             createCfgFromBase(baseFile, deviceName, vendorId, productId, this);
-            cfgCreated = true; // CFG criado
+            cfgCreated = true;
+            Log.d("RetroActivityFuture", "[Autoconf] CFG criada com sucesso.");
         } else {
-            Log.i("RetroActivityFuture", "Autoconfiguração cancelada ou sem input");
-            Toast.makeText(this, "Autoconfiguração cancelada ou sem input", Toast.LENGTH_SHORT).show();
+            Log.d("RetroActivityFuture", "[Autoconf] Nenhum Select pressionado. Autoconfiguração cancelada.");
+            Toast.makeText(this, "Nenhum Select pressionado, autoconfiguração cancelada", Toast.LENGTH_SHORT).show();
         }
     
         latch = null;
-    
-        return cfgCreated; // retorna true se criou, false se não
+        Log.d("RetroActivityFuture", "[Autoconf] createConfigForUnknownControllerSync retornando: " + cfgCreated);
+        return cfgCreated;
     }
 
     /** Criação do arquivo CFG */

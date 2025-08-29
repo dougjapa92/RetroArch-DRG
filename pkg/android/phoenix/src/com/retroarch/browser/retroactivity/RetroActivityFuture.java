@@ -79,9 +79,8 @@ public final class RetroActivityFuture extends RetroActivityCamera {
 
     /** Método chamado via JNI de forma síncrona */
     public boolean createConfigForUnknownControllerSync(int vendorId, int productId, String deviceName) {
-        final int MAX_ATTEMPTS = 3;
+        final int[] attemptsLeft = {3};
         selectedInput = -1;
-        int attemptsLeft = MAX_ATTEMPTS;
         latch = new CountDownLatch(1);
     
         Log.d("RetroActivityFuture", "[Autoconf] Iniciando autoconfiguração para dispositivo: " + deviceName);
@@ -89,19 +88,20 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         runOnUiThread(() -> {
             AlertDialog.Builder builder = new AlertDialog.Builder(this, android.R.style.Theme_Material_Light_Dialog_Alert);
     
-            // Título tamanho 20
+            // Título
             SpannableString title = new SpannableString("Autoconfiguração de Controle");
             title.setSpan(new AbsoluteSizeSpan(20, true), 0, title.length(), 0);
+            title.setSpan(new StyleSpan(Typeface.BOLD), 0, title.length(), 0);
             builder.setTitle(title);
     
-            // Mensagem tamanho 16
+            // Mensagem
             TextView message = new TextView(this);
             message.setText("Pressione Select (Options) para autoconfigurar o controle.");
             message.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
             message.setPadding(50, 20, 50, 20);
             builder.setView(message);
     
-            builder.setCancelable(false); // Sem botão Cancelar
+            builder.setCancelable(false);
     
             dialog = builder.create();
             dialog.setOnKeyListener((d, keyCode, event) -> {
@@ -114,14 +114,14 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                         dialog.dismiss();
                         return true;
                     } else {
-                        attemptsLeft--;
-                        Log.d("RetroActivityFuture", "[Autoconf] Botão inválido. Tentativas restantes: " + attemptsLeft);
-                        if (attemptsLeft <= 0) {
+                        attemptsLeft[0]--;
+                        Log.d("RetroActivityFuture", "[Autoconf] Botão inválido. Tentativas restantes: " + attemptsLeft[0]);
+                        if (attemptsLeft[0] <= 0) {
                             Log.d("RetroActivityFuture", "[Autoconf] Tentativas esgotadas. Fechando diálogo.");
                             latch.countDown();
                             dialog.dismiss();
                         }
-                        return true; // impede ações do sistema Android
+                        return true; // evita ações do sistema Android
                     }
                 }
                 return false;
@@ -148,10 +148,18 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         if (selectedInput != -1) {
             String baseFile;
             switch (selectedInput) {
-                case INPUT_SELECT_4:  baseFile = "Base4.cfg"; break;
-                case INPUT_SELECT_109: baseFile = "Base109.cfg"; break;
-                case INPUT_SELECT_196: baseFile = "Base196.cfg"; break;
-                default: baseFile = "Base4.cfg"; break;
+                case INPUT_SELECT_4:
+                    baseFile = "Base4.cfg";
+                    break;
+                case INPUT_SELECT_109:
+                    baseFile = "Base109.cfg";
+                    break;
+                case INPUT_SELECT_196:
+                    baseFile = "Base196.cfg";
+                    break;
+                default:
+                    baseFile = "Base4.cfg";
+                    break;
             }
             Log.d("RetroActivityFuture", "[Autoconf] Criando CFG com base: " + baseFile);
             createCfgFromBase(baseFile, deviceName, vendorId, productId, this);

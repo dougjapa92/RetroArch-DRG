@@ -677,7 +677,7 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
 
     RARCH_LOG("[Autoconf] Initial autoconfigured: %d\n", autoconfig_handle->device_info.autoconfigured);
 
-    /* --- Chamada Java se o controle não estiver configurado --- */
+    /* --- Chamada Java apenas se ainda não estiver configurado --- */
     if (!autoconfig_handle->device_info.autoconfigured)
     {
         JNIEnv *env;
@@ -704,39 +704,38 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
                         jName);
 
                     cfgCreated = (result == JNI_TRUE);
-                    RARCH_LOG("[Autoconf] JNI createConfigForUnknownControllerSync returned: %d\n", cfgCreated);
+                    RARCH_LOG("[Autoconf] JNI returned cfgCreated=%d\n", cfgCreated);
 
                     if ((*env)->ExceptionCheck(env))
                     {
                         (*env)->ExceptionDescribe(env);
                         (*env)->ExceptionClear(env);
-                        RARCH_ERR("Exceção durante criação de CFG\n");
+                        RARCH_ERR("Exception during Java config creation\n");
                     }
 
                     (*env)->DeleteLocalRef(env, jName);
                 }
-
                 (*env)->DeleteLocalRef(env, cls);
             }
-
             (*g_vm)->DetachCurrentThread(g_vm);
         }
 
         if (cfgCreated)
         {
-            /* Reaplica autoconfig */
-            RARCH_LOG("[Autoconf] Config criada via Java, refazendo autoconfig\n");
+            /* Atualiza flag para puxar a configuração criada */
+            autoconfig_handle->device_info.autoconfigured = true;
+            RARCH_LOG("[Autoconf] Java created config, autoconfigured set to true\n");
+
+            /* Reaplica autoconfig com a nova configuração */
             input_autoconfigure_connect_handler(task);
-            return; // evita continuar o fluxo atual
+            return;
         }
     }
 
     /* --- Fluxo original --- */
-    /* Scan configs externas e internas */
     if (!(match_found = input_autoconfigure_scan_config_files_external(autoconfig_handle)))
         match_found = input_autoconfigure_scan_config_files_internal(autoconfig_handle);
 
-    /* fallback mapping */
     if (!match_found)
     {
         const char *fallback_device_name = NULL;
@@ -765,7 +764,6 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
         }
     }
 
-    /* --- Notificações de status --- */
     device_display_name = autoconfig_handle->device_info.display_name;
     if (string_is_empty(device_display_name))
         device_display_name = autoconfig_handle->device_info.name;

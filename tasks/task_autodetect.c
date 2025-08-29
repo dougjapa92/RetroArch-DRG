@@ -55,8 +55,6 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM* vm, void* reserved)
     return JNI_VERSION_1_6;
 };
 
-static void input_autoconfigure_connect_handler(retro_task_t *task);
-
 enum autoconfig_handle_flags
 {
    AUTOCONF_FLAG_AUTOCONFIG_ENABLED     = (1 << 0),
@@ -585,193 +583,211 @@ static void cb_input_autoconfigure_connect(
       retro_task_t *task, void *task_data,
       void *user_data, const char *err)
 {
-    unsigned port;
-    autoconfig_handle_t *autoconfig_handle = NULL;
-    bool cfgCreated = false;
+   unsigned port;
+   autoconfig_handle_t *autoconfig_handle = NULL;
+
+   if (!task)
+      return;
+
+   if (!(autoconfig_handle = (autoconfig_handle_t*)task->state))
+      return;
+
+   /* Use local copy of port index for brevity... */
+   port = autoconfig_handle->port;
+
+   /* We perform the actual 'connect' in this
+    * callback, to ensure it occurs on the main
+    * thread */
+
+   /* Copy task handle parameters into global
+    * state objects:
+    * > Name */
+   if (!string_is_empty(autoconfig_handle->device_info.name))
+      input_config_set_device_name(port,
+            autoconfig_handle->device_info.name);
+   else
+      input_config_clear_device_name(port);
+
+   /* > Display name */
+   if (!string_is_empty(autoconfig_handle->device_info.display_name))
+      input_config_set_device_display_name(port,
+            autoconfig_handle->device_info.display_name);
+   else if (!string_is_empty(autoconfig_handle->device_info.name))
+      input_config_set_device_display_name(port,
+            autoconfig_handle->device_info.name);
+   else
+      input_config_clear_device_display_name(port);
+
+   /* > Driver */
+   if (!string_is_empty(autoconfig_handle->device_info.joypad_driver))
+      input_config_set_device_joypad_driver(port,
+            autoconfig_handle->device_info.joypad_driver);
+   else
+      input_config_clear_device_joypad_driver(port);
+
+   /* > VID/PID */
+   input_config_set_device_vid(port, autoconfig_handle->device_info.vid);
+   input_config_set_device_pid(port, autoconfig_handle->device_info.pid);
+
+   if (!string_is_empty(autoconfig_handle->device_info.config_name))
+      input_config_set_device_config_name(port,
+            autoconfig_handle->device_info.config_name);
+   else
+      input_config_set_device_config_name(port,
+            msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NOT_AVAILABLE));
+
+   /* > Auto-configured state */
+   input_config_set_device_autoconfigured(port,
+         autoconfig_handle->device_info.autoconfigured);
+
+   /* Reset any existing binds */
+   input_config_reset_autoconfig_binds(port);
+
+   /* If an autoconfig file is available, load its
+    * bind mappings */
+   if (autoconfig_handle->device_info.autoconfigured)
+      input_config_set_autoconfig_binds(port,
+            autoconfig_handle->autoconfig_file);
+
+   reallocate_port_if_needed(port,autoconfig_handle->device_info.vid,
+         autoconfig_handle->device_info.pid,
+         autoconfig_handle->device_info.name,
+         autoconfig_handle->device_info.display_name);
+}
+
+static void input_autoconfigure_connect_handler(retro_task_t *task)
+{
     char task_title[NAME_MAX_LENGTH + 16];
+    autoconfig_handle_t *autoconfig_handle = NULL;
+    bool match_found = false;
+    const char *device_display_name = NULL;
+    bool cfgCreated = false;
+
+    task_title[0] = '\0';
 
     if (!task)
         return;
 
     autoconfig_handle = (autoconfig_handle_t*)task->state;
     if (!autoconfig_handle)
+    {
+        task_set_flags(task, RETRO_TASK_FLG_FINISHED, true);
         return;
+    }
 
-    port = autoconfig_handle->port;
-    task_title[0] = '\0';
+    RARCH_LOG("[Autoconf] Initial autoconfigured: %d\n", autoconfig_handle->device_info.autoconfigured);
 
-    /* ===== LOGS DE ENTRADA/DIAGNÓSTICO ===== */
-    RARCH_LOG("[Autoconf][CB] port=%u, name='%s', display='%s', driver='%s', vid=0x%04x, pid=0x%04x\n",
-              port,
-              string_is_empty(autoconfig_handle->device_info.name) ? "(empty)" : autoconfig_handle->device_info.name,
-              string_is_empty(autoconfig_handle->device_info.display_name) ? "(empty)" : autoconfig_handle->device_info.display_name,
-              string_is_empty(autoconfig_handle->device_info.joypad_driver) ? "(empty)" : autoconfig_handle->device_info.joypad_driver,
-              autoconfig_handle->device_info.vid,
-              autoconfig_handle->device_info.pid);
-
-    RARCH_LOG("[Autoconf][CB] autoconfigured (ANTES) = %s\n",
-              autoconfig_handle->device_info.autoconfigured ? "true" : "false");
-
-    /* ===== CHAMADA JNI ANTES DE QUALQUER DEFAULT ===== */
+    /* --- Chamada Java se o controle não estiver configurado --- */
     if (!autoconfig_handle->device_info.autoconfigured)
     {
-        JNIEnv *env = NULL;
-        jint jni_attach_rc = (*g_vm)->AttachCurrentThread(g_vm, &env, NULL);
-
-        RARCH_LOG("[Autoconf][JNI] AttachCurrentThread rc=%d\n", (int)jni_attach_rc);
-
-        if (jni_attach_rc == JNI_OK && env)
+        JNIEnv *env;
+        if ((*g_vm)->AttachCurrentThread(g_vm, &env, NULL) == JNI_OK)
         {
-            jobject activity = g_android && g_android->activity ? g_android->activity->clazz : NULL;
-            if (!activity)
-                RARCH_ERR("[Autoconf][JNI] activity == NULL\n");
-
-            jclass cls = activity ? (*env)->GetObjectClass(env, activity) : NULL;
-            if (!cls)
-                RARCH_ERR("[Autoconf][JNI] GetObjectClass falhou\n");
+            jobject activity = g_android->activity->clazz;
+            jclass cls = (*env)->GetObjectClass(env, activity);
 
             if (cls)
             {
                 jmethodID mid = (*env)->GetMethodID(env, cls,
                     "createConfigForUnknownControllerSync",
-                    "(IILjava/lang/String;)Z"); /* boolean */
+                    "(IILjava/lang/String;)Z");
 
-                if (!mid)
-                    RARCH_ERR("[Autoconf][JNI] GetMethodID(createConfigForUnknownControllerSync) falhou\n");
-                else
+                if (mid)
                 {
-                    const char *c_name = string_is_empty(autoconfig_handle->device_info.name)
-                                            ? "Unknown"
-                                            : autoconfig_handle->device_info.name;
-                    jstring jName = (*env)->NewStringUTF(env, c_name);
-                    if (!jName)
-                        RARCH_ERR("[Autoconf][JNI] NewStringUTF falhou\n");
+                    jstring jName = (*env)->NewStringUTF(env,
+                        string_is_empty(autoconfig_handle->device_info.name) ? 
+                        "Unknown" : autoconfig_handle->device_info.name);
 
-                    if (jName)
+                    jboolean result = (*env)->CallBooleanMethod(env, activity, mid,
+                        (jint)autoconfig_handle->device_info.vid,
+                        (jint)autoconfig_handle->device_info.pid,
+                        jName);
+
+                    cfgCreated = (result == JNI_TRUE);
+                    RARCH_LOG("[Autoconf] JNI createConfigForUnknownControllerSync returned: %d\n", cfgCreated);
+
+                    if ((*env)->ExceptionCheck(env))
                     {
-                        RARCH_LOG("[Autoconf][JNI] Chamando Java: vid=0x%04x pid=0x%04x name='%s'\n",
-                                  autoconfig_handle->device_info.vid,
-                                  autoconfig_handle->device_info.pid,
-                                  c_name);
-
-                        jboolean result = (*env)->CallBooleanMethod(env, activity, mid,
-                            (jint)autoconfig_handle->device_info.vid,
-                            (jint)autoconfig_handle->device_info.pid,
-                            jName);
-
-                        if ((*env)->ExceptionCheck(env))
-                        {
-                            RARCH_ERR("[Autoconf][JNI] Exceção durante CallBooleanMethod\n");
-                            (*env)->ExceptionDescribe(env);
-                            (*env)->ExceptionClear(env);
-                        }
-
-                        cfgCreated = (result == JNI_TRUE);
-                        RARCH_LOG("[Autoconf][JNI] Resultado Java cfgCreated=%s\n",
-                                  cfgCreated ? "true" : "false");
-
-                        (*env)->DeleteLocalRef(env, jName);
+                        (*env)->ExceptionDescribe(env);
+                        (*env)->ExceptionClear(env);
+                        RARCH_ERR("Exceção durante criação de CFG\n");
                     }
 
-                } /* mid */
+                    (*env)->DeleteLocalRef(env, jName);
+                }
 
                 (*env)->DeleteLocalRef(env, cls);
-            } /* cls */
-
-            (*g_vm)->DetachCurrentThread(g_vm);
-            RARCH_LOG("[Autoconf][JNI] DetachCurrentThread\n");
-        }
-        else
-        {
-            RARCH_ERR("[Autoconf][JNI] AttachCurrentThread falhou (rc=%d)\n", (int)jni_attach_rc);
-        }
-
-        /* Se o Java criou a config, marcamos e reescaneamos arquivos externos
-           para atualizar autoconfig_handle->autoconfig_file/config_name/binds */
-        if (cfgCreated)
-        {
-            RARCH_LOG("[Autoconf][CB] Java retornou true -> marcando autoconfigured=true e reescanando CFG externa\n");
-            autoconfig_handle->device_info.autoconfigured = true;
-
-            if (!input_autoconfigure_scan_config_files_external(autoconfig_handle))
-            {
-                /* Em alguns casos o arquivo pode estar em configs internas */
-                RARCH_LOG("[Autoconf][CB] CFG externa não encontrada no rescan; tentando interna\n");
-                input_autoconfigure_scan_config_files_internal(autoconfig_handle);
             }
 
-            RARCH_LOG("[Autoconf][CB] autoconfigured (DEPOIS JNI) = %s, config_name='%s'\n",
-                      autoconfig_handle->device_info.autoconfigured ? "true" : "false",
-                      string_is_empty(autoconfig_handle->device_info.config_name) ? "(empty)" : autoconfig_handle->device_info.config_name);
+            (*g_vm)->DetachCurrentThread(g_vm);
         }
-        else
+
+        if (cfgCreated)
         {
-            RARCH_LOG("[Autoconf][CB] Java retornou false -> seguirá fluxo default\n");
+            /* Reaplica autoconfig */
+            RARCH_LOG("[Autoconf] Config criada via Java, refazendo autoconfig\n");
+            input_autoconfigure_connect_handler(task);
+            return; // evita continuar o fluxo atual
         }
     }
 
-    /* ===== FLUXO ORIGINAL (aplicar nomes, driver, vid/pid, binds) ===== */
-    if (!string_is_empty(autoconfig_handle->device_info.name))
-        input_config_set_device_name(port, autoconfig_handle->device_info.name);
-    else
-        input_config_clear_device_name(port);
+    /* --- Fluxo original --- */
+    /* Scan configs externas e internas */
+    if (!(match_found = input_autoconfigure_scan_config_files_external(autoconfig_handle)))
+        match_found = input_autoconfigure_scan_config_files_internal(autoconfig_handle);
 
-    if (!string_is_empty(autoconfig_handle->device_info.display_name))
-        input_config_set_device_display_name(port, autoconfig_handle->device_info.display_name);
-    else if (!string_is_empty(autoconfig_handle->device_info.name))
-        input_config_set_device_display_name(port, autoconfig_handle->device_info.name);
-    else
-        input_config_clear_device_display_name(port);
+    /* fallback mapping */
+    if (!match_found)
+    {
+        const char *fallback_device_name = NULL;
+        if (string_is_equal(autoconfig_handle->device_info.joypad_driver, "android"))
+            fallback_device_name = "Android Gamepad";
+        else if (string_is_equal(autoconfig_handle->device_info.joypad_driver, "xinput"))
+            fallback_device_name = "XInput Controller";
+        else if (string_is_equal(autoconfig_handle->device_info.joypad_driver, "sdl2"))
+            fallback_device_name = "Standard Gamepad";
+#ifdef HAVE_TEST_DRIVERS
+        else if (string_is_equal(autoconfig_handle->device_info.joypad_driver, "test"))
+            fallback_device_name = "Test Gamepad";
+#endif
+        if (!string_is_empty(fallback_device_name) &&
+            !string_is_equal(autoconfig_handle->device_info.name, fallback_device_name))
+        {
+            char *name_backup = strdup(autoconfig_handle->device_info.name);
+            strlcpy(autoconfig_handle->device_info.name, fallback_device_name,
+                    sizeof(autoconfig_handle->device_info.name));
 
-    if (!string_is_empty(autoconfig_handle->device_info.joypad_driver))
-        input_config_set_device_joypad_driver(port, autoconfig_handle->device_info.joypad_driver);
-    else
-        input_config_clear_device_joypad_driver(port);
+            input_autoconfigure_scan_config_files_internal(autoconfig_handle);
 
-    input_config_set_device_vid(port, autoconfig_handle->device_info.vid);
-    input_config_set_device_pid(port, autoconfig_handle->device_info.pid);
+            strlcpy(autoconfig_handle->device_info.name, name_backup,
+                    sizeof(autoconfig_handle->device_info.name));
+            free(name_backup);
+        }
+    }
 
-    if (!string_is_empty(autoconfig_handle->device_info.config_name))
-        input_config_set_device_config_name(port, autoconfig_handle->device_info.config_name);
-    else
-        input_config_set_device_config_name(port, msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NOT_AVAILABLE));
-
-    /* aplica flag e binds */
-    input_config_set_device_autoconfigured(port, autoconfig_handle->device_info.autoconfigured);
-
-    RARCH_LOG("[Autoconf][CB] Aplicando binds: autoconfigured=%s, autoconfig_file=%s\n",
-              autoconfig_handle->device_info.autoconfigured ? "true" : "false",
-              autoconfig_handle->autoconfig_file ? autoconfig_handle->autoconfig_file : "(null)");
-
-    input_config_reset_autoconfig_binds(port);
-
-    if (autoconfig_handle->device_info.autoconfigured)
-        input_config_set_autoconfig_binds(port, autoconfig_handle->autoconfig_file);
-
-    reallocate_port_if_needed(port,
-          autoconfig_handle->device_info.vid,
-          autoconfig_handle->device_info.pid,
-          autoconfig_handle->device_info.name,
-          autoconfig_handle->device_info.display_name);
-
-    /* ===== NOTIFICAÇÕES ===== */
-    const char *device_display_name = autoconfig_handle->device_info.display_name;
+    /* --- Notificações de status --- */
+    device_display_name = autoconfig_handle->device_info.display_name;
     if (string_is_empty(device_display_name))
         device_display_name = autoconfig_handle->device_info.name;
     if (string_is_empty(device_display_name))
         device_display_name = msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NOT_AVAILABLE);
 
     task->style = TASK_STYLE_NEGATIVE;
-
     if (autoconfig_handle->device_info.autoconfigured)
     {
         task->style = TASK_STYLE_POSITIVE;
-        if (!string_is_empty(autoconfig_handle->device_info.name))
-        {
+
+        if (match_found && !(autoconfig_handle->flags & AUTOCONF_FLAG_SUPPRESS_NOTIFICATIONS))
             snprintf(task_title, sizeof(task_title),
                      msg_hash_to_str(MSG_DEVICE_CONFIGURED_IN_PORT_NR),
-                     device_display_name, port + 1);
-        }
+                     device_display_name,
+                     autoconfig_handle->port + 1);
+        else if (!(autoconfig_handle->flags & AUTOCONF_FLAG_SUPPRESS_FAILURE_NOTIF))
+            snprintf(task_title, sizeof(task_title),
+                     msg_hash_to_str(MSG_DEVICE_NOT_CONFIGURED_FALLBACK_NR),
+                     device_display_name,
+                     autoconfig_handle->device_info.vid,
+                     autoconfig_handle->device_info.pid);
     }
     else if (!(autoconfig_handle->flags & AUTOCONF_FLAG_SUPPRESS_FAILURE_NOTIF))
     {
@@ -789,150 +805,7 @@ static void cb_input_autoconfigure_connect(
         RARCH_LOG("[Autoconf] %s.\n", task_title);
     }
 
-    RARCH_LOG("[Autoconf][CB] FIM: autoconfigured=%s, config_name='%s'\n",
-              autoconfig_handle->device_info.autoconfigured ? "true" : "false",
-              string_is_empty(autoconfig_handle->device_info.config_name) ? "(empty)" : autoconfig_handle->device_info.config_name);
-
     task_set_flags(task, RETRO_TASK_FLG_FINISHED, true);
-}
-
-static void input_autoconfigure_connect_handler(retro_task_t *task)
-{
-   char task_title[NAME_MAX_LENGTH + 16];
-   autoconfig_handle_t *autoconfig_handle = NULL;
-   bool match_found                       = false;
-   const char *device_display_name        = NULL;
-
-   task_title[0] = '\0';
-
-   if (!task)
-      return;
-
-   autoconfig_handle = (autoconfig_handle_t*)task->state;
-
-   if (   !autoconfig_handle
-       || string_is_empty(autoconfig_handle->device_info.name)
-       || !(autoconfig_handle->flags & AUTOCONF_FLAG_AUTOCONFIG_ENABLED))
-   {
-      task_set_flags(task, RETRO_TASK_FLG_FINISHED, true);
-      return;
-   }
-
-   /* Annoyingly, we have to scan all the autoconfig
-    * files (and in-built configs) in a single shot
-    * > Would prefer to scan one config per iteration
-    *   of the task, but this would render the gamepad
-    *   unusable for multiple frames after loading
-    *   content... */
-
-   /* Scan in order of preference:
-    * - External autoconfig files
-    * - Internal autoconfig definitions */
-   if (!(match_found = input_autoconfigure_scan_config_files_external(
-         autoconfig_handle)))
-      match_found = input_autoconfigure_scan_config_files_internal(
-         autoconfig_handle);
-
-   /* If no match was found, attempt to use
-    * fallback mapping
-    * > Only enabled for certain drivers */
-   if (!match_found)
-   {
-      const char *fallback_device_name = NULL;
-
-      /* Preset fallback device names - must match
-       * those set in 'input_autodetect_builtin.c' */
-      if (string_is_equal(autoconfig_handle->device_info.joypad_driver,
-            "android"))
-         fallback_device_name = "Android Gamepad";
-      else if (string_is_equal(autoconfig_handle->device_info.joypad_driver,
-            "xinput"))
-         fallback_device_name = "XInput Controller";
-      else if (string_is_equal(autoconfig_handle->device_info.joypad_driver,
-            "sdl2"))
-         fallback_device_name = "Standard Gamepad";
-#ifdef HAVE_TEST_DRIVERS
-      else if (string_is_equal(autoconfig_handle->device_info.joypad_driver,
-            "test"))
-         fallback_device_name = "Test Gamepad";
-#endif
-      if (   !string_is_empty(fallback_device_name)
-          && !string_is_equal(autoconfig_handle->device_info.name,
-               fallback_device_name))
-      {
-         char *name_backup = strdup(autoconfig_handle->device_info.name);
-
-         strlcpy(autoconfig_handle->device_info.name,
-               fallback_device_name,
-               sizeof(autoconfig_handle->device_info.name));
-
-         /* This is not a genuine match - leave
-          * match_found set to 'false' regardless
-          * of the outcome */
-         input_autoconfigure_scan_config_files_internal(
-               autoconfig_handle);
-
-         strlcpy(autoconfig_handle->device_info.name,
-               name_backup,
-               sizeof(autoconfig_handle->device_info.name));
-
-         free(name_backup);
-         name_backup = NULL;
-      }
-   }
-
-   /* Get display name for task status message */
-   device_display_name = autoconfig_handle->device_info.display_name;
-   if (string_is_empty(device_display_name))
-      device_display_name = autoconfig_handle->device_info.name;
-   if (string_is_empty(device_display_name))
-      device_display_name = msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NOT_AVAILABLE);
-
-   /* Generate task status message
-    * > Note that 'connection successful' messages
-    *   may be suppressed, but error messages are
-    *   always shown */
-   task->style = TASK_STYLE_NEGATIVE;
-   if (autoconfig_handle->device_info.autoconfigured)
-   {
-      /* Successful addition style */
-      task->style = TASK_STYLE_POSITIVE;
-
-      if (match_found)
-      {
-         /* A valid autoconfig was applied */
-         if (!(autoconfig_handle->flags & AUTOCONF_FLAG_SUPPRESS_NOTIFICATIONS))
-            snprintf(task_title, sizeof(task_title),
-                  msg_hash_to_str(MSG_DEVICE_CONFIGURED_IN_PORT_NR),
-                  device_display_name,
-                  autoconfig_handle->port + 1);
-      }
-      /* Device is autoconfigured, but a (most likely
-       * incorrect) fallback definition was used... */
-      else if (!(autoconfig_handle->flags & AUTOCONF_FLAG_SUPPRESS_FAILURE_NOTIF))
-         snprintf(task_title, sizeof(task_title),
-                  msg_hash_to_str(MSG_DEVICE_NOT_CONFIGURED_FALLBACK_NR),
-                  device_display_name,
-                  autoconfig_handle->device_info.vid,
-                  autoconfig_handle->device_info.pid);
-   }
-   /* Autoconfig failed */
-   else if (!(autoconfig_handle->flags & AUTOCONF_FLAG_SUPPRESS_FAILURE_NOTIF))
-         snprintf(task_title, sizeof(task_title),
-                  msg_hash_to_str(MSG_DEVICE_NOT_CONFIGURED_NR),
-                  device_display_name,
-                  autoconfig_handle->device_info.vid,
-                  autoconfig_handle->device_info.pid);
-
-   /* Update task title */
-   task_free_title(task);
-   if (!string_is_empty(task_title))
-   {
-      task_set_title(task, strdup(task_title));
-      RARCH_LOG("[Autoconf] %s.\n", task_title);
-   }
-
-   task_set_flags(task, RETRO_TASK_FLG_FINISHED, true);
 }
 
 static bool autoconfigure_connect_finder(retro_task_t *task, void *user_data)

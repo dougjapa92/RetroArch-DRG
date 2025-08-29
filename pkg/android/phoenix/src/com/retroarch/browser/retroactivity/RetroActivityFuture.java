@@ -84,8 +84,19 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     
         runOnUiThread(() -> {
             AlertDialog.Builder builder = new AlertDialog.Builder(this, android.R.style.Theme_Material_Light_Dialog_Alert);
-            builder.setTitle("Autoconfiguração de Controle");
-            builder.setMessage("Pressione Select (Options) para autoconfigurar o controle.");
+    
+            // Título tamanho 20
+            SpannableString title = new SpannableString("Autoconfiguração de Controle");
+            title.setSpan(new AbsoluteSizeSpan(20, true), 0, title.length(), 0);
+            builder.setTitle(title);
+    
+            // Mensagem tamanho 16
+            TextView message = new TextView(this);
+            message.setText("Pressione Select (Options) para autoconfigurar o controle.");
+            message.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+            message.setPadding(50, 20, 50, 20);
+            builder.setView(message);
+    
             builder.setCancelable(false); // Sem botão Cancelar
     
             dialog = builder.create();
@@ -106,7 +117,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                             latch.countDown();
                             dialog.dismiss();
                         }
-                        return true; // evita ações do sistema Android
+                        return true; // impede ações do sistema Android
                     }
                 }
                 return false;
@@ -133,18 +144,10 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         if (selectedInput != -1) {
             String baseFile;
             switch (selectedInput) {
-                case INPUT_SELECT_4:
-                    baseFile = "Base4.cfg";
-                    break;
-                case INPUT_SELECT_109:
-                    baseFile = "Base109.cfg";
-                    break;
-                case INPUT_SELECT_196:
-                    baseFile = "Base196.cfg";
-                    break;
-                default:
-                    baseFile = "Base4.cfg";
-                    break;
+                case INPUT_SELECT_4:  baseFile = "Base4.cfg"; break;
+                case INPUT_SELECT_109: baseFile = "Base109.cfg"; break;
+                case INPUT_SELECT_196: baseFile = "Base196.cfg"; break;
+                default: baseFile = "Base4.cfg"; break;
             }
             Log.d("RetroActivityFuture", "[Autoconf] Criando CFG com base: " + baseFile);
             createCfgFromBase(baseFile, deviceName, vendorId, productId, this);

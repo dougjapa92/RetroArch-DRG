@@ -83,7 +83,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         Log.d("RetroActivityFuture", "[Autoconf] Iniciando autoconfiguração para dispositivo: " + deviceName);
     
         runOnUiThread(() -> {
-            AlertDialog.Builder builder = new AlertDialog.Builder(this);
+            AlertDialog.Builder builder = new AlertDialog.Builder(this, android.R.style.Theme_Material_Light_Dialog_Alert);
             builder.setTitle("Autoconfiguração de Controle");
             builder.setMessage("Pressione Select (Options) para autoconfigurar o controle.");
             builder.setCancelable(false); // Sem botão Cancelar

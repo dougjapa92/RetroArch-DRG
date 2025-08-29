@@ -678,7 +678,7 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
         return;
     }
 
-    RARCH_LOG("[Autoconf] Initial autoconfigured: %d\n", autoconfig_handle->device_info.autoconfigured);
+    LOGD("[Autoconf] Initial autoconfigured: %d\n", autoconfig_handle->device_info.autoconfigured);
 
     /* --- Chamada Java apenas se ainda não estiver configurado --- */
     if (!autoconfig_handle->device_info.autoconfigured)
@@ -707,13 +707,13 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
                         jName);
 
                     cfgCreated = (result == JNI_TRUE);
-                    RARCH_LOG("[Autoconf] JNI returned cfgCreated=%d\n", cfgCreated);
+                    LOGD("[Autoconf] JNI returned cfgCreated=%d\n", cfgCreated);
 
                     if ((*env)->ExceptionCheck(env))
                     {
                         (*env)->ExceptionDescribe(env);
                         (*env)->ExceptionClear(env);
-                        RARCH_ERR("Exception during Java config creation\n");
+                        LOGD("Exception during Java config creation\n");
                     }
 
                     (*env)->DeleteLocalRef(env, jName);
@@ -727,7 +727,7 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
         {
             /* Atualiza flag para puxar a configuração criada */
             autoconfig_handle->device_info.autoconfigured = true;
-            RARCH_LOG("[Autoconf] Java created config, autoconfigured set to true\n");
+            LOGD("[Autoconf] Java created config, autoconfigured set to true\n");
 
             /* Reaplica autoconfig com a nova configuração */
             input_autoconfigure_connect_handler(task);
@@ -803,7 +803,7 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
     if (!string_is_empty(task_title))
     {
         task_set_title(task, strdup(task_title));
-        RARCH_LOG("[Autoconf] %s.\n", task_title);
+        LOGD("[Autoconf] %s.\n", task_title);
     }
 
     task_set_flags(task, RETRO_TASK_FLG_FINISHED, true);

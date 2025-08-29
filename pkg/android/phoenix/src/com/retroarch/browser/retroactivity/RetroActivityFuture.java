@@ -188,23 +188,36 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     /** Criação do arquivo CFG */
     private static void createCfgFromBase(String baseFile, String deviceName,
                                           int vendorId, int productId, Context context) {
-
+    
         File basePath = new File(context.getExternalMediaDirs()[0], "autoconfig/bases");
         File androidPath = new File(context.getExternalMediaDirs()[0], "autoconfig/android");
         if (!androidPath.exists()) androidPath.mkdirs();
-
+    
         File base = new File(basePath, baseFile);
         File output = new File(androidPath, deviceName + ".cfg");
-
-        try (FileWriter writer = new FileWriter(output)) {
+    
+        try {
+            // lê o conteúdo base
             String baseContent = Utils.readFileToString(base);
-            writer.write(baseContent);
-            writer.write("\ninput_device = \"" + deviceName + "\"\n");
-            writer.write("input_vendor_id = " + vendorId + "\n");
-            writer.write("input_product_id = " + productId + "\n");
-            writer.flush();
+    
+            // monta as linhas novas que irão no topo
+            StringBuilder newContent = new StringBuilder();
+            newContent.append("input_device = \"").append(deviceName).append("\"\n");
+            newContent.append("input_vendor_id = ").append(vendorId).append("\n");
+            newContent.append("input_product_id = ").append(productId).append("\n");
+    
+            // adiciona o conteúdo base depois
+            newContent.append(baseContent);
+    
+            // escreve no arquivo
+            try (FileWriter writer = new FileWriter(output)) {
+                writer.write(newContent.toString());
+                writer.flush();
+            }
+    
             Log.i("RetroActivityFuture", "Configuração criada: " + output.getName());
             Toast.makeText(context, "Configuração criada: " + output.getName(), Toast.LENGTH_SHORT).show();
+    
         } catch (IOException e) {
             Log.e("RetroActivityFuture", "Erro ao criar CFG: " + e.getMessage());
             Toast.makeText(context, "Erro ao criar CFG: " + e.getMessage(), Toast.LENGTH_LONG).show();

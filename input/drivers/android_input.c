@@ -1042,56 +1042,64 @@ static void handle_hotplug(android_input_t *android,
       struct android_app *android_app, int *port, int id,
       int source)
 {
-   char device_name[256];
-   char name_buf[256];
-   int vendorId             = 0;
-   int productId            = 0;
+    char device_name[256];
+    char name_buf[256];
 
-   device_name[0] = name_buf[0] = '\0';
+    device_name[0] = name_buf[0] = '\0';
 
-   if (!engine_lookup_name(device_name, &vendorId,
-            &productId, sizeof(device_name), id))
-      return;
+    if (!engine_lookup_name(device_name, NULL, NULL, sizeof(device_name), id))
+        return;
 
-   /* Se for teclado */
-   if (source == AINPUT_SOURCE_KEYBOARD && kbd_num < MAX_NUM_KEYBOARDS)
-   {
-      kbd_id[kbd_num] = id;
-      kbd_num++;
-      return;
-   }
+    /* Se for teclado */
+    if (source == AINPUT_SOURCE_KEYBOARD && kbd_num < MAX_NUM_KEYBOARDS)
+    {
+        kbd_id[kbd_num] = id;
+        kbd_num++;
+        return;
+    }
 
-   if ((source & AINPUT_SOURCE_KEYBOARD) && kbd_num < MAX_NUM_KEYBOARDS &&
-       is_configured_as_physical_keyboard(vendorId, productId, device_name))
-   {
-      kbd_id[kbd_num] = id;
-      kbd_num++;
-      return;
-   }
+    if ((source & AINPUT_SOURCE_KEYBOARD) && kbd_num < MAX_NUM_KEYBOARDS &&
+        is_configured_as_physical_keyboard(0, 0, device_name)) // VID/PID não existem mais
+    {
+        kbd_id[kbd_num] = id;
+        kbd_num++;
+        return;
+    }
 
-   /* Caso não seja teclado, usa o próprio nome do dispositivo */
-   if (!string_is_empty(device_name))
-      strlcpy(name_buf, device_name, sizeof(name_buf));
+    /* Caso não seja teclado, usa o próprio nome do dispositivo */
+    if (!string_is_empty(device_name))
+        strlcpy(name_buf, device_name, sizeof(name_buf));
 
-   if (*port < 0)
-      *port = android->pads_connected;
+    /* Escolhe porta livre se não foi especificada */
+    if (*port < 0)
+    {
+        for (int i = 0; i < MAX_PADS; i++)
+        {
+            if (android->pad_states[i].id == 0) // porta livre
+            {
+                *port = i;
+                break;
+            }
+        }
+    }
 
-   input_autoconfigure_connect(
-         name_buf,
-         NULL,
-         android_joypad.ident,
-         *port,
-         vendorId,
-         productId);
+    if (*port < 0 || *port >= MAX_PADS)
+        return; // nenhuma porta disponível
 
-   android->pad_states[android->pads_connected].id   =
-      g_android->id[android->pads_connected]         = id;
-   android->pad_states[android->pads_connected].port = *port;
+    /* Conecta o pad */
+    input_autoconfigure_connect(
+          name_buf,
+          NULL,
+          android_joypad.ident,
+          *port,
+          0, 0); // VID/PID não utilizados
 
-   strlcpy(android->pad_states[*port].name, name_buf,
-         sizeof(android->pad_states[*port].name));
+    android->pad_states[*port].id   = id;
+    android->pad_states[*port].port = *port;
+    strlcpy(android->pad_states[*port].name, name_buf,
+            sizeof(android->pad_states[*port].name));
 
-   android->pads_connected++;
+    android->pads_connected++;
 }
 
 static int android_input_get_id(AInputEvent *event)

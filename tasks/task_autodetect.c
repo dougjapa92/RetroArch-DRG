@@ -663,7 +663,6 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
     autoconfig_handle_t *autoconfig_handle = NULL;
     bool match_found = false;
     const char *device_display_name = NULL;
-    bool cfgCreated = false;
 
     task_title[0] = '\0';
     if (!task)
@@ -695,8 +694,8 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
             if (cls)
             {
                 jmethodID mid = (*env)->GetMethodID(env, cls,
-                    "createConfigForUnknownControllerSync",
-                    "(IILjava/lang/String;)Z");
+                    "createCfgForUnknownControllerSync",
+                    "(IILjava/lang/String;)Ljava/lang/String;"); // retorna path
 
                 if (mid)
                 {
@@ -704,19 +703,31 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
                         string_is_empty(autoconfig_handle->device_info.name) ?
                         "Unknown" : autoconfig_handle->device_info.name);
 
-                    jboolean result = (*env)->CallBooleanMethod(env, activity, mid,
+                    jstring jPath = (jstring)(*env)->CallObjectMethod(env, activity, mid,
                         (jint)autoconfig_handle->device_info.vid,
                         (jint)autoconfig_handle->device_info.pid,
                         jName);
-
-                    cfgCreated = (result == JNI_TRUE);
-                    LOGD("[Autoconf] JNI returned cfgCreated=%d\n", cfgCreated);
 
                     if ((*env)->ExceptionCheck(env))
                     {
                         (*env)->ExceptionDescribe(env);
                         (*env)->ExceptionClear(env);
-                        LOGD("Exception during Java config creation\n");
+                        LOGD("Exception during Java CFG creation\n");
+                    }
+
+                    if (jPath)
+                    {
+                        const char *cfgPath = (*env)->GetStringUTFChars(env, jPath, NULL);
+                        autoconfig_handle->autoconfig_file = strdup(cfgPath);
+                        autoconfig_handle->device_info.autoconfigured = true;
+
+                        LOGD("[Autoconf] Novo cfg criado pelo Java: %s\n", cfgPath);
+
+                        /* Aplica imediatamente */
+                        cb_input_autoconfigure_connect(task, task, NULL, NULL);
+
+                        (*env)->ReleaseStringUTFChars(env, jPath, cfgPath);
+                        (*env)->DeleteLocalRef(env, jPath);
                     }
 
                     (*env)->DeleteLocalRef(env, jName);
@@ -725,38 +736,10 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
             }
             (*g_vm)->DetachCurrentThread(g_vm);
         }
-
-        /* --- Se Java criou CFG, refaz varredura --- */
-        if (cfgCreated)
-        {
-            LOGD("[Autoconf] Novo cfg criado pelo Java, forçando re-scan...\n");
-        
-            /* Desconecta handle atual para limpar binds */
-            input_autoconfigure_disconnect(task, task);
-        
-            /* Marca que já temos autoconfig */
-            autoconfig_handle->device_info.autoconfigured = true;
-        
-            /* Revarredura dos diretórios */
-            match_found = input_autoconfigure_scan_config_files_external(autoconfig_handle);
-            if (!match_found)
-                match_found = input_autoconfigure_scan_config_files_internal(autoconfig_handle);
-        
-            if (match_found)
-            {
-                LOGD("[Autoconf] Config encontrado, aplicando imediatamente...\n");
-                cb_input_autoconfigure_connect(task, task, NULL, NULL);
-            }
-            else
-            {
-                LOGD("[Autoconf] Java criou cfg, mas scanner não encontrou nenhum válido.\n");
-            }
-        }
-
     }
 
     /* --- Fallback se ainda não encontrou configuração --- */
-    if (!match_found)
+    if (!autoconfig_handle->device_info.autoconfigured)
     {
         const char *fallback_device_name = NULL;
         if (string_is_equal(autoconfig_handle->device_info.joypad_driver, "android"))
@@ -796,17 +779,11 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
     {
         task->style = TASK_STYLE_POSITIVE;
 
-        if (match_found && !(autoconfig_handle->flags & AUTOCONF_FLAG_SUPPRESS_NOTIFICATIONS))
+        if (!(autoconfig_handle->flags & AUTOCONF_FLAG_SUPPRESS_NOTIFICATIONS))
             snprintf(task_title, sizeof(task_title),
                      msg_hash_to_str(MSG_DEVICE_CONFIGURED_IN_PORT_NR),
                      device_display_name,
                      autoconfig_handle->port + 1);
-        else if (!(autoconfig_handle->flags & AUTOCONF_FLAG_SUPPRESS_FAILURE_NOTIF))
-            snprintf(task_title, sizeof(task_title),
-                     msg_hash_to_str(MSG_DEVICE_NOT_CONFIGURED_FALLBACK_NR),
-                     device_display_name,
-                     autoconfig_handle->device_info.vid,
-                     autoconfig_handle->device_info.pid);
     }
     else if (!(autoconfig_handle->flags & AUTOCONF_FLAG_SUPPRESS_FAILURE_NOTIF))
     {

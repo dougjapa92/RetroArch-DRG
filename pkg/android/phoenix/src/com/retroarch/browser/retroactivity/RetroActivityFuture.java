@@ -12,22 +12,14 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
-import android.text.SpannableString;
-import android.text.style.AbsoluteSizeSpan;
 import android.util.TypedValue;
 import android.widget.TextView;
-import android.text.style.StyleSpan;
-import android.graphics.Typeface;
-import android.widget.LinearLayout;
-import android.view.Gravity;
-import com.retroarch.browser.R;
 import com.retroarch.browser.preferences.util.ConfigFile;
 import com.retroarch.browser.preferences.util.UserPreferences;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
 // Android framework
-import android.app.AlertDialog;
+import android.app.ProgressDialog;
 import android.view.KeyEvent;
 import android.widget.Toast;
 
@@ -91,33 +83,15 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         Log.d("RetroActivityFuture", "[Autoconf] Iniciando autoconfiguração para dispositivo: " + deviceName);
     
         runOnUiThread(() -> {
-            AlertDialog.Builder builder = new AlertDialog.Builder(this);
+            ProgressDialog dialog = new ProgressDialog(this);
+            dialog.setTitle("Autoconfiguração de Controle");
+            dialog.setMessage("Pressione Select (Options) para autoconfigurar o controle.\n\nTentativas restantes: " + attemptsLeft[0]);
+            dialog.setCancelable(false);
     
-            // Título
-            SpannableString spannableTitle = new SpannableString("Autoconfiguração de Controle");
-            spannableTitle.setSpan(new StyleSpan(Typeface.BOLD), 0, spannableTitle.length(), 0);
-    
-            // Mensagem inicial
-            final TextView messageView = new TextView(this);
-            messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\nTentativas restantes: " + attemptsLeft[0]);
-            messageView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
-            messageView.setGravity(Gravity.CENTER_HORIZONTAL);
-            int padding = (int) TypedValue.applyDimension(
-                    TypedValue.COMPLEX_UNIT_DIP, 16, getResources().getDisplayMetrics());
-            messageView.setPadding(padding, padding, padding, padding);
-    
-            // Layout vertical
-            LinearLayout layout = new LinearLayout(this);
-            layout.setOrientation(LinearLayout.VERTICAL);
-            layout.setPadding(padding, padding, padding, padding);
-            layout.setBackgroundResource(R.drawable.dialog_background);
-            layout.addView(messageView);
-    
-            builder.setTitle(spannableTitle);
-            builder.setView(layout);
-            builder.setCancelable(false);
-    
-            dialog = builder.create();
+            // Customiza fundo branco com cantos arredondados
+            if (dialog.getWindow() != null) {
+                dialog.getWindow().setBackgroundDrawableResource(R.drawable.dialog_background);
+            }
     
             dialog.setOnKeyListener((d, keyCode, event) -> {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
@@ -128,7 +102,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                         return true;
                     } else {
                         attemptsLeft[0]--;
-                        messageView.setText("Botão inválido! Tentativas restantes: " + attemptsLeft[0]);
+                        dialog.setMessage("Botão inválido! Pressione somente Select (Options).\n\nTentativas restantes: " + attemptsLeft[0]);
                         if (attemptsLeft[0] <= 0) {
                             latch.countDown();
                             dialog.dismiss();
@@ -140,10 +114,6 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             });
     
             dialog.show();
-    
-            // Ajuste tamanho do título após mostrar
-            TextView titleView = dialog.findViewById(android.R.id.title);
-            if (titleView != null) titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
         });
     
         try {
@@ -172,9 +142,6 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 case INPUT_SELECT_196:
                     baseFile = "Base196.cfg";
                     break;
-                default:
-                    baseFile = "Base4.cfg";
-                    break;
             }
             Log.d("RetroActivityFuture", "[Autoconf] Criando CFG com base: " + baseFile);
             createCfgFromBase(baseFile, deviceName, vendorId, productId, this);
@@ -189,6 +156,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         Log.d("RetroActivityFuture", "[Autoconf] createConfigForUnknownControllerSync retornando: " + cfgCreated);
         return cfgCreated;
     }
+
     
     /** Criação do arquivo CFG */
     private static void createCfgFromBase(String baseFile, String deviceName,

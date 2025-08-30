@@ -12,7 +12,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 
-import android.app.ProgressDialog;
+import android.app.AlertDialog;
 import android.view.KeyEvent;
 import android.widget.Toast;
 
@@ -66,7 +66,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     private static final int INPUT_SELECT_196 = 196;
     private static final int TIMEOUT_SECONDS = 10;
 
-    private ProgressDialog dialog;
+    private AlertDialog dialog;
     private CountDownLatch latch;
     private int selectedInput = -1;
 
@@ -79,7 +79,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         Log.d("RetroActivityFuture", "[Autoconf] Iniciando autoconfiguração para dispositivo: " + deviceName);
     
         runOnUiThread(() -> {
-            ProgressDialog dialog = new ProgressDialog(this);
+            AlertDialog dialog = new AlertDialog(this);
             dialog.setTitle("Autoconfiguração de Controle");
             dialog.setMessage("Pressione Select (Options) para autoconfigurar o controle.\n\nTentativas restantes: " + attemptsLeft[0]);
             dialog.setCancelable(false);
@@ -170,8 +170,8 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             // monta as linhas novas que irão no topo
             StringBuilder newContent = new StringBuilder();
             newContent.append("input_device = \"").append(deviceName).append("\"\n");
-            newContent.append("input_vendor_id = ").append(vendorId).append("\n");
-            newContent.append("input_product_id = ").append(productId).append("\n");
+            newContent.append("input_vendor_id = \"").append(vendorId).append("\"n");
+            newContent.append("input_product_id = \"").append(productId).append("\"n");
     
             // adiciona o conteúdo base depois
             newContent.append(baseContent);

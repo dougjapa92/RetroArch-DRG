@@ -666,7 +666,6 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
     bool cfgCreated = false;
 
     task_title[0] = '\0';
-
     if (!task)
         return;
 
@@ -701,7 +700,7 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
                 if (mid)
                 {
                     jstring jName = (*env)->NewStringUTF(env,
-                        string_is_empty(autoconfig_handle->device_info.name) ? 
+                        string_is_empty(autoconfig_handle->device_info.name) ?
                         "Unknown" : autoconfig_handle->device_info.name);
 
                     jboolean result = (*env)->CallBooleanMethod(env, activity, mid,
@@ -731,16 +730,35 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
             autoconfig_handle->device_info.autoconfigured = true;
             LOGD("[Autoconf] Java created config, autoconfigured set to true\n");
 
-            /* --- Refaz a varredura de configuração para detectar o novo CFG --- */
+            /* --- Refaz a varredura para detectar o novo CFG --- */
             match_found = input_autoconfigure_scan_config_files_external(autoconfig_handle);
             if (!match_found)
                 match_found = input_autoconfigure_scan_config_files_internal(autoconfig_handle);
 
-            /* --- Reaplica a configuração encontrada --- */
             if (match_found)
             {
+                /* --- Atualiza o handle com o novo CFG --- */
+                autoconfig_handle->autoconfig_file = get_autoconfig_file_for_device(
+                    autoconfig_handle->device_info.vid,
+                    autoconfig_handle->device_info.pid
+                );
+
+                if (autoconfig_handle->autoconfig_file)
+                {
+                    strncpy(autoconfig_handle->device_info.config_name,
+                            get_config_name(autoconfig_handle->autoconfig_file),
+                            sizeof(autoconfig_handle->device_info.config_name));
+                    strncpy(autoconfig_handle->device_info.joypad_driver,
+                            get_driver_name(autoconfig_handle->autoconfig_file),
+                            sizeof(autoconfig_handle->device_info.joypad_driver));
+                    strncpy(autoconfig_handle->device_info.name,
+                            get_device_name(autoconfig_handle->autoconfig_file),
+                            sizeof(autoconfig_handle->device_info.name));
+                }
+
+                /* --- Aplica imediatamente via callback --- */
                 cb_input_autoconfigure_connect(task, task, NULL, NULL);
-                LOGD("[Autoconf] Novo CFG aplicado via callback com sucesso\n");
+                LOGD("[Autoconf] Novo CFG aplicado via callback imediatamente\n");
             }
         }
     }

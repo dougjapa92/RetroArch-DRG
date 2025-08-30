@@ -15,6 +15,9 @@ import android.os.Message;
 import android.app.AlertDialog;
 import android.view.KeyEvent;
 import android.widget.Toast;
+import android.widget.TextView;
+import android.view.Gravity;
+import android.net.Uri;
 
 import com.retroarch.browser.preferences.util.ConfigFile;
 import com.retroarch.browser.preferences.util.UserPreferences;
@@ -65,27 +68,37 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     private static final int INPUT_SELECT_109 = 109;
     private static final int INPUT_SELECT_196 = 196;
     private static final int TIMEOUT_SECONDS = 10;
-
+    
     private AlertDialog dialog;
     private CountDownLatch latch;
     private int selectedInput = -1;
-
-    /** Método chamado via JNI de forma síncrona */
-    public boolean createConfigForUnknownControllerSync(int vendorId, int productId, String deviceName) {
+    
+    /** Método chamado via JNI de forma síncrona
+     *  Retorna o path completo do arquivo CFG criado, ou null se não foi criado */
+    public String createCfgForUnknownControllerSync(int vendorId, int productId, String deviceName) {
         final int[] attemptsLeft = {3};
         selectedInput = -1;
         latch = new CountDownLatch(1);
-    
-        Log.d("RetroActivityFuture", "[Autoconf] Iniciando autoconfiguração para dispositivo: " + deviceName);
     
         runOnUiThread(() -> {
             AlertDialog.Builder builder = new AlertDialog.Builder(this);
             builder.setTitle("Autoconfiguração de Controle");
             builder.setMessage("Pressione Select (Options) para autoconfigurar o controle.\n\nTentativas restantes: " + attemptsLeft[0]);
             builder.setCancelable(false);
-
+    
             dialog = builder.create();
-            
+    
+            // Centraliza título e mensagem
+            TextView messageView = dialog.findViewById(android.R.id.message);
+            if (messageView != null) {
+                messageView.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+            }
+            int titleId = getResources().getIdentifier("alertTitle", "id", "android");
+            TextView titleView = dialog.findViewById(titleId);
+            if (titleView != null) {
+                titleView.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+            }
+    
             dialog.setOnKeyListener((d, keyCode, event) -> {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {
@@ -96,7 +109,16 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                     } else {
                         attemptsLeft[0]--;
                         dialog.setMessage("Botão inválido! Pressione somente Select (Options).\n\nTentativas restantes: " + attemptsLeft[0]);
-                        if (attemptsLeft[0] <= 0) {
+                        if (attemptsLeft[0] > 0) {
+                            // Reinicia contador de timeout para mais TIMEOUT_SECONDS
+                            latch = new CountDownLatch(1);
+                            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                                if (latch.getCount() > 0) {
+                                    latch.countDown();
+                                    dialog.dismiss();
+                                }
+                            }, TIMEOUT_SECONDS * 1000);
+                        } else {
                             latch.countDown();
                             dialog.dismiss();
                         }
@@ -111,49 +133,34 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     
         try {
             latch.await(TIMEOUT_SECONDS, TimeUnit.SECONDS);
-            Log.d("RetroActivityFuture", "[Autoconf] Espera finalizada ou timeout atingido.");
         } catch (InterruptedException e) {
-            Log.e("RetroActivityFuture", "[Autoconf] Interrompido durante espera", e);
+            e.printStackTrace();
         }
     
         if (dialog != null && dialog.isShowing()) {
-            Log.d("RetroActivityFuture", "[Autoconf] Diálogo ainda aberto. Fechando...");
             dialog.dismiss();
         }
     
-        boolean cfgCreated = false;
-    
-        if (selectedInput != -1) {
-            String baseFile;
-            switch (selectedInput) {
-                case INPUT_SELECT_4:
-                    baseFile = "Base4.cfg";
-                    break;
-                case INPUT_SELECT_109:
-                    baseFile = "Base109.cfg";
-                    break;
-                case INPUT_SELECT_196:
-                    baseFile = "Base196.cfg";
-                    break;
-                default:
-                    baseFile = "Base4.cfg"; // valor seguro padrão
-                    break;
-                    
-            }
-            Log.d("RetroActivityFuture", "[Autoconf] Criando CFG com base: " + baseFile);
-            createCfgFromBase(baseFile, deviceName, vendorId, productId, this);
-            cfgCreated = true;
-            Log.d("RetroActivityFuture", "[Autoconf] CFG criada com sucesso.");
-        } else {
-            Log.d("RetroActivityFuture", "[Autoconf] Nenhum Select pressionado. Autoconfiguração cancelada.");
-            Toast.makeText(this, "Nenhum Select pressionado, autoconfiguração cancelada", Toast.LENGTH_SHORT).show();
+        if (selectedInput == -1) {
+            return null; // Nenhuma seleção
         }
     
-        latch = null;
-        Log.d("RetroActivityFuture", "[Autoconf] createConfigForUnknownControllerSync retornando: " + cfgCreated);
-        return cfgCreated;
+        // Seleciona baseFile conforme Select pressionado
+        String baseFile;
+        switch (selectedInput) {
+            case INPUT_SELECT_4:  baseFile = "Base4.cfg"; break;
+            case INPUT_SELECT_109: baseFile = "Base109.cfg"; break;
+            case INPUT_SELECT_196: baseFile = "Base196.cfg"; break;
+            default: baseFile = "Base4.cfg"; break;
+        }
+    
+        // Cria o arquivo CFG
+        createCfgFromBase(baseFile, deviceName, vendorId, productId, this);
+    
+        // Monta o path completo no diretório externo
+        File androidPath = new File(getExternalMediaDirs()[0], "autoconfig/android/" + deviceName + ".cfg");
+        return androidPath.getAbsolutePath();
     }
-
     
     /** Criação do arquivo CFG */
     private static void createCfgFromBase(String baseFile, String deviceName,

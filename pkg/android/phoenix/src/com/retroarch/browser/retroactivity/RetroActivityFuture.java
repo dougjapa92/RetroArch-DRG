@@ -18,6 +18,8 @@ import android.widget.Toast;
 import android.widget.TextView;
 import android.view.Gravity;
 import android.net.Uri;
+import android.widget.LinearLayout;
+import android.graphics.Typeface;
 
 import com.retroarch.browser.preferences.util.ConfigFile;
 import com.retroarch.browser.preferences.util.UserPreferences;
@@ -83,21 +85,40 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         runOnUiThread(() -> {
             AlertDialog.Builder builder = new AlertDialog.Builder(this);
             builder.setTitle("Autoconfiguração de Controle");
-            builder.setMessage("Pressione Select (Options) para autoconfigurar o controle.\n\nTentativas restantes: " + attemptsLeft[0]);
             builder.setCancelable(false);
+    
+            // Layout customizado para centralizar texto e título e permitir contador
+            LinearLayout layout = new LinearLayout(this);
+            layout.setOrientation(LinearLayout.VERTICAL);
+            layout.setPadding(50, 30, 50, 30);
+    
+            TextView titleView = new TextView(this);
+            titleView.setText("Autoconfiguração de Controle");
+            titleView.setTextSize(20);
+            titleView.setTypeface(null, Typeface.BOLD);
+            titleView.setGravity(Gravity.CENTER);
+            layout.addView(titleView);
+    
+            TextView messageView = new TextView(this);
+            messageView.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+            messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\nTentativas restantes: " + attemptsLeft[0]);
+            messageView.setPadding(0, 20, 0, 0);
+            layout.addView(messageView);
+    
+            builder.setView(layout);
     
             dialog = builder.create();
     
-            // Centraliza título e mensagem
-            TextView messageView = dialog.findViewById(android.R.id.message);
-            if (messageView != null) {
-                messageView.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
-            }
-            int titleId = getResources().getIdentifier("alertTitle", "id", "android");
-            TextView titleView = dialog.findViewById(titleId);
-            if (titleView != null) {
-                titleView.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
-            }
+            final Handler handler = new Handler(Looper.getMainLooper());
+            Runnable timeoutRunnable = new Runnable() {
+                @Override
+                public void run() {
+                    if (latch.getCount() > 0) {
+                        latch.countDown();
+                        dialog.dismiss();
+                    }
+                }
+            };
     
             dialog.setOnKeyListener((d, keyCode, event) -> {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
@@ -105,19 +126,17 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                         selectedInput = keyCode;
                         latch.countDown();
                         dialog.dismiss();
+                        handler.removeCallbacks(timeoutRunnable);
                         return true;
                     } else {
                         attemptsLeft[0]--;
-                        dialog.setMessage("Botão inválido! Pressione somente Select (Options).\n\nTentativas restantes: " + attemptsLeft[0]);
+                        messageView.setText("Botão inválido! Pressione somente Select (Options).\nTentativas restantes: " + attemptsLeft[0]);
+                        handler.removeCallbacks(timeoutRunnable);
+    
                         if (attemptsLeft[0] > 0) {
-                            // Reinicia contador de timeout para mais TIMEOUT_SECONDS
+                            // Reinicia o timer de 10 segundos
                             latch = new CountDownLatch(1);
-                            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                                if (latch.getCount() > 0) {
-                                    latch.countDown();
-                                    dialog.dismiss();
-                                }
-                            }, TIMEOUT_SECONDS * 1000);
+                            handler.postDelayed(timeoutRunnable, TIMEOUT_SECONDS * 1000);
                         } else {
                             latch.countDown();
                             dialog.dismiss();
@@ -129,10 +148,12 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             });
     
             dialog.show();
+            // Inicia contador da primeira vez
+            handler.postDelayed(timeoutRunnable, TIMEOUT_SECONDS * 1000);
         });
     
         try {
-            latch.await(TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            latch.await(TIMEOUT_SECONDS + 1, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -142,10 +163,9 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         }
     
         if (selectedInput == -1) {
-            return null; // Nenhuma seleção
+            return null;
         }
     
-        // Seleciona baseFile conforme Select pressionado
         String baseFile;
         switch (selectedInput) {
             case INPUT_SELECT_4:  baseFile = "Base4.cfg"; break;
@@ -154,10 +174,8 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             default: baseFile = "Base4.cfg"; break;
         }
     
-        // Cria o arquivo CFG
         createCfgFromBase(baseFile, deviceName, vendorId, productId, this);
     
-        // Monta o path completo no diretório externo
         File androidPath = new File(getExternalMediaDirs()[0], "autoconfig/android/" + deviceName + ".cfg");
         return androidPath.getAbsolutePath();
     }
@@ -180,8 +198,8 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             // monta as linhas novas que irão no topo
             StringBuilder newContent = new StringBuilder();
             newContent.append("input_device = \"").append(deviceName).append("\"\n");
-            newContent.append("input_vendor_id = \"").append(vendorId).append("\"n");
-            newContent.append("input_product_id = \"").append(productId).append("\"n");
+            newContent.append("input_vendor_id = \"").append(vendorId).append("\"\n");
+            newContent.append("input_product_id = \"").append(productId).append("\"\n");
     
             // adiciona o conteúdo base depois
             newContent.append(baseContent);

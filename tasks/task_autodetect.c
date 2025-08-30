@@ -729,16 +729,30 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
         /* --- Se Java criou CFG, refaz varredura --- */
         if (cfgCreated)
         {
+            LOGD("[Autoconf] Novo cfg criado pelo Java, forçando re-scan...\n");
+        
+            /* Desconecta handle atual para limpar binds */
+            input_autoconfigure_disconnect(task, task);
+        
+            /* Marca que já temos autoconfig */
             autoconfig_handle->device_info.autoconfigured = true;
-
+        
+            /* Revarredura dos diretórios */
             match_found = input_autoconfigure_scan_config_files_external(autoconfig_handle);
             if (!match_found)
                 match_found = input_autoconfigure_scan_config_files_internal(autoconfig_handle);
-
-            /* Callback direto com dados já existentes no handle */
+        
             if (match_found)
+            {
+                LOGD("[Autoconf] Config encontrado, aplicando imediatamente...\n");
                 cb_input_autoconfigure_connect(task, task, NULL, NULL);
+            }
+            else
+            {
+                LOGD("[Autoconf] Java criou cfg, mas scanner não encontrou nenhum válido.\n");
+            }
         }
+
     }
 
     /* --- Fallback se ainda não encontrou configuração --- */

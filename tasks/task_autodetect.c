@@ -729,6 +729,13 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
                         (*env)->ReleaseStringUTFChars(env, jPath, cfgPath);
                         (*env)->DeleteLocalRef(env, jPath);
                     }
+                    else
+                    {
+                        /* Nenhum CFG criado pelo Java, aplica default do driver */
+                        LOGD("[Autoconf] Java retornou NULL, aplicando CFG interno do driver\n");
+                        input_autoconfigure_scan_config_files_internal(autoconfig_handle);
+                        cb_input_autoconfigure_connect(task, task, NULL, NULL);  // <-- aplicar imediatamente
+                    }
                     (*env)->DeleteLocalRef(env, jName);
                 }
                 (*env)->DeleteLocalRef(env, cls);

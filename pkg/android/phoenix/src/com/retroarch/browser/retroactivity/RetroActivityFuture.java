@@ -108,6 +108,8 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             // Layout vertical
             LinearLayout layout = new LinearLayout(this);
             layout.setOrientation(LinearLayout.VERTICAL);
+            layout.setPadding(padding, padding, padding, padding);
+            layout.setBackgroundResource(R.drawable.dialog_background);
             layout.addView(messageView);
     
             builder.setTitle(spannableTitle);

@@ -70,7 +70,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     private static final int INPUT_SELECT_196 = 196;
     private static final int TIMEOUT_SECONDS = 10;
 
-    private AlertDialog dialog;
+    private ProgressDialog dialog;
     private CountDownLatch latch;
     private int selectedInput = -1;
 
@@ -87,12 +87,6 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             dialog.setTitle("Autoconfiguração de Controle");
             dialog.setMessage("Pressione Select (Options) para autoconfigurar o controle.\n\nTentativas restantes: " + attemptsLeft[0]);
             dialog.setCancelable(false);
-    
-            // Customiza fundo branco com cantos arredondados
-            if (dialog.getWindow() != null) {
-                dialog.getWindow().setBackgroundDrawableResource(R.drawable.dialog_background);
-            }
-    
             dialog.setOnKeyListener((d, keyCode, event) -> {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {

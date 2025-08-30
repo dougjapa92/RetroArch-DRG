@@ -22,6 +22,7 @@ import com.retroarch.browser.preferences.util.UserPreferences;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 

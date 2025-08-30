@@ -675,9 +675,7 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
         return;
     }
 
-    LOGD("[Autoconf] Initial autoconfigured: %d\n", autoconfig_handle->device_info.autoconfigured);
-
-    /* --- Verifica se já existe CFG --- */
+    /* --- Tenta encontrar CFG existente --- */
     match_found = input_autoconfigure_scan_config_files_external(autoconfig_handle);
     if (!match_found)
         match_found = input_autoconfigure_scan_config_files_internal(autoconfig_handle);
@@ -731,11 +729,36 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
                     }
                     else
                     {
-                        /* Nenhum CFG criado pelo Java, aplica default do driver */
+                        /* Java retornou NULL: aplica fallback interno por driver */
                         LOGD("[Autoconf] Java retornou NULL, aplicando CFG interno do driver\n");
-                        input_autoconfigure_scan_config_files_internal(autoconfig_handle);
-                        cb_input_autoconfigure_connect(task, task, NULL, NULL);  // <-- aplicar imediatamente
+                        const char *fallback_device_name = NULL;
+                        if (string_is_equal(autoconfig_handle->device_info.joypad_driver, "android"))
+                            fallback_device_name = "Android Gamepad";
+                        else if (string_is_equal(autoconfig_handle->device_info.joypad_driver, "xinput"))
+                            fallback_device_name = "XInput Controller";
+                        else if (string_is_equal(autoconfig_handle->device_info.joypad_driver, "sdl2"))
+                            fallback_device_name = "Standard Gamepad";
+#ifdef HAVE_TEST_DRIVERS
+                        else if (string_is_equal(autoconfig_handle->device_info.joypad_driver, "test"))
+                            fallback_device_name = "Test Gamepad";
+#endif
+                        if (!string_is_empty(fallback_device_name))
+                        {
+                            char *name_backup = strdup(autoconfig_handle->device_info.name);
+                            strlcpy(autoconfig_handle->device_info.name, fallback_device_name,
+                                    sizeof(autoconfig_handle->device_info.name));
+
+                            input_autoconfigure_scan_config_files_internal(autoconfig_handle);
+
+                            strlcpy(autoconfig_handle->device_info.name, name_backup,
+                                    sizeof(autoconfig_handle->device_info.name));
+                            free(name_backup);
+                        }
+
+                        if (autoconfig_handle->autoconfig_file)
+                            cb_input_autoconfigure_connect(task, task, NULL, NULL);
                     }
+
                     (*env)->DeleteLocalRef(env, jName);
                 }
                 (*env)->DeleteLocalRef(env, cls);
@@ -744,46 +767,19 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
         }
     }
 
-    /* --- Fallback se ainda não encontrou configuração --- */
-    if (!autoconfig_handle->device_info.autoconfigured)
-    {
-        const char *fallback_device_name = NULL;
-        if (string_is_equal(autoconfig_handle->device_info.joypad_driver, "android"))
-            fallback_device_name = "Android Gamepad";
-        else if (string_is_equal(autoconfig_handle->device_info.joypad_driver, "xinput"))
-            fallback_device_name = "XInput Controller";
-        else if (string_is_equal(autoconfig_handle->device_info.joypad_driver, "sdl2"))
-            fallback_device_name = "Standard Gamepad";
-#ifdef HAVE_TEST_DRIVERS
-        else if (string_is_equal(autoconfig_handle->device_info.joypad_driver, "test"))
-            fallback_device_name = "Test Gamepad";
-#endif
-        if (!string_is_empty(fallback_device_name) &&
-            !string_is_equal(autoconfig_handle->device_info.name, fallback_device_name))
-        {
-            char *name_backup = strdup(autoconfig_handle->device_info.name);
-            strlcpy(autoconfig_handle->device_info.name, fallback_device_name,
-                    sizeof(autoconfig_handle->device_info.name));
-
-            input_autoconfigure_scan_config_files_internal(autoconfig_handle);
-
-            strlcpy(autoconfig_handle->device_info.name, name_backup,
-                    sizeof(autoconfig_handle->device_info.name));
-            free(name_backup);
-        }
-    }
-
-    /* --- Atualiza task com status --- */
+    /* --- Atualiza display name --- */
     device_display_name = autoconfig_handle->device_info.display_name;
     if (string_is_empty(device_display_name))
         device_display_name = autoconfig_handle->device_info.name;
     if (string_is_empty(device_display_name))
         device_display_name = msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NOT_AVAILABLE);
 
+    /* --- Atualiza task com status --- */
     task->style = TASK_STYLE_NEGATIVE;
     if (autoconfig_handle->device_info.autoconfigured)
     {
         task->style = TASK_STYLE_POSITIVE;
+
         if (!(autoconfig_handle->flags & AUTOCONF_FLAG_SUPPRESS_NOTIFICATIONS))
             snprintf(task_title, sizeof(task_title),
                      msg_hash_to_str(MSG_DEVICE_CONFIGURED_IN_PORT_NR),

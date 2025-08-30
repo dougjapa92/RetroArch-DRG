@@ -48,7 +48,6 @@
 
 #include <android/log.h>
 #define LOGD(fmt, ...) __android_log_print(ANDROID_LOG_DEBUG, "RetroArchJNI", fmt, ##__VA_ARGS__)
-#define AUTOCONF_FLAG_JNI_CALLED  (1 << 0)
 
 JavaVM *g_vm = NULL;
 
@@ -740,8 +739,8 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
             /* --- Reaplica a configuração encontrada --- */
             if (match_found)
             {
-                input_autoconfigure_apply_config(autoconfig_handle);
-                LOGD("[Autoconf] Novo CFG aplicado com sucesso\n");
+                cb_input_autoconfigure_connect(task, task, NULL, NULL);
+                LOGD("[Autoconf] Novo CFG aplicado via callback com sucesso\n");
             }
         }
     }

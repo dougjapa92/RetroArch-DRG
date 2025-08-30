@@ -2,6 +2,7 @@ package com.retroarch.browser.retroactivity;
 
 import android.util.Log;
 import android.view.View;
+import android.view.PointerIcon;
 import android.view.WindowManager;
 import android.content.Context;
 import android.hardware.input.InputManager;

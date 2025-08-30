@@ -678,8 +678,9 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
 
     LOGD("[Autoconf] Initial autoconfigured: %d\n", autoconfig_handle->device_info.autoconfigured);
 
-    /* --- Primeiro verifica se já existe CFG --- */
-    if (!(match_found = input_autoconfigure_scan_config_files_external(autoconfig_handle)))
+    /* --- Verifica se já existe CFG --- */
+    match_found = input_autoconfigure_scan_config_files_external(autoconfig_handle);
+    if (!match_found)
         match_found = input_autoconfigure_scan_config_files_internal(autoconfig_handle);
 
     /* --- Se não houver configuração, chama Java --- */
@@ -724,50 +725,23 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
             }
             (*g_vm)->DetachCurrentThread(g_vm);
         }
-   
-         if (cfgCreated)
-         {
-             autoconfig_handle->device_info.autoconfigured = true;
-         
-             // Refaz varredura para detectar novo CFG
-             match_found = input_autoconfigure_scan_config_files_external(autoconfig_handle);
-             if (!match_found)
-                 match_found = input_autoconfigure_scan_config_files_internal(autoconfig_handle);
-         
-             if (match_found)
-             {
-                 autoconfig_handle->autoconfig_file = get_autoconfig_file_for_device(
-                     autoconfig_handle->device_info.vid,
-                     autoconfig_handle->device_info.pid
-                 );
-         
-                 if (autoconfig_handle->autoconfig_file)
-                 {
-                     const char *cfg_name = get_config_name(autoconfig_handle->autoconfig_file);
-                     const char *driver = get_driver_name(autoconfig_handle->autoconfig_file);
-                     const char *dev_name = get_device_name(autoconfig_handle->autoconfig_file);
-         
-                     if (cfg_name) strncpy(autoconfig_handle->device_info.config_name, cfg_name, sizeof(autoconfig_handle->device_info.config_name));
-                     if (driver)   strncpy(autoconfig_handle->device_info.joypad_driver, driver, sizeof(autoconfig_handle->device_info.joypad_driver));
-                     if (dev_name) strncpy(autoconfig_handle->device_info.name, dev_name, sizeof(autoconfig_handle->device_info.name));
-                 }
-         
-                 // Aplica na main thread
-                 reallocate_port_if_needed(
-                     autoconfig_handle->port,
-                     autoconfig_handle->device_info.vid,
-                     autoconfig_handle->device_info.pid,
-                     autoconfig_handle->device_info.name,
-                     autoconfig_handle->device_info.display_name
-                 );
-         
-                 cb_input_autoconfigure_connect(task, task, NULL, NULL);
-             }
-         }
 
+        /* --- Se Java criou CFG, refaz varredura --- */
+        if (cfgCreated)
+        {
+            autoconfig_handle->device_info.autoconfigured = true;
+
+            match_found = input_autoconfigure_scan_config_files_external(autoconfig_handle);
+            if (!match_found)
+                match_found = input_autoconfigure_scan_config_files_internal(autoconfig_handle);
+
+            /* Callback direto com dados já existentes no handle */
+            if (match_found)
+                cb_input_autoconfigure_connect(task, task, NULL, NULL);
+        }
     }
 
-    /* --- Se ainda não encontrou configuração, aplica fallback --- */
+    /* --- Fallback se ainda não encontrou configuração --- */
     if (!match_found)
     {
         const char *fallback_device_name = NULL;
@@ -802,6 +776,7 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
     if (string_is_empty(device_display_name))
         device_display_name = msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NOT_AVAILABLE);
 
+    /* --- Atualiza task com status --- */
     task->style = TASK_STYLE_NEGATIVE;
     if (autoconfig_handle->device_info.autoconfigured)
     {
@@ -837,7 +812,7 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
 
     task_set_flags(task, RETRO_TASK_FLG_FINISHED, true);
 }
-
+        
 static bool autoconfigure_connect_finder(retro_task_t *task, void *user_data)
 {
    autoconfig_handle_t *autoconfig_handle = NULL;

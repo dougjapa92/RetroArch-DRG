@@ -1073,13 +1073,19 @@ static void handle_hotplug(android_input_t *android,
    if (!string_is_empty(device_name))
       strlcpy(name_buf, device_name, sizeof(name_buf));
 
-   /* Atribui a primeira porta livre */
+   /* Se não foi definida porta, escolhe a primeira porta livre */
    if (*port < 0)
    {
-       *port = android->pads_connected;
-       // Evita sobrescrever uma porta já ocupada
-       while (*port < 16 && android->pad_states[*port].id != -1)
-           (*port)++;
+      int i;
+      *port = 0;
+      for (i = 0; i < ANDROID_MAX_PADS; i++)
+      {
+         if (android->pad_states[i].id == -1) /* porta livre */
+         {
+            *port = i;
+            break;
+         }
+      }
    }
 
    input_autoconfigure_connect(
@@ -1090,15 +1096,14 @@ static void handle_hotplug(android_input_t *android,
          vendorId,
          productId);
 
-   android->pad_states[android->pads_connected].id   =
-      g_android->id[android->pads_connected]         = id;
-   android->pad_states[android->pads_connected].port = *port;
+   android->pad_states[*port].id   = id;
+   android->pad_states[*port].port = *port;
 
    strlcpy(android->pad_states[*port].name, name_buf,
          sizeof(android->pad_states[*port].name));
 
    android->pads_connected++;
-} 
+}
 
 static int android_input_get_id(AInputEvent *event)
 {

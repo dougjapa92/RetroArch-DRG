@@ -18,6 +18,8 @@ import android.util.TypedValue;
 import android.widget.TextView;
 import android.text.style.StyleSpan;
 import android.graphics.Typeface;
+import android.widget.LinearLayout;
+import android.view.Gravity;
 import com.retroarch.browser.preferences.util.ConfigFile;
 import com.retroarch.browser.preferences.util.UserPreferences;
 import java.lang.reflect.InvocationTargetException;

@@ -732,9 +732,10 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
             autoconfig_handle->device_info.autoconfigured = true;
             LOGD("[Autoconf] Java created config, autoconfigured set to true\n");
 
-            /* Reaplica autoconfig com a nova configuração */
-            input_autoconfigure_connect_handler(task);
-            return;
+            /* --- Refaz a varredura de configuração para detectar o novo CFG --- */
+            match_found = input_autoconfigure_scan_config_files_external(autoconfig_handle);
+            if (!match_found)
+                match_found = input_autoconfigure_scan_config_files_internal(autoconfig_handle);
         }
     }
 

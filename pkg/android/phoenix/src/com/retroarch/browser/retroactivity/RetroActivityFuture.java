@@ -75,8 +75,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     private CountDownLatch latch;
     private int selectedInput = -1;
 
-    /** Método chamado via JNI de forma síncrona
-     *  Retorna o path completo do arquivo CFG criado, ou null se não foi criado */
+    /** Método chamado via JNI de forma síncrona */
     public String createCfgForUnknownControllerSync(int vendorId, int productId, String deviceName) {
         final int[] attemptsLeft = {3};
         selectedInput = -1;
@@ -86,7 +85,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             AlertDialog.Builder builder = new AlertDialog.Builder(this);
             builder.setCancelable(false);
     
-            // --- Título centralizado ---
+            // Título centralizado e negrito
             TextView titleView = new TextView(this);
             titleView.setText("Autoconfiguração de Controle");
             titleView.setGravity(Gravity.CENTER);
@@ -95,29 +94,27 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             titleView.setPadding(20, 40, 20, 20);
             builder.setCustomTitle(titleView);
     
-            // --- Mensagem centralizada ---
+            // Mensagem centralizada
             TextView messageView = new TextView(this);
             messageView.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
             messageView.setGravity(Gravity.CENTER);
             messageView.setTextSize(16);
             messageView.setPadding(40, 30, 40, 30);
             messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\nTentativas restantes: " + attemptsLeft[0]);
-    
             builder.setView(messageView);
-            dialog = builder.create();
     
+            dialog = builder.create();
             final Handler handler = new Handler(Looper.getMainLooper());
     
-            // --- Timeout corrigido ---
             Runnable timeoutRunnable = () -> {
                 if (latch.getCount() > 0) {
-                    selectedInput = -1; // força retorno null
+                    selectedInput = -1; // fallback
                     latch.countDown();
                     dialog.dismiss();
                 }
             };
     
-            // --- OnKeyListener para válidos e inválidos ---
+            // OnKeyListener captura válidos e inválidos
             dialog.setOnKeyListener((d, keyCode, event) -> {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {
@@ -130,12 +127,11 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                         attemptsLeft[0]--;
                         messageView.setText("Botão inválido! Pressione somente Select (Options).\nTentativas restantes: " + attemptsLeft[0]);
                         handler.removeCallbacks(timeoutRunnable);
-    
                         if (attemptsLeft[0] > 0) {
                             latch = new CountDownLatch(1);
                             handler.postDelayed(timeoutRunnable, TIMEOUT_SECONDS * 1000);
                         } else {
-                            selectedInput = -1; // erro definitivo
+                            selectedInput = -1; // invalida configuração
                             latch.countDown();
                             dialog.dismiss();
                         }
@@ -155,14 +151,9 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             e.printStackTrace();
         }
     
-        if (dialog != null && dialog.isShowing()) {
-            dialog.dismiss();
-        }
+        if (dialog != null && dialog.isShowing()) dialog.dismiss();
     
-        // --- Retorno corrigido ---
-        if (selectedInput == -1) {
-            return null; // JNI recebe null → fallback no C
-        }
+        if (selectedInput == -1) return null;
     
         String baseFile;
         switch (selectedInput) {
@@ -173,9 +164,10 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         }
     
         createCfgFromBase(baseFile, deviceName, vendorId, productId, this);
+    
         File androidPath = new File(getExternalMediaDirs()[0], "autoconfig/android/" + deviceName + ".cfg");
         return androidPath.getAbsolutePath();
-    }
+    } 
     
     /** Criação do arquivo CFG */
     private static void createCfgFromBase(String baseFile, String deviceName,

@@ -84,30 +84,40 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     
         runOnUiThread(() -> {
             AlertDialog.Builder builder = new AlertDialog.Builder(this);
-            builder.setTitle("Autoconfiguração de Controle");
             builder.setCancelable(false);
     
+            // --- Título centralizado ---
+            TextView titleView = new TextView(this);
+            titleView.setText("Autoconfiguração de Controle");
+            titleView.setGravity(Gravity.CENTER);
+            titleView.setTypeface(null, Typeface.BOLD);
+            titleView.setTextSize(20);
+            titleView.setPadding(20, 40, 20, 20);
+            builder.setCustomTitle(titleView);
+    
+            // --- Mensagem centralizada ---
             TextView messageView = new TextView(this);
             messageView.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
+            messageView.setGravity(Gravity.CENTER);
+            messageView.setTextSize(16);
+            messageView.setPadding(40, 30, 40, 30);
             messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\nTentativas restantes: " + attemptsLeft[0]);
     
-            builder.setView(layout);
+            builder.setView(messageView);
             dialog = builder.create();
     
             final Handler handler = new Handler(Looper.getMainLooper());
     
             // --- Timeout corrigido ---
-            Runnable timeoutRunnable = new Runnable() {
-                @Override
-                public void run() {
-                    if (latch.getCount() > 0) {
-                        selectedInput = -1; // força retorno null no JNI
-                        latch.countDown();
-                        dialog.dismiss();
-                    }
+            Runnable timeoutRunnable = () -> {
+                if (latch.getCount() > 0) {
+                    selectedInput = -1; // força retorno null
+                    latch.countDown();
+                    dialog.dismiss();
                 }
             };
     
+            // --- OnKeyListener para válidos e inválidos ---
             dialog.setOnKeyListener((d, keyCode, event) -> {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {
@@ -125,7 +135,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                             latch = new CountDownLatch(1);
                             handler.postDelayed(timeoutRunnable, TIMEOUT_SECONDS * 1000);
                         } else {
-                            selectedInput = -1; // também força null após esgotar tentativas
+                            selectedInput = -1; // erro definitivo
                             latch.countDown();
                             dialog.dismiss();
                         }
@@ -151,7 +161,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     
         // --- Retorno corrigido ---
         if (selectedInput == -1) {
-            return null; // JNI recebe NULL -> C cai no fallback
+            return null; // JNI recebe null → fallback no C
         }
     
         String baseFile;
@@ -354,7 +364,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 selectedInput = keyCode;
                 latch.countDown();
                 if (dialog != null && dialog.isShowing()) dialog.dismiss();
-                return true;
+                return true; // consumiu o evento
             }
         }
         return super.dispatchKeyEvent(event);

@@ -74,7 +74,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     private AlertDialog dialog;
     private CountDownLatch latch;
     private int selectedInput = -1;
-    
+
     /** Método chamado via JNI de forma síncrona
      *  Retorna o path completo do arquivo CFG criado, ou null se não foi criado */
     public String createCfgForUnknownControllerSync(int vendorId, int productId, String deviceName) {
@@ -87,33 +87,21 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             builder.setTitle("Autoconfiguração de Controle");
             builder.setCancelable(false);
     
-            // Layout customizado para centralizar texto e título e permitir contador
-            LinearLayout layout = new LinearLayout(this);
-            layout.setOrientation(LinearLayout.VERTICAL);
-            layout.setPadding(50, 30, 50, 30);
-    
-            TextView titleView = new TextView(this);
-            titleView.setText("Autoconfiguração de Controle");
-            titleView.setTextSize(20);
-            titleView.setTypeface(null, Typeface.BOLD);
-            titleView.setGravity(Gravity.CENTER);
-            layout.addView(titleView);
-    
             TextView messageView = new TextView(this);
             messageView.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
             messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\nTentativas restantes: " + attemptsLeft[0]);
-            messageView.setPadding(0, 20, 0, 0);
-            layout.addView(messageView);
     
             builder.setView(layout);
-    
             dialog = builder.create();
     
             final Handler handler = new Handler(Looper.getMainLooper());
+    
+            // --- Timeout corrigido ---
             Runnable timeoutRunnable = new Runnable() {
                 @Override
                 public void run() {
                     if (latch.getCount() > 0) {
+                        selectedInput = -1; // força retorno null no JNI
                         latch.countDown();
                         dialog.dismiss();
                     }
@@ -134,10 +122,10 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                         handler.removeCallbacks(timeoutRunnable);
     
                         if (attemptsLeft[0] > 0) {
-                            // Reinicia o timer de 10 segundos
                             latch = new CountDownLatch(1);
                             handler.postDelayed(timeoutRunnable, TIMEOUT_SECONDS * 1000);
                         } else {
+                            selectedInput = -1; // também força null após esgotar tentativas
                             latch.countDown();
                             dialog.dismiss();
                         }
@@ -148,7 +136,6 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             });
     
             dialog.show();
-            // Inicia contador da primeira vez
             handler.postDelayed(timeoutRunnable, TIMEOUT_SECONDS * 1000);
         });
     
@@ -162,8 +149,9 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             dialog.dismiss();
         }
     
+        // --- Retorno corrigido ---
         if (selectedInput == -1) {
-            return null;
+            return null; // JNI recebe NULL -> C cai no fallback
         }
     
         String baseFile;
@@ -175,7 +163,6 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         }
     
         createCfgFromBase(baseFile, deviceName, vendorId, productId, this);
-    
         File androidPath = new File(getExternalMediaDirs()[0], "autoconfig/android/" + deviceName + ".cfg");
         return androidPath.getAbsolutePath();
     }

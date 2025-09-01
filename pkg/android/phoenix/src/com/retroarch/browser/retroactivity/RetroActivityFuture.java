@@ -118,13 +118,13 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                         if (!lastInputInvalid[0]) {
                             messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\n\n"
                                     + "Tentativas restantes: " + attemptsLeft[0]
-                                    + "\nTempo restante: " + remainingSeconds[0] + "s");
+                                    + "\n\n" + remainingSeconds[0] + "s");
                         } else {
                             // mantém mensagem de botão inválido apenas atualizando tempo
                             String msg = messageView.getText().toString();
-                            int idx = msg.indexOf("Tempo restante:");
+                            int idx = msg.lastIndexOf("\n");
                             if (idx != -1) {
-                                msg = msg.substring(0, idx) + "Tempo restante: " + remainingSeconds[0] + "s";
+                                msg = msg.substring(0, idx + 1) + remainingSeconds[0] + "s";
                                 messageView.setText(msg);
                             }
                         }
@@ -147,8 +147,8 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                         attemptsLeft[0]--;
                         lastInputInvalid[0] = true; // ativa flag de inválido
                         String invalidMsg = "Botão inválido!\n\nPressione Select (Options) para autoconfigurar o controle.\n\n"
-                                    + "Tentativas restantes: " + attemptsLeft[0]
-                                    + "\nTempo restante: " + remainingSeconds[0] + "s");
+                                + "Tentativas restantes: " + attemptsLeft[0]
+                                + "\n\n" + remainingSeconds[0] + "s";
                         messageView.setText(invalidMsg);
     
                         if (attemptsLeft[0] <= 0) {

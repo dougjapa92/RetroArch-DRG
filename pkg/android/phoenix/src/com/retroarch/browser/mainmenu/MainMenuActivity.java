@@ -232,21 +232,23 @@ public final class MainMenuActivity extends PreferenceActivity {
 		    ExecutorService executor = Executors.newFixedThreadPool(poolSize);
 		
 		    // --- ROOT_FOLDERS: copiar apenas para ROOT_DIR ---
-		    for (String folder : ROOT_FOLDERS) {
-		        executor.submit(() -> {
-		            try { copyAssetFolder(folder, new File(ROOT_DIR, folder), ROOT_FOLDERS); }
-		            catch (IOException e) { e.printStackTrace(); }
-		        });
-		    }
-		
-		    // --- MEDIA_FOLDERS: copiar apenas para MEDIA_DIR ---
-		    for (String folder : MEDIA_FOLDERS) {
-		        executor.submit(() -> {
-		            try { copyAssetFolder(folder, new File(MEDIA_DIR, folder), MEDIA_FOLDERS); }
-		            catch (IOException e) { e.printStackTrace(); }
-		        });
-		    }
-		
+			for (String folder : ROOT_FOLDERS) {
+			    executor.submit(() -> {
+			        try { 
+			            copyAssetFolder(folder, new File(ROOT_DIR, folder), new HashSet<>(Arrays.asList(ROOT_FOLDERS))); 
+			        } catch (IOException e) { e.printStackTrace(); }
+			    });
+			}
+			
+			// MEDIA_FOLDERS
+			for (String folder : MEDIA_FOLDERS) {
+			    executor.submit(() -> {
+			        try { 
+			            copyAssetFolder(folder, new File(MEDIA_DIR, folder), new HashSet<>(Arrays.asList(MEDIA_FOLDERS))); 
+			        } catch (IOException e) { e.printStackTrace(); }
+			    });
+			}
+
 		    // --- Cores: copiar apenas a pasta correspondente ---
 		    executor.submit(() -> {
 		        try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores"), Set.of(archCores)); }

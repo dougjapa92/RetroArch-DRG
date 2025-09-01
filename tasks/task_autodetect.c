@@ -723,9 +723,6 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
 
                         LOGD("[Autoconf] Novo cfg criado pelo Java: %s\n", cfgPath);
 
-                        /* Aplica imediatamente */
-                        cb_input_autoconfigure_connect(task, task, NULL, NULL);
-
                         (*env)->ReleaseStringUTFChars(env, jPath, cfgPath);
                         (*env)->DeleteLocalRef(env, jPath);
                     }

@@ -659,30 +659,27 @@ static void cb_input_autoconfigure_connect(
 
 static void input_autoconfigure_connect_handler(retro_task_t *task)
 {
-    char task_title[NAME_MAX_LENGTH + 16];
+    char task_title[NAME_MAX_LENGTH + 64];
     autoconfig_handle_t *autoconfig_handle = NULL;
     bool match_found = false;
-    const char *device_display_name = NULL;
 
     task_title[0] = '\0';
     if (!task)
         return;
 
     autoconfig_handle = (autoconfig_handle_t*)task->state;
-    if (!autoconfig_handle)
+    if (!autoconfig_handle || !(autoconfig_handle->flags & AUTOCONF_FLAG_AUTOCONFIG_ENABLED))
     {
         task_set_flags(task, RETRO_TASK_FLG_FINISHED, true);
         return;
     }
 
-    LOGD("[Autoconf] Initial autoconfigured: %d\n", autoconfig_handle->device_info.autoconfigured);
-
-    /* --- Verifica se já existe CFG --- */
+    /* --- Tenta encontrar CFG existente --- */
     match_found = input_autoconfigure_scan_config_files_external(autoconfig_handle);
     if (!match_found)
         match_found = input_autoconfigure_scan_config_files_internal(autoconfig_handle);
 
-    /* --- Se não houver configuração, chama Java --- */
+    /* --- Se não encontrou, chama Java --- */
     if (!match_found && !autoconfig_handle->device_info.autoconfigured)
     {
         JNIEnv *env;
@@ -694,25 +691,26 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
             {
                 jmethodID mid = (*env)->GetMethodID(env, cls,
                     "createCfgForUnknownControllerSync",
-                    "(IILjava/lang/String;)V"); // agora void
-    
+                    "(IILjava/lang/String;)V"); // método void
+
                 if (mid)
                 {
                     jstring jName = (*env)->NewStringUTF(env,
-                        string_is_empty(autoconfig_handle->device_info.name) ? "Unknown" : autoconfig_handle->device_info.name);
-    
+                        string_is_empty(autoconfig_handle->device_info.name) ? "Unknown" :
+                        autoconfig_handle->device_info.name);
+
                     (*env)->CallVoidMethod(env, activity, mid,
                         (jint)autoconfig_handle->device_info.vid,
                         (jint)autoconfig_handle->device_info.pid,
                         jName);
-    
+
                     if ((*env)->ExceptionCheck(env))
                     {
                         (*env)->ExceptionDescribe(env);
                         (*env)->ExceptionClear(env);
                         LOGD("Exception during Java CFG creation\n");
                     }
-    
+
                     (*env)->DeleteLocalRef(env, jName);
                 }
                 (*env)->DeleteLocalRef(env, cls);
@@ -720,31 +718,27 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
             (*g_vm)->DetachCurrentThread(g_vm);
         }
     }
-   
-    /* --- Fallback se ainda não encontrou configuração --- */
+
+    /* --- Fallback se ainda não configurado --- */
     if (!autoconfig_handle->device_info.autoconfigured)
     {
-        const char *fallback_device_name = NULL;
+        const char *fallback_name = NULL;
         if (string_is_equal(autoconfig_handle->device_info.joypad_driver, "android"))
-            fallback_device_name = "Android Gamepad";
+            fallback_name = "Android Gamepad";
         else if (string_is_equal(autoconfig_handle->device_info.joypad_driver, "xinput"))
-            fallback_device_name = "XInput Controller";
+            fallback_name = "XInput Controller";
         else if (string_is_equal(autoconfig_handle->device_info.joypad_driver, "sdl2"))
-            fallback_device_name = "Standard Gamepad";
-#ifdef HAVE_TEST_DRIVERS
-        else if (string_is_equal(autoconfig_handle->device_info.joypad_driver, "test"))
-            fallback_device_name = "Test Gamepad";
-#endif
-        if (!string_is_empty(fallback_device_name) &&
-            !string_is_equal(autoconfig_handle->device_info.name, fallback_device_name))
+            fallback_name = "Standard Gamepad";
+
+        if (!string_is_empty(fallback_name) &&
+            !string_is_equal(autoconfig_handle->device_info.name, fallback_name))
         {
             char *name_backup = strdup(autoconfig_handle->device_info.name);
-            strlcpy(autoconfig_handle->device_info.name, fallback_device_name,
+            strlcpy(autoconfig_handle->device_info.name, fallback_name,
                     sizeof(autoconfig_handle->device_info.name));
 
             input_autoconfigure_scan_config_files_internal(autoconfig_handle);
 
-            /* >>> Correção: aplica imediatamente se encontrou algo <<< */
             if (autoconfig_handle->autoconfig_file)
                 cb_input_autoconfigure_connect(task, task, NULL, NULL);
 
@@ -754,31 +748,32 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
         }
     }
 
-    device_display_name = autoconfig_handle->device_info.display_name;
+    /* --- Determina o nome de exibição do dispositivo --- */
+    const char *device_display_name = autoconfig_handle->device_info.display_name;
     if (string_is_empty(device_display_name))
         device_display_name = autoconfig_handle->device_info.name;
     if (string_is_empty(device_display_name))
         device_display_name = msg_hash_to_str(MENU_ENUM_LABEL_VALUE_NOT_AVAILABLE);
 
-    /* --- Atualiza task com status --- */
+    /* --- Atualiza a task com status --- */
     task->style = TASK_STYLE_NEGATIVE;
     if (autoconfig_handle->device_info.autoconfigured)
     {
         task->style = TASK_STYLE_POSITIVE;
-
         if (!(autoconfig_handle->flags & AUTOCONF_FLAG_SUPPRESS_NOTIFICATIONS))
+        {
             snprintf(task_title, sizeof(task_title),
                      msg_hash_to_str(MSG_DEVICE_CONFIGURED_IN_PORT_NR),
                      device_display_name,
                      autoconfig_handle->port + 1);
+        }
     }
     else if (!(autoconfig_handle->flags & AUTOCONF_FLAG_SUPPRESS_FAILURE_NOTIF))
     {
+        /* <<< Aqui a mudança: exibe mensagem clara de dispositivo não configurado >>> */
         snprintf(task_title, sizeof(task_title),
-                 msg_hash_to_str(MSG_DEVICE_NOT_CONFIGURED_NR),
-                 device_display_name,
-                 autoconfig_handle->device_info.vid,
-                 autoconfig_handle->device_info.pid);
+                 "Dispositivo não configurado na porta %d",
+                 autoconfig_handle->port + 1);
     }
 
     task_free_title(task);

@@ -14,7 +14,6 @@ import android.os.Message;
 
 import android.app.AlertDialog;
 import android.view.KeyEvent;
-import android.widget.Toast;
 import android.widget.TextView;
 import android.view.Gravity;
 import android.net.Uri;
@@ -200,11 +199,9 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             }
     
             Log.i("RetroActivityFuture", "Configuração criada: " + output.getName());
-            Toast.makeText(context, "Configuração criada: " + output.getName(), Toast.LENGTH_SHORT).show();
     
         } catch (IOException e) {
             Log.e("RetroActivityFuture", "Erro ao criar CFG: " + e.getMessage());
-            Toast.makeText(context, "Erro ao criar CFG: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
 

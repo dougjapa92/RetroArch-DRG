@@ -75,7 +75,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     private int selectedInput = -1;
 
     /** Método chamado via JNI de forma síncrona */
-    public String createCfgForUnknownControllerSync(int vendorId, int productId, String deviceName) {
+    public void createCfgForUnknownControllerSync(int vendorId, int productId, String deviceName) {
         final int[] attemptsLeft = {3};
         selectedInput = -1;
         latch = new CountDownLatch(1);
@@ -103,20 +103,20 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     
             dialog = builder.create();
             final Handler handler = new Handler(Looper.getMainLooper());
-    
             final int[] remainingSeconds = {TIMEOUT_SECONDS};
     
-            // Runnable de contagem regressiva
+            // Runnable de contagem regressiva único
             final Runnable countdownRunnable = new Runnable() {
                 @Override
                 public void run() {
+                    messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\n\n(tentativas restantes: "
+                            + attemptsLeft[0] + ")\nTempo restante: " + remainingSeconds[0] + "s");
+    
                     if (remainingSeconds[0] <= 0) {
                         selectedInput = -1;
                         if (latch.getCount() > 0) latch.countDown();
                         if (dialog != null && dialog.isShowing()) dialog.dismiss();
                     } else {
-                        messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\n\n(tentativas restantes: "
-                                + attemptsLeft[0] + ")\nTempo restante: " + remainingSeconds[0] + "s");
                         remainingSeconds[0]--;
                         handler.postDelayed(this, 1000);
                     }
@@ -134,10 +134,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                         return true;
                     } else {
                         attemptsLeft[0]--;
-                        // Reinicia o mesmo contador
-                        handler.removeCallbacks(countdownRunnable);
-                        remainingSeconds[0] = TIMEOUT_SECONDS;
-                        handler.post(countdownRunnable);
+                        remainingSeconds[0] = TIMEOUT_SECONDS; // reinicia contador no mesmo Runnable
     
                         messageView.setText("Botão inválido!\n\nPressione somente Select (Options).\n\n(tentativas restantes: "
                                 + attemptsLeft[0] + ")\nTempo restante: " + remainingSeconds[0] + "s");
@@ -155,7 +152,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             });
     
             dialog.show();
-            handler.post(countdownRunnable);
+            handler.post(countdownRunnable); // inicia contador único
         });
     
         try {
@@ -166,23 +163,17 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     
         if (dialog != null && dialog.isShowing()) dialog.dismiss();
     
-        if (selectedInput == -1) {
-            if (latch != null && latch.getCount() > 0) latch.countDown();
-            return null;
+        if (selectedInput != -1) {
+            // cria arquivo CFG baseado na seleção
+            String baseFile;
+            switch (selectedInput) {
+                case INPUT_SELECT_4:  baseFile = "Base4.cfg"; break;
+                case INPUT_SELECT_109: baseFile = "Base109.cfg"; break;
+                case INPUT_SELECT_196: baseFile = "Base196.cfg"; break;
+                default: baseFile = "Base4.cfg"; break;
+            }
+            createCfgFromBase(baseFile, deviceName, vendorId, productId, this);
         }
-    
-        String baseFile;
-        switch (selectedInput) {
-            case INPUT_SELECT_4:  baseFile = "Base4.cfg"; break;
-            case INPUT_SELECT_109: baseFile = "Base109.cfg"; break;
-            case INPUT_SELECT_196: baseFile = "Base196.cfg"; break;
-            default: baseFile = "Base4.cfg"; break;
-        }
-    
-        createCfgFromBase(baseFile, deviceName, vendorId, productId, this);
-    
-        File androidPath = new File(getExternalMediaDirs()[0], "autoconfig/android/" + deviceName + ".cfg");
-        return androidPath.getAbsolutePath();
     }
     
     /** Criação do arquivo CFG */

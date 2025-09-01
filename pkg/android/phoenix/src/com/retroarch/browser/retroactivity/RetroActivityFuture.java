@@ -134,7 +134,11 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                         return true;
                     } else {
                         attemptsLeft[0]--;
-                        remainingSeconds[0] = TIMEOUT_SECONDS; // reinicia o tempo
+                        // Reinicia o mesmo contador
+                        handler.removeCallbacks(countdownRunnable);
+                        remainingSeconds[0] = TIMEOUT_SECONDS;
+                        handler.post(countdownRunnable);
+    
                         messageView.setText("Botão inválido!\n\nPressione somente Select (Options).\n\n(tentativas restantes: "
                                 + attemptsLeft[0] + ")\nTempo restante: " + remainingSeconds[0] + "s");
     

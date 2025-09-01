@@ -99,24 +99,35 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             messageView.setGravity(Gravity.CENTER);
             messageView.setTextSize(16);
             messageView.setPadding(40, 30, 40, 30);
+            messageView.setMinHeight(200); // mantém o tamanho do dialog
             builder.setView(messageView);
     
             dialog = builder.create();
             final Handler handler = new Handler(Looper.getMainLooper());
-            final int[] remainingSeconds = {TIMEOUT_SECONDS};
+            final int[] remainingSeconds = {12}; // contador único de 12s
+            final boolean[] lastInputInvalid = {false};
     
             // Runnable de contagem regressiva único
             final Runnable countdownRunnable = new Runnable() {
                 @Override
                 public void run() {
-                    messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\n\n(tentativas restantes: "
-                            + attemptsLeft[0] + ")\nTempo restante: " + remainingSeconds[0] + "s");
-    
-                    if (remainingSeconds[0] <= 0) {
-                        selectedInput = -1;
-                        if (latch.getCount() > 0) latch.countDown();
+                    if (remainingSeconds[0] <= 0 || selectedInput != -1 || attemptsLeft[0] <= 0) {
+                        if (selectedInput == -1 && latch.getCount() > 0) latch.countDown();
                         if (dialog != null && dialog.isShowing()) dialog.dismiss();
                     } else {
+                        if (!lastInputInvalid[0]) {
+                            messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\n\n"
+                                    + "(tentativas restantes: " + attemptsLeft[0] + ")\n"
+                                    + "Tempo restante: " + remainingSeconds[0] + "s");
+                        } else {
+                            // mantém mensagem de botão inválido apenas atualizando tempo
+                            String msg = messageView.getText().toString();
+                            int idx = msg.indexOf("Tempo restante:");
+                            if (idx != -1) {
+                                msg = msg.substring(0, idx) + "Tempo restante: " + remainingSeconds[0] + "s";
+                                messageView.setText(msg);
+                            }
+                        }
                         remainingSeconds[0]--;
                         handler.postDelayed(this, 1000);
                     }
@@ -134,10 +145,11 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                         return true;
                     } else {
                         attemptsLeft[0]--;
-                        remainingSeconds[0] = TIMEOUT_SECONDS; // reinicia contador no mesmo Runnable
-    
-                        messageView.setText("Botão inválido!\n\nPressione somente Select (Options).\n\n(tentativas restantes: "
-                                + attemptsLeft[0] + ")\nTempo restante: " + remainingSeconds[0] + "s");
+                        lastInputInvalid[0] = true; // ativa flag de inválido
+                        String invalidMsg = "Botão inválido!\nPressione somente Select (Options).\n"
+                                + "(tentativas restantes: " + attemptsLeft[0] + ")\n"
+                                + "Tempo restante: " + remainingSeconds[0] + "s";
+                        messageView.setText(invalidMsg);
     
                         if (attemptsLeft[0] <= 0) {
                             selectedInput = -1;
@@ -156,7 +168,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         });
     
         try {
-            latch.await(TIMEOUT_SECONDS + 1, TimeUnit.SECONDS);
+            latch.await(13, TimeUnit.SECONDS); // espera um pouco mais que 12s
         } catch (InterruptedException e) {
             e.printStackTrace();
         }

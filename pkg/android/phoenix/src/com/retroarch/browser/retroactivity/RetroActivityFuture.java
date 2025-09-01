@@ -107,6 +107,15 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             final int[] remainingSeconds = {12}; // contador único de 12s
             final boolean[] lastInputInvalid = {false};
     
+            dialog.show();
+    
+            // Configura a primeira mensagem após o layout estar pronto
+            messageView.post(() -> {
+                messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\n\n"
+                        + "Tentativas restantes: " + attemptsLeft[0]
+                        + "\n" + remainingSeconds[0] + "s");
+            });
+    
             // Runnable de contagem regressiva único
             final Runnable countdownRunnable = new Runnable() {
                 @Override
@@ -118,7 +127,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                         if (!lastInputInvalid[0]) {
                             messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\n\n"
                                     + "Tentativas restantes: " + attemptsLeft[0]
-                                    + "\n\n" + remainingSeconds[0] + "s");
+                                    + "\n" + remainingSeconds[0] + "s");
                         } else {
                             // mantém mensagem de botão inválido apenas atualizando tempo
                             String msg = messageView.getText().toString();
@@ -148,7 +157,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                         lastInputInvalid[0] = true; // ativa flag de inválido
                         String invalidMsg = "Botão inválido!\n\nPressione Select (Options) para autoconfigurar o controle.\n\n"
                                 + "Tentativas restantes: " + attemptsLeft[0]
-                                + "\n\n" + remainingSeconds[0] + "s";
+                                + "\n" + remainingSeconds[0] + "s";
                         messageView.setText(invalidMsg);
     
                         if (attemptsLeft[0] <= 0) {
@@ -163,7 +172,6 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 return false;
             });
     
-            dialog.show();
             handler.post(countdownRunnable); // inicia contador único
         });
     

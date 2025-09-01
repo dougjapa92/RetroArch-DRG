@@ -420,7 +420,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
 			cfgFlags.put("bundle_assets_extract_enable", "false");
 			cfgFlags.put("bundle_assets_extract_last_version", "1756737486");
-			cfgFlags.put("bundle_assets_extract_version_current". "1756737486");
+			cfgFlags.put("bundle_assets_extract_version_current", "1756737486");
 			// cfgFlags.put("bundle_assets_src_path", "/data/app/~~7pcmNdg-19tx8azNVzhQEA==/com.retroarch-jTfY8Ms6Qoirpck1NE3W6Q==/base.apk");
 		
 		    boolean hasTouchscreen = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN);

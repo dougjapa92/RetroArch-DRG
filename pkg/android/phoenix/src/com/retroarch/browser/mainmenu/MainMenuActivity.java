@@ -35,8 +35,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -228,68 +226,50 @@ public final class MainMenuActivity extends PreferenceActivity {
                     + countAllFiles(new String[]{archCores, archAutoconfig});
         }
 
-		@Override
-		protected Boolean doInBackground(Void... voids) {
-		    int poolSize = Math.min(ROOT_FOLDERS.length + MEDIA_FOLDERS.length + 2, 4);
-		    ExecutorService executor = Executors.newFixedThreadPool(poolSize);
-		
-		    // --- ROOT_FOLDERS: copiar apenas para ROOT_DIR ---
-			for (String folder : ROOT_FOLDERS) {
-			    executor.submit(() -> {
-			        try { 
-			            copyAssetFolder(folder, new File(ROOT_DIR, folder), new HashSet<>(Arrays.asList(ROOT_FOLDERS))); 
-			        } catch (IOException e) { e.printStackTrace(); }
-			    });
-			}
-			
-			// MEDIA_FOLDERS
-			for (String folder : MEDIA_FOLDERS) {
-			    executor.submit(() -> {
-			        try { 
-			            copyAssetFolder(folder, new File(MEDIA_DIR, folder), new HashSet<>(Arrays.asList(MEDIA_FOLDERS))); 
-			        } catch (IOException e) { e.printStackTrace(); }
-			    });
-			}
+        @Override
+        protected Boolean doInBackground(Void... voids) {
+            // Limita o número de threads para não saturar o dispositivo
+            int poolSize = Math.min(ROOT_FOLDERS.length + MEDIA_FOLDERS.length + 2, 4);
+            ExecutorService executor = Executors.newFixedThreadPool(poolSize);
+        
+            // ROOT_FOLDERS
+            for (String folder : ROOT_FOLDERS) {
+                executor.submit(() -> {
+                    try { copyAssetFolder(folder, new File(ROOT_DIR, folder)); }
+                    catch (IOException e) { e.printStackTrace(); }
+                });
+            }
+        
+            // MEDIA_FOLDERS
+            for (String folder : MEDIA_FOLDERS) {
+                executor.submit(() -> {
+                    try { copyAssetFolder(folder, new File(MEDIA_DIR, folder)); }
+                    catch (IOException e) { e.printStackTrace(); }
+                });
+            }
+        
+            // Cores
+            executor.submit(() -> {
+                try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores")); }
+                catch (IOException e) { e.printStackTrace(); }
+            });
 
-		    // --- Cores: copiar apenas a pasta correspondente ---
-		    executor.submit(() -> {
-		        try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores"), Set.of(archCores)); }
-		        catch (IOException e) { e.printStackTrace(); }
-		    });
-		
-		    // --- Autoconfig ---
-		    executor.submit(() -> {
-		        try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig"), Set.of(archAutoconfig)); }
-		        catch (IOException e) { e.printStackTrace(); }
-		    });
-		
-		    executor.shutdown();
-		    while (!executor.isTerminated()) {
-		        publishProgress((processedFiles.get() * 100) / totalFiles);
-		        try { Thread.sleep(100); } catch (InterruptedException ignored) {}
-		    }
-		
-		    // --- Limpar cores32 e cores64 do ROOT_DIR ---
-		    deleteRecursive(new File(ROOT_DIR, "cores32"));
-		    deleteRecursive(new File(ROOT_DIR, "cores64"));
-			deleteRecursive(new File(ROOT_DIR, "autoconfig"));
-			deleteRecursive(new File(ROOT_DIR, "autoconfig-legacy"));
-
-		    try { updateRetroarchCfg(); } catch (IOException e) { return false; }
-		    return true;
-		}
-		
-		// --- Função auxiliar para exclusão recursiva ---
-		private void deleteRecursive(File fileOrDirectory) {
-		    if (fileOrDirectory == null || !fileOrDirectory.exists()) return;
-		    if (fileOrDirectory.isDirectory()) {
-		        File[] children = fileOrDirectory.listFiles();
-		        if (children != null) {
-		            for (File child : children) deleteRecursive(child);
-		        }
-		    }
-		    fileOrDirectory.delete();
-		}
+            // Autoconfig
+            executor.submit(() -> {
+                try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig")); }
+                catch (IOException e) { e.printStackTrace(); }
+            });
+        
+            // Aguarda todas as tasks finalizarem
+            executor.shutdown();
+            while (!executor.isTerminated()) {
+                publishProgress((processedFiles.get() * 100) / totalFiles);
+                try { Thread.sleep(100); } catch (InterruptedException ignored) {}
+            }
+        
+            try { updateRetroarchCfg(); } catch (IOException e) { return false; }
+            return true;
+        }
 
         @Override
         protected void onProgressUpdate(Integer... values) { progressDialog.setProgress(values[0]); }
@@ -362,38 +342,34 @@ public final class MainMenuActivity extends PreferenceActivity {
             } catch (IOException e) { return 0; }
         }
 
-		private void copyAssetFolder(String assetFolder, File targetFolder, Set<String> allowedRoots) throws IOException {
-		    String rootName = assetFolder.split("/")[0];
-		    if (!allowedRoots.contains(rootName)) return; // ignora assets que não são permitidos nesse destino
-		
-		    String[] assets = getAssets().list(assetFolder);
-		    if (!targetFolder.exists()) targetFolder.mkdirs();
-		
-		    if (assets != null && assets.length > 0) {
-		        for (String asset : assets) {
-		            String fullPath = assetFolder + "/" + asset;
-		            File outFile = new File(targetFolder, asset);
-		
-		            // Ignora global.glslp se cores32
-		            if ("cores32".equals(archCores) && fullPath.equals("config/global.glslp")) {
-		                processedFiles.incrementAndGet();
-		                continue;
-		            }
-		
-		            if (getAssets().list(fullPath).length > 0) {
-		                copyAssetFolder(fullPath, outFile, allowedRoots); // recursão só dentro do permitido
-		            } else {
-		                try (InputStream in = getAssets().open(fullPath);
-		                     FileOutputStream out = new FileOutputStream(outFile)) {
-		                    byte[] buffer = new byte[1024];
-		                    int read;
-		                    while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
-		                }
-		                processedFiles.incrementAndGet();
-		            }
-		        }
-		    }
-		}
+        private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
+            String[] assets = getAssets().list(assetFolder);
+            if (!targetFolder.exists()) targetFolder.mkdirs();
+
+            if (assets != null && assets.length > 0) {
+                for (String asset : assets) {
+                    String fullPath = assetFolder + "/" + asset;
+                    File outFile = new File(targetFolder, asset);
+
+                    if ("cores32".equals(archCores) && fullPath.equals("config/global.glslp")) {
+                        processedFiles.incrementAndGet();
+                        continue;
+                    }
+
+                    if (getAssets().list(fullPath).length > 0) {
+                        copyAssetFolder(fullPath, outFile);
+                    } else {
+                        try (InputStream in = getAssets().open(fullPath);
+                             FileOutputStream out = new FileOutputStream(outFile)) {
+                            byte[] buffer = new byte[1024];
+                            int read;
+                            while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
+                        }
+                        processedFiles.incrementAndGet();
+                    }
+                }
+            }
+        }
 
 		private void updateRetroarchCfg() throws IOException {
 		    File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");

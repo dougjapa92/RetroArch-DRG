@@ -690,59 +690,37 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
         {
             jobject activity = g_android->activity->clazz;
             jclass cls = (*env)->GetObjectClass(env, activity);
-
             if (cls)
             {
                 jmethodID mid = (*env)->GetMethodID(env, cls,
                     "createCfgForUnknownControllerSync",
-                    "(IILjava/lang/String;)Ljava/lang/String;"); // retorna path
-
+                    "(IILjava/lang/String;)V"); // agora void
+    
                 if (mid)
                 {
                     jstring jName = (*env)->NewStringUTF(env,
-                        string_is_empty(autoconfig_handle->device_info.name) ?
-                        "Unknown" : autoconfig_handle->device_info.name);
-
-                    jstring jPath = (jstring)(*env)->CallObjectMethod(env, activity, mid,
+                        string_is_empty(autoconfig_handle->device_info.name) ? "Unknown" : autoconfig_handle->device_info.name);
+    
+                    (*env)->CallVoidMethod(env, activity, mid,
                         (jint)autoconfig_handle->device_info.vid,
                         (jint)autoconfig_handle->device_info.pid,
                         jName);
-
+    
                     if ((*env)->ExceptionCheck(env))
                     {
                         (*env)->ExceptionDescribe(env);
                         (*env)->ExceptionClear(env);
                         LOGD("Exception during Java CFG creation\n");
                     }
-
-                    if (jPath)
-                    {
-                        const char *cfgPath = (*env)->GetStringUTFChars(env, jPath, NULL);
-                        autoconfig_handle->autoconfig_file = strdup(cfgPath);
-                        autoconfig_handle->device_info.autoconfigured = true;
-
-                        LOGD("[Autoconf] Novo cfg criado pelo Java: %s\n", cfgPath);
-
-                        (*env)->ReleaseStringUTFChars(env, jPath, cfgPath);
-                        (*env)->DeleteLocalRef(env, jPath);
-                    }
-                    else
-                    {
-                        /* Nenhum CFG criado pelo Java, aplica default do driver */
-                        LOGD("[Autoconf] Java retornou NULL, aplicando CFG interno do driver\n");
-                        input_autoconfigure_scan_config_files_internal(autoconfig_handle);
-                        if (autoconfig_handle->autoconfig_file)
-                            cb_input_autoconfigure_connect(task, task, NULL, NULL);
-                    }
-
+    
                     (*env)->DeleteLocalRef(env, jName);
                 }
                 (*env)->DeleteLocalRef(env, cls);
             }
             (*g_vm)->DetachCurrentThread(g_vm);
-       } 
+        }
     }
-
+   
     /* --- Fallback se ainda não encontrou configuração --- */
     if (!autoconfig_handle->device_info.autoconfigured)
     {

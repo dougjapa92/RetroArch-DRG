@@ -99,39 +99,49 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             messageView.setGravity(Gravity.CENTER);
             messageView.setTextSize(16);
             messageView.setPadding(40, 30, 40, 30);
-            messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\nTentativas restantes: " + attemptsLeft[0]);
             builder.setView(messageView);
     
             dialog = builder.create();
             final Handler handler = new Handler(Looper.getMainLooper());
     
-            Runnable timeoutRunnable = () -> {
-                if (latch.getCount() > 0) {
-                    selectedInput = -1; // fallback
-                    latch.countDown();
-                    dialog.dismiss();
+            final int[] remainingSeconds = {TIMEOUT_SECONDS};
+    
+            // Runnable de contagem regressiva
+            final Runnable countdownRunnable = new Runnable() {
+                @Override
+                public void run() {
+                    if (remainingSeconds[0] <= 0) {
+                        selectedInput = -1;
+                        if (latch.getCount() > 0) latch.countDown();
+                        if (dialog != null && dialog.isShowing()) dialog.dismiss();
+                    } else {
+                        messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\n\n(tentativas restantes: "
+                                + attemptsLeft[0] + ")\nTempo restante: " + remainingSeconds[0] + "s");
+                        remainingSeconds[0]--;
+                        handler.postDelayed(this, 1000);
+                    }
                 }
             };
     
-            // OnKeyListener captura válidos e inválidos
+            // Listener de teclas
             dialog.setOnKeyListener((d, keyCode, event) -> {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {
                         selectedInput = keyCode;
-                        latch.countDown();
+                        if (latch.getCount() > 0) latch.countDown();
+                        handler.removeCallbacks(countdownRunnable);
                         dialog.dismiss();
-                        handler.removeCallbacks(timeoutRunnable);
                         return true;
                     } else {
                         attemptsLeft[0]--;
-                        messageView.setText("Botão inválido! Pressione somente Select (Options).\nTentativas restantes: " + attemptsLeft[0]);
-                        handler.removeCallbacks(timeoutRunnable);
-                        if (attemptsLeft[0] > 0) {
-                            latch = new CountDownLatch(1);
-                            handler.postDelayed(timeoutRunnable, TIMEOUT_SECONDS * 1000);
-                        } else {
-                            selectedInput = -1; // invalida configuração
-                            latch.countDown();
+                        remainingSeconds[0] = TIMEOUT_SECONDS; // reinicia o tempo
+                        messageView.setText("Botão inválido!\n\nPressione somente Select (Options).\n\n(tentativas restantes: "
+                                + attemptsLeft[0] + ")\nTempo restante: " + remainingSeconds[0] + "s");
+    
+                        if (attemptsLeft[0] <= 0) {
+                            selectedInput = -1;
+                            if (latch.getCount() > 0) latch.countDown();
+                            handler.removeCallbacks(countdownRunnable);
                             dialog.dismiss();
                         }
                         return true;
@@ -141,7 +151,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             });
     
             dialog.show();
-            handler.postDelayed(timeoutRunnable, TIMEOUT_SECONDS * 1000);
+            handler.post(countdownRunnable);
         });
     
         try {
@@ -152,7 +162,10 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     
         if (dialog != null && dialog.isShowing()) dialog.dismiss();
     
-        if (selectedInput == -1) return null;
+        if (selectedInput == -1) {
+            if (latch != null && latch.getCount() > 0) latch.countDown();
+            return null;
+        }
     
         String baseFile;
         switch (selectedInput) {
@@ -166,7 +179,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     
         File androidPath = new File(getExternalMediaDirs()[0], "autoconfig/android/" + deviceName + ".cfg");
         return androidPath.getAbsolutePath();
-    } 
+    }
     
     /** Criação do arquivo CFG */
     private static void createCfgFromBase(String baseFile, String deviceName,

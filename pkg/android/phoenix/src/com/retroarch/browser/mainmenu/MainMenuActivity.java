@@ -417,6 +417,11 @@ public final class MainMenuActivity extends PreferenceActivity {
 			cfgFlags.put("input_overlay", new File(MEDIA_DIR, "overlays/gamepads/neo-retropad/neo-retropad.cfg").getAbsolutePath());
 		    cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
 		    cfgFlags.put("video_driver", (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && "cores64".equals(archCores)) ? "vulkan" : "gl");
+
+			cfgFlags.put("bundle_assets_extract_enable", "false");
+			cfgFlags.put("bundle_assets_extract_last_version", "1756737486");
+			cfgFlags.put("bundle_assets_extract_version_current". "1756737486");
+			// cfgFlags.put("bundle_assets_src_path", "/data/app/~~7pcmNdg-19tx8azNVzhQEA==/com.retroarch-jTfY8Ms6Qoirpck1NE3W6Q==/base.apk");
 		
 		    boolean hasTouchscreen = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN);
 		    boolean isLeanback = getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);

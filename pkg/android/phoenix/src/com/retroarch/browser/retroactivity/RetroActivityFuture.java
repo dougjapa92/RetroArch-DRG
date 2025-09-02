@@ -113,7 +113,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             messageView.post(() -> {
                 messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\n\n"
                         + "Tentativas restantes: " + attemptsLeft[0]
-                        + "\n" + remainingSeconds[0] + "s");
+                        + "\n\n" + remainingSeconds[0] + "s");
             });
     
             // Runnable de contagem regressiva único
@@ -176,7 +176,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         });
     
         try {
-            latch.await(13, TimeUnit.SECONDS); // espera um pouco mais que 12s
+            latch.await(16, TimeUnit.SECONDS); // espera um pouco mais que 15s
         } catch (InterruptedException e) {
             e.printStackTrace();
         }

@@ -16,6 +16,7 @@ import android.app.AlertDialog;
 import android.view.KeyEvent;
 import android.widget.TextView;
 import android.view.Gravity;
+import android.view.Window;
 import android.net.Uri;
 import android.widget.LinearLayout;
 import android.graphics.Typeface;

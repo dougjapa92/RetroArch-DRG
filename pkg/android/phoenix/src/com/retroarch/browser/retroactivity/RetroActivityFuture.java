@@ -79,11 +79,11 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         final int[] attemptsLeft = {3};
         selectedInput = -1;
         latch = new CountDownLatch(1);
-    
+
         runOnUiThread(() -> {
             AlertDialog.Builder builder = new AlertDialog.Builder(this);
             builder.setCancelable(false);
-    
+
             // Título
             TextView titleView = new TextView(this);
             titleView.setText("Autoconfiguração de Controle");
@@ -92,7 +92,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             titleView.setTextSize(20);
             titleView.setPadding(20, 40, 20, 20);
             builder.setCustomTitle(titleView);
-    
+
             // Mensagem
             TextView messageView = new TextView(this);
             messageView.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
@@ -101,13 +101,17 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             messageView.setPadding(40, 30, 40, 30);
             messageView.setMinHeight(200);
             builder.setView(messageView);
-    
-            dialog = builder.create();
-    
+
             final Handler handler = new Handler(Looper.getMainLooper());
             final int[] remainingSeconds = {15};
             final boolean[] lastInputInvalid = {false};
-    
+
+            messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\n\n"
+                    + "Tentativas restantes: " + attemptsLeft[0] + "\n\n"
+                    + remainingSeconds[0] + "s");
+
+            dialog = builder.create();
+
             final Runnable countdownRunnable = new Runnable() {
                 @Override
                 public void run() {
@@ -132,7 +136,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                     }
                 }
             };
-    
+
             dialog.setOnKeyListener((d, keyCode, event) -> {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {
@@ -148,7 +152,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                                 + "Tentativas restantes: " + attemptsLeft[0] + "\n\n"
                                 + remainingSeconds[0] + "s";
                         messageView.setText(invalidMsg);
-    
+
                         if (attemptsLeft[0] <= 0) {
                             selectedInput = -1;
                             if (latch.getCount() > 0) latch.countDown();
@@ -160,25 +164,24 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 }
                 return false;
             });
-    
+
             dialog.setOnShowListener(d -> {
-                messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\n\n"
-                        + "Tentativas restantes: " + attemptsLeft[0] + "\n\n"
-                        + remainingSeconds[0] + "s");
                 handler.post(countdownRunnable);
             });
-    
-            handler.postDelayed(() -> dialog.show(), 200);
+            dialog.show();
         });
-    
+
         try {
-            latch.await(15, TimeUnit.SECONDS);
+            latch.await(15, TimeUnit.SECONDS); 
         } catch (InterruptedException e) {
             e.printStackTrace();
+            Thread.currentThread().interrupt();
         }
-    
-        if (dialog != null && dialog.isShowing()) dialog.dismiss();
-    
+
+        if (dialog != null && dialog.isShowing()) {
+            runOnUiThread(dialog::dismiss);
+        }
+
         if (selectedInput != -1) {
             String baseFile;
             switch (selectedInput) {
@@ -190,9 +193,9 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             createCfgFromBase(baseFile, deviceName, vendorId, productId, this);
             return true; // retorna true se CFG foi criado
         }
-    
+
         return false; // retorna false se não criou nada
-    } 
+    }
     
     /** Criação do arquivo CFG */
     private static void createCfgFromBase(String baseFile, String deviceName,

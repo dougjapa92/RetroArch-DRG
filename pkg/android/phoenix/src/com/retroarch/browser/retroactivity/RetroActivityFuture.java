@@ -84,7 +84,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             AlertDialog.Builder builder = new AlertDialog.Builder(this);
             builder.setCancelable(false);
     
-            // Título centralizado e negrito
+            // Título
             TextView titleView = new TextView(this);
             titleView.setText("Autoconfiguração de Controle");
             titleView.setGravity(Gravity.CENTER);
@@ -93,30 +93,22 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             titleView.setPadding(20, 40, 20, 20);
             builder.setCustomTitle(titleView);
     
-            // Mensagem centralizada
+            // Mensagem
             TextView messageView = new TextView(this);
             messageView.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
             messageView.setGravity(Gravity.CENTER);
             messageView.setTextSize(16);
             messageView.setPadding(40, 30, 40, 30);
-            messageView.setMinHeight(200); // mantém o tamanho do dialog
+            messageView.setMinHeight(200);
             builder.setView(messageView);
     
             dialog = builder.create();
+    
             final Handler handler = new Handler(Looper.getMainLooper());
-            final int[] remainingSeconds = {12}; // contador único de 12s
+            final int[] remainingSeconds = {15};
             final boolean[] lastInputInvalid = {false};
     
-            dialog.show();
-    
-            // Configura a primeira mensagem após o layout estar pronto
-            messageView.post(() -> {
-                messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\n\n"
-                        + "Tentativas restantes: " + attemptsLeft[0]
-                        + "\n\n" + remainingSeconds[0] + "s");
-            });
-    
-            // Runnable de contagem regressiva único
+            // Runnable do contador
             final Runnable countdownRunnable = new Runnable() {
                 @Override
                 public void run() {
@@ -126,10 +118,10 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                     } else {
                         if (!lastInputInvalid[0]) {
                             messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\n\n"
-                                    + "Tentativas restantes: " + attemptsLeft[0]
-                                    + "\n\n" + remainingSeconds[0] + "s");
+                                    + "Tentativas restantes: " + attemptsLeft[0] + "\n\n"
+                                    + remainingSeconds[0] + "s");
                         } else {
-                            // mantém mensagem de botão inválido apenas atualizando tempo
+                            // mantém mensagem de inválido
                             String msg = messageView.getText().toString();
                             int idx = msg.lastIndexOf("\n");
                             if (idx != -1) {
@@ -143,7 +135,6 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 }
             };
     
-            // Listener de teclas
             dialog.setOnKeyListener((d, keyCode, event) -> {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {
@@ -154,10 +145,10 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                         return true;
                     } else {
                         attemptsLeft[0]--;
-                        lastInputInvalid[0] = true; // ativa flag de inválido
+                        lastInputInvalid[0] = true;
                         String invalidMsg = "Botão inválido!\n\nPressione Select (Options) para autoconfigurar o controle.\n\n"
-                                + "Tentativas restantes: " + attemptsLeft[0]
-                                + "\n\n" + remainingSeconds[0] + "s";
+                                + "Tentativas restantes: " + attemptsLeft[0] + "\n\n"
+                                + remainingSeconds[0] + "s";
                         messageView.setText(invalidMsg);
     
                         if (attemptsLeft[0] <= 0) {
@@ -172,11 +163,19 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 return false;
             });
     
-            handler.post(countdownRunnable); // inicia contador único
+            dialog.setOnShowListener(d -> {
+                // Agora que o layout está pronto, exibe a primeira mensagem
+                messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\n\n"
+                        + "Tentativas restantes: " + attemptsLeft[0] + "\n\n"
+                        + remainingSeconds[0] + "s");
+                handler.post(countdownRunnable); // inicia o contador
+            });
+    
+            dialog.show();
         });
     
         try {
-            latch.await(16, TimeUnit.SECONDS); // espera um pouco mais que 15s
+            latch.await(15, TimeUnit.SECONDS); // espera até o usuário interagir ou acabar tempo
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -184,17 +183,16 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         if (dialog != null && dialog.isShowing()) dialog.dismiss();
     
         if (selectedInput != -1) {
-            // cria arquivo CFG baseado na seleção
             String baseFile;
             switch (selectedInput) {
-                case INPUT_SELECT_4:  baseFile = "Base4.cfg"; break;
+                case INPUT_SELECT_4: baseFile = "Base4.cfg"; break;
                 case INPUT_SELECT_109: baseFile = "Base109.cfg"; break;
                 case INPUT_SELECT_196: baseFile = "Base196.cfg"; break;
                 default: baseFile = "Base4.cfg"; break;
             }
             createCfgFromBase(baseFile, deviceName, vendorId, productId, this);
         }
-    }
+    } 
     
     /** Criação do arquivo CFG */
     private static void createCfgFromBase(String baseFile, String deviceName,

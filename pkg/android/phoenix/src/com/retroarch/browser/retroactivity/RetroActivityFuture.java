@@ -168,7 +168,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 handler.post(countdownRunnable);
             });
     
-            dialog.show();
+            handler.postDelayed(() -> dialog.show(), 50);
         });
     
         try {

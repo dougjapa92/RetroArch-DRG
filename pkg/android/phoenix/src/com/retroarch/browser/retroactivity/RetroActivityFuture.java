@@ -106,7 +106,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             final int[] remainingSeconds = {15};
             final boolean[] lastInputInvalid = {false};
 
-            messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\n\n"
+            messageView.setText("Pressione SELECT (Options) para autoconfigurar o controle.\n\n"
                     + "Tentativas restantes: " + attemptsLeft[0] + "\n\n"
                     + remainingSeconds[0] + "s");
 
@@ -148,7 +148,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                     } else {
                         attemptsLeft[0]--;
                         lastInputInvalid[0] = true;
-                        String invalidMsg = "Botão inválido!\n\nPressione Select (Options) para autoconfigurar o controle.\n\n"
+                        String invalidMsg = "Botão inválido!\n\nPressione SELECT (Options) para autoconfigurar o controle.\n\n"
                                 + "Tentativas restantes: " + attemptsLeft[0] + "\n\n"
                                 + remainingSeconds[0] + "s";
                         messageView.setText(invalidMsg);

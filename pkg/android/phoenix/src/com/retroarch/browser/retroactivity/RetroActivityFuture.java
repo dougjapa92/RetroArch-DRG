@@ -75,7 +75,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     private int selectedInput = -1;
 
     /** Método chamado via JNI de forma síncrona */
-    public void createCfgForUnknownControllerSync(int vendorId, int productId, String deviceName) {
+    public boolean createCfgForUnknownControllerSync(int vendorId, int productId, String deviceName) {
         final int[] attemptsLeft = {3};
         selectedInput = -1;
         latch = new CountDownLatch(1);
@@ -191,7 +191,10 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 default: baseFile = "Base4.cfg"; break;
             }
             createCfgFromBase(baseFile, deviceName, vendorId, productId, this);
+            return true; // CFG criado
         }
+    
+        return false; // nada criado
     } 
     
     /** Criação do arquivo CFG */

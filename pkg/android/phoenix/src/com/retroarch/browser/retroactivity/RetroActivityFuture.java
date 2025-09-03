@@ -79,11 +79,11 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         final int[] attemptsLeft = {3};
         selectedInput = -1;
         latch = new CountDownLatch(1);
-
+    
         runOnUiThread(() -> {
             AlertDialog.Builder builder = new AlertDialog.Builder(this);
             builder.setCancelable(false);
-
+    
             // Título
             TextView titleView = new TextView(this);
             titleView.setText("Autoconfiguração de Controle");
@@ -92,7 +92,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             titleView.setTextSize(20);
             titleView.setPadding(20, 40, 20, 20);
             builder.setCustomTitle(titleView);
-
+    
             // Mensagem
             TextView messageView = new TextView(this);
             messageView.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
@@ -101,17 +101,29 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             messageView.setPadding(40, 30, 40, 30);
             messageView.setMinHeight(200);
             builder.setView(messageView);
-
+    
             final Handler handler = new Handler(Looper.getMainLooper());
             final int[] remainingSeconds = {15};
             final boolean[] lastInputInvalid = {false};
-
-            messageView.setText("Pressione SELECT (Options) para autoconfigurar o controle.\n\n"
-                    + "Tentativas restantes: " + attemptsLeft[0] + "\n\n"
-                    + remainingSeconds[0] + "s");
-
+    
+            // Função auxiliar para atualizar a mensagem
+            Runnable updateMessage = () -> {
+                if (!lastInputInvalid[0]) {
+                    messageView.setText("Pressione SELECT (Options) para autoconfigurar o controle.\n\n"
+                            + "Tentativas restantes: " + attemptsLeft[0] + "\n\n"
+                            + remainingSeconds[0] + "s");
+                } else {
+                    messageView.setText("Botão inválido!\n\nPressione SELECT (Options) para autoconfigurar o controle.\n\n"
+                            + "Tentativas restantes: " + attemptsLeft[0] + "\n\n"
+                            + remainingSeconds[0] + "s");
+                }
+            };
+    
+            // Primeira mensagem antes de mostrar o diálogo
+            updateMessage.run();
+    
             dialog = builder.create();
-
+    
             final Runnable countdownRunnable = new Runnable() {
                 @Override
                 public void run() {
@@ -119,24 +131,13 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                         if (selectedInput == -1 && latch.getCount() > 0) latch.countDown();
                         if (dialog != null && dialog.isShowing()) dialog.dismiss();
                     } else {
-                        if (!lastInputInvalid[0]) {
-                            messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\n\n"
-                                    + "Tentativas restantes: " + attemptsLeft[0] + "\n\n"
-                                    + remainingSeconds[0] + "s");
-                        } else {
-                            String msg = messageView.getText().toString();
-                            int idx = msg.lastIndexOf("\n");
-                            if (idx != -1) {
-                                msg = msg.substring(0, idx + 1) + remainingSeconds[0] + "s";
-                                messageView.setText(msg);
-                            }
-                        }
+                        updateMessage.run();
                         remainingSeconds[0]--;
                         handler.postDelayed(this, 1000);
                     }
                 }
             };
-
+    
             dialog.setOnKeyListener((d, keyCode, event) -> {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
                     if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {
@@ -148,11 +149,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                     } else {
                         attemptsLeft[0]--;
                         lastInputInvalid[0] = true;
-                        String invalidMsg = "Botão inválido!\n\nPressione SELECT (Options) para autoconfigurar o controle.\n\n"
-                                + "Tentativas restantes: " + attemptsLeft[0] + "\n\n"
-                                + remainingSeconds[0] + "s";
-                        messageView.setText(invalidMsg);
-
+                        updateMessage.run();
                         if (attemptsLeft[0] <= 0) {
                             selectedInput = -1;
                             if (latch.getCount() > 0) latch.countDown();
@@ -164,24 +161,22 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 }
                 return false;
             });
-
-            dialog.setOnShowListener(d -> {
-                handler.post(countdownRunnable);
-            });
+    
+            dialog.setOnShowListener(d -> handler.post(countdownRunnable));
             dialog.show();
         });
-
+    
         try {
-            latch.await(15, TimeUnit.SECONDS); 
+            latch.await(15, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             e.printStackTrace();
             Thread.currentThread().interrupt();
         }
-
+    
         if (dialog != null && dialog.isShowing()) {
             runOnUiThread(dialog::dismiss);
         }
-
+    
         if (selectedInput != -1) {
             String baseFile;
             switch (selectedInput) {
@@ -191,10 +186,10 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 default: baseFile = "Base4.cfg"; break;
             }
             createCfgFromBase(baseFile, deviceName, vendorId, productId, this);
-            return true; // retorna true se CFG foi criado
+            return true;
         }
-
-        return false; // retorna false se não criou nada
+    
+        return false;
     }
     
     /** Criação do arquivo CFG */

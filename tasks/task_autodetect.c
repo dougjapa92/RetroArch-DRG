@@ -678,16 +678,11 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
 
     /* --- Verifica se já existe CFG --- */
     match_found = input_autoconfigure_scan_config_files_external(autoconfig_handle);
+    
+    /* --- Chamada JNI se não houver configuração externa --- */
     if (!match_found)
-        match_found = input_autoconfigure_scan_config_files_internal(autoconfig_handle);
-
-    LOGD("[Autoconf] match_found=%d, autoconfigured=%d",
-         match_found, autoconfig_handle->device_info.autoconfigured);
-
-    /* --- Chamada JNI se não houver CFG --- */
-    if (!match_found && !autoconfig_handle->device_info.autoconfigured)
     {
-        LOGD("[Autoconf] Nenhuma configuração encontrada, chamando Java");
+        LOGD("[Autoconf] Nenhuma config externa, chamando JNI...");
         JNIEnv *env;
         if ((*g_vm)->AttachCurrentThread(g_vm, &env, NULL) == JNI_OK)
         {
@@ -697,26 +692,32 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
             {
                 jmethodID mid = (*env)->GetMethodID(env, cls,
                     "createCfgForUnknownControllerSync",
-                    "(IILjava/lang/String;)V");
-
+                    "(IILjava/lang/String;)Z"); // <-- agora retorna boolean
+    
                 if (mid)
                 {
                     jstring jName = (*env)->NewStringUTF(env,
                         string_is_empty(autoconfig_handle->device_info.name) ? 
                         "Unknown" : autoconfig_handle->device_info.name);
-
-                    (*env)->CallVoidMethod(env, activity, mid,
+    
+                    jboolean created = (*env)->CallBooleanMethod(env, activity, mid,
                         (jint)autoconfig_handle->device_info.vid,
                         (jint)autoconfig_handle->device_info.pid,
                         jName);
-
+    
                     if ((*env)->ExceptionCheck(env))
                     {
                         (*env)->ExceptionDescribe(env);
                         (*env)->ExceptionClear(env);
-                        LOGD("[Autoconf] Exception durante criação Java");
+                        LOGD("[Autoconf] Exception no JNI");
                     }
-
+                    else if (created == JNI_TRUE)
+                    {
+                        LOGD("[Autoconf] JNI criou novo cfg");
+                        /* Reescaneia pois agora o arquivo existe */
+                        match_found = input_autoconfigure_scan_config_files_external(autoconfig_handle);
+                    }
+    
                     (*env)->DeleteLocalRef(env, jName);
                 }
                 (*env)->DeleteLocalRef(env, cls);
@@ -724,7 +725,11 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
             (*g_vm)->DetachCurrentThread(g_vm);
         }
     }
-
+    
+    /* --- Se ainda não achou, tenta internal --- */
+    if (!match_found)
+        match_found = input_autoconfigure_scan_config_files_internal(autoconfig_handle);
+   
     /* --- Fallback se ainda não encontrou configuração --- */
     if (!autoconfig_handle->device_info.autoconfigured)
     {

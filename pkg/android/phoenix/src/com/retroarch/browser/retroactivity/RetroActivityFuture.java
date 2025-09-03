@@ -165,6 +165,10 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     
             dialog.setOnShowListener(d -> {
                 // Agora que o layout está pronto, exibe a primeira mensagem
+                Window window = dialog.getWindow();
+                if (window != null) {
+                    window.setGravity(Gravity.CENTER);
+                }
                 messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\n\n"
                         + "Tentativas restantes: " + attemptsLeft[0] + "\n\n"
                         + remainingSeconds[0] + "s");

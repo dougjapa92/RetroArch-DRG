@@ -161,15 +161,14 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 return false;
             });
     
-            // Post no decor view para garantir layout pronto antes de mostrar
-            dialog.getWindow().getDecorView().post(() -> {
-                dialog.show();
-                // Inicia contagem regressiva apenas após layout pronto
+            dialog.setOnShowListener(d -> {
                 messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\n\n"
                         + "Tentativas restantes: " + attemptsLeft[0] + "\n\n"
                         + remainingSeconds[0] + "s");
                 handler.post(countdownRunnable);
             });
+    
+            dialog.show();
         });
     
         try {
@@ -189,11 +188,11 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 default: baseFile = "Base4.cfg"; break;
             }
             createCfgFromBase(baseFile, deviceName, vendorId, productId, this);
-            return true; // CFG criado
+            return true; // retorna true se CFG foi criado
         }
     
-        return false; // nada criado
-    }
+        return false; // retorna false se não criou nada
+    } 
     
     /** Criação do arquivo CFG */
     private static void createCfgFromBase(String baseFile, String deviceName,

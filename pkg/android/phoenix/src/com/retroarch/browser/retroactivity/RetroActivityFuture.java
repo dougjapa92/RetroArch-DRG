@@ -16,7 +16,6 @@ import android.app.AlertDialog;
 import android.view.KeyEvent;
 import android.widget.TextView;
 import android.view.Gravity;
-import android.view.Window;
 import android.net.Uri;
 import android.widget.LinearLayout;
 import android.graphics.Typeface;
@@ -109,7 +108,6 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             final int[] remainingSeconds = {15};
             final boolean[] lastInputInvalid = {false};
     
-            // Runnable do contador
             final Runnable countdownRunnable = new Runnable() {
                 @Override
                 public void run() {
@@ -122,7 +120,6 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                                     + "Tentativas restantes: " + attemptsLeft[0] + "\n\n"
                                     + remainingSeconds[0] + "s");
                         } else {
-                            // mantém mensagem de inválido
                             String msg = messageView.getText().toString();
                             int idx = msg.lastIndexOf("\n");
                             if (idx != -1) {
@@ -164,23 +161,19 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 return false;
             });
     
-            dialog.setOnShowListener(d -> {
-                // Agora que o layout está pronto, exibe a primeira mensagem
-                Window window = dialog.getWindow();
-                if (window != null) {
-                    window.setGravity(Gravity.CENTER);
-                }
+            // Post no decor view para garantir layout pronto antes de mostrar
+            dialog.getWindow().getDecorView().post(() -> {
+                dialog.show();
+                // Inicia contagem regressiva apenas após layout pronto
                 messageView.setText("Pressione Select (Options) para autoconfigurar o controle.\n\n"
                         + "Tentativas restantes: " + attemptsLeft[0] + "\n\n"
                         + remainingSeconds[0] + "s");
-                handler.post(countdownRunnable); // inicia o contador
+                handler.post(countdownRunnable);
             });
-    
-            dialog.show();
         });
     
         try {
-            latch.await(15, TimeUnit.SECONDS); // espera até o usuário interagir ou acabar tempo
+            latch.await(15, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
@@ -200,7 +193,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         }
     
         return false; // nada criado
-    } 
+    }
     
     /** Criação do arquivo CFG */
     private static void createCfgFromBase(String baseFile, String deviceName,

@@ -1059,7 +1059,7 @@ static void handle_unplug(android_input_t *android, int unplugged_id)
          android->pad_states[port].is_connected = false;
 
          // Notifica o frontend do RetroArch sobre a desconexão para limpar estados e mostrar UI
-         input_autoconfigure_disconnect(port); 
+         input_autoconfigure_disconnect(port, android->pad_states[port].name);
          
          RARCH_LOG("[Input] Controle na porta %d (ID: %d) desconectado. Slot reservado para reconexão.\n", port + 1, unplugged_id);
          return; // Encontramos e processamos o controle, podemos sair.

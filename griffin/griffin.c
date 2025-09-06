@@ -1432,7 +1432,7 @@ DEPENDENCIES
 #include "../deps/libz/inflate.c"
 #include "../deps/libz/inftrees.c"
 #include "../deps/libz/trees.c"
-#include "../deps/libz/uncompr.c"
+include "../deps/libz/uncompr.c"
 #include "../deps/libz/zutil.c"
 #endif
 
@@ -1711,4 +1711,26 @@ GAME AI
 ============================================================ */
 #if defined(HAVE_GAME_AI)
 #include "../ai/game_ai.c"
+#endif
+
+// <<< PASSO 2 (Parte B): IMPLEMENTAÇÃO DA PONTE JNI >>>
+// Esta função será chamada pelo código Java para que o C possa obter
+// a lista de dispositivos conectados diretamente do sistema Android.
+#if defined(ANDROID)
+#include <jni.h>
+JNIEXPORT jintArray JNICALL
+Java_com_retroarch_browser_retroactivity_RetroActivityCommon_getInputDeviceIds(JNIEnv* env, jobject thiz)
+{
+    // Encontra a classe 'android.view.InputDevice'
+    jclass inputDeviceClass = (*env)->FindClass(env, "android/view/InputDevice");
+    if (inputDeviceClass == NULL) return NULL;
+
+    // Encontra o método estático 'getDeviceIds()' que retorna um array de inteiros '()[I]'
+    jmethodID getDeviceIdsMethod = (*env)->GetStaticMethodID(env, inputDeviceClass, "getDeviceIds", "()[I");
+    if (getDeviceIdsMethod == NULL) return NULL;
+
+    // Chama o método e retorna o resultado (o array de IDs)
+    jintArray deviceIds = (jintArray)(*env)->CallStaticObjectMethod(env, inputDeviceClass, getDeviceIdsMethod);
+    return deviceIds;
+}
 #endif

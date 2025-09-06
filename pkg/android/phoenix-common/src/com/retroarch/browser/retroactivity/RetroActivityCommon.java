@@ -463,8 +463,10 @@ public class RetroActivityCommon extends NativeActivity
 
 
   /////////////// JNI methods ///////////////
-
-
+  
+  // <<< PASSO 2 (Parte A): NOVA PONTE JNI >>>
+  // Esta função será chamada pelo código C para obter a lista de dispositivos conectados.
+  public native int[] getInputDeviceIds();
 
   /**
    * Called when a core install is initiated.
@@ -479,7 +481,7 @@ public class RetroActivityCommon extends NativeActivity
    *
    * @param coreNames Names of all cores that are currently being downloaded.
    * @param status One of INSTALL_STATUS_DOWNLOADING, INSTALL_STATUS_INSTALLING,
-   *               INSTALL_STATUS_INSTALLED, or INSTALL_STATUS_FAILED
+   * INSTALL_STATUS_INSTALLED, or INSTALL_STATUS_FAILED
    * @param bytesDownloaded Number of bytes downloaded.
    * @param totalBytesToDownload Total number of bytes to download.
    */

@@ -47,14 +47,6 @@
 #include "../../retroarch.h"
 #include "../../runloop.h"
 
-#include <android/log.h>
-
-#define LOG_TAG "hotplug"
-
-#define HOTPLUG_LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
-#define HOTPLUG_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
-#define HOTPLUG_LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
-
 #define MAX_TOUCH 16
 #define MAX_NUM_KEYBOARDS 3
 #define DEFAULT_ASENSOR_EVENT_RATE 60
@@ -1049,19 +1041,7 @@ static bool is_configured_as_physical_keyboard(int vendor_id, int product_id, co
 static void handle_hotplug(android_input_t *android,
       struct android_app *android_app, int *port, int id,
       int source)
-{
-   // LOG 1: Captura o valor exato da 'source'
-   HOTPLUG_LOGI("[HOTPLUG DEBUG] Evento. ID: %d, Source: %d (Hex: 0x%X)\n", id, source, source);
-    
-   // Precisamos pegar vendorId e productId antes de chamar a próxima função
-   char device_name_tmp[256];
-   int vendorId_tmp = 0, productId_tmp = 0;
-   engine_lookup_name(device_name_tmp, &vendorId_tmp, &productId_tmp, sizeof(device_name_tmp), id);
-
-   // LOG 2: Captura o resultado da função suspeita
-   bool is_keyboard = is_configured_as_physical_keyboard(vendorId_tmp, productId_tmp, device_name_tmp);
-   HOTPLUG_LOGI("[HOTPLUG DEBUG] is_configured_as_physical_keyboard retornou: %s\n", is_keyboard ? "true" : "false");
-   
+{   
    char device_name[256];
    char name_buf[256];
    int vendorId             = 0;
@@ -1074,19 +1054,14 @@ static void handle_hotplug(android_input_t *android,
       return;
 
    /* Se for teclado */
-   if (source == AINPUT_SOURCE_KEYBOARD && kbd_num < MAX_NUM_KEYBOARDS)
+   if ((source & AINPUT_SOURCE_KEYBOARD) && !(source & AINPUT_SOURCE_JOYSTICK))
    {
-      kbd_id[kbd_num] = id;
-      kbd_num++;
-      return;
-   }
-
-   if ((source & AINPUT_SOURCE_KEYBOARD) && !(source & AINPUT_SOURCE_JOYSTICK) && kbd_num < MAX_NUM_KEYBOARDS &&
-       is_configured_as_physical_keyboard(vendorId, productId, device_name))
-   {
-      kbd_id[kbd_num] = id;
-      kbd_num++;
-      return;
+      if (is_configured_as_physical_keyboard(vendorId, productId, device_name) && kbd_num < MAX_NUM_KEYBOARDS)
+      {
+         kbd_id[kbd_num] = id;
+         kbd_num++;
+         return;
+      }
    }
 
    /* Caso não seja teclado, usa o próprio nome do dispositivo */

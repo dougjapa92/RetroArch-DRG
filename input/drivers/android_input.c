@@ -1042,6 +1042,18 @@ static void handle_hotplug(android_input_t *android,
       struct android_app *android_app, int *port, int id,
       int source)
 {
+   // LOG 1: Captura o valor exato da 'source'
+   RARCH_LOG("[HOTPLUG DEBUG] Evento. ID: %d, Source: %d (Hex: 0x%X)\n", id, source, source);
+    
+   // Precisamos pegar vendorId e productId antes de chamar a próxima função
+   char device_name_tmp[256];
+   int vendorId_tmp = 0, productId_tmp = 0;
+   engine_lookup_name(device_name_tmp, &vendorId_tmp, &productId_tmp, sizeof(device_name_tmp), id);
+
+   // LOG 2: Captura o resultado da função suspeita
+   bool is_keyboard = is_configured_as_physical_keyboard(vendorId_tmp, productId_tmp, device_name_tmp);
+   RARCH_LOG("[HOTPLUG DEBUG] is_configured_as_physical_keyboard retornou: %s\n", is_keyboard ? "true" : "false");
+   
    char device_name[256];
    char name_buf[256];
    int vendorId             = 0;

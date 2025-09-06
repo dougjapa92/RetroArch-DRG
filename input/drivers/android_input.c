@@ -1044,22 +1044,100 @@ static bool is_configured_as_physical_keyboard(int vendor_id, int product_id, co
     return false;
 }
 
+// <<< PASSO 3: NOVA FUNÇÃO HANDLE_UNPLUG >>>
+// Esta função é chamada quando um dispositivo é desconectado.
+// Ela marca o slot como 'desconectado' para que possa ser reutilizado.
+static void handle_unplug(android_input_t *android, int unplugged_id)
+{
+   int port;
+   for (port = 0; port < android->pads_connected; port++)
+   {
+      // Procura pelo controle que foi desconectado
+      if (android->pad_states[port].is_connected && android->pad_states[port].id == unplugged_id)
+      {
+         // Marca o slot como 'desconectado', preservando as outras informações (VID/PID)
+         android->pad_states[port].is_connected = false;
+
+         // Notifica o frontend do RetroArch sobre a desconexão para limpar estados e mostrar UI
+         input_autoconfigure_disconnect(port); 
+         
+         RARCH_LOG("[Input] Controle na porta %d (ID: %d) desconectado. Slot reservado para reconexão.\n", port + 1, unplugged_id);
+         return; // Encontramos e processamos o controle, podemos sair.
+      }
+   }
+}
+
+// <<< PASSO 4: NOVA FUNÇÃO DE VERIFICAÇÃO >>>
+// Esta função usa a ponte JNI para comparar a lista de controles do Android
+// com a nossa lista interna para encontrar dispositivos que sumiram.
+static void android_input_check_unplug(android_input_t *android)
+{
+    JNIEnv *env = NULL;
+    if ((*g_android->activity->vm)->AttachCurrentThread(g_android->activity->vm, &env, NULL) != JNI_OK)
+        return;
+
+    // Obtém o jmethodID para a nossa função Java. É mais seguro obter toda vez.
+    jmethodID getInputDeviceIds_method = (*env)->GetMethodID(env, (*env)->GetObjectClass(env, g_android->activity->clazz), "getInputDeviceIds", "()[I");
+    if (!getInputDeviceIds_method) {
+        (*g_android->activity->vm)->DetachCurrentThread(g_android->activity->vm);
+        return;
+    }
+
+    // Chama a função JNI para pegar a lista de IDs de dispositivos ATIVOS
+    jintArray active_device_ids_jni = (jintArray)(*env)->CallObjectMethod(env, g_android->activity->clazz, getInputDeviceIds_method);
+    if (!active_device_ids_jni) {
+        (*g_android->activity->vm)->DetachCurrentThread(g_android->activity->vm);
+        return;
+    }
+
+    jint* active_ids     = (*env)->GetIntArrayElements(env, active_device_ids_jni, 0);
+    jsize active_count   = (*env)->GetArrayLength(env, active_device_ids_jni);
+    int port;
+
+    // Itera por TODOS os nossos controles que ACHAMOS que estão conectados
+    for (port = 0; port < android->pads_connected; port++)
+    {
+        if (android->pad_states[port].is_connected)
+        {
+            bool found = false;
+            int our_id = android->pad_states[port].id;
+
+            // ...procuramos por ele na lista de dispositivos que o Android nos deu.
+            for (int i = 0; i < active_count; i++)
+            {
+                if (active_ids[i] == our_id)
+                {
+                    found = true;
+                    break;
+                }
+            }
+
+            // Se não o encontramos na lista do Android, ele foi desconectado!
+            if (!found)
+                handle_unplug(android, our_id);
+        }
+    }
+
+    (*env)->ReleaseIntArrayElements(env, active_device_ids_jni, active_ids, 0);
+    (*env)->DeleteLocalRef(env, active_device_ids_jni);
+    (*g_android->activity->vm)->DetachCurrentThread(g_android->activity->vm);
+}
+
 static void handle_hotplug(android_input_t *android,
-      struct android_app *android_app, int *port, int id,
+      struct android_app *android_app, int *port_ptr, int id,
       int source)
-{   
+{
    char device_name[256];
-   char name_buf[256];
    int vendorId             = 0;
    int productId            = 0;
+   int port;
 
-   device_name[0] = name_buf[0] = '\0';
+   device_name[0] = '\0';
 
-   if (!engine_lookup_name(device_name, &vendorId,
-            &productId, sizeof(device_name), id))
+   if (!engine_lookup_name(device_name, &vendorId, &productId, sizeof(device_name), id))
       return;
 
-   /* Se for teclado */
+   // Lógica de teclado corrigida
    if ((source & AINPUT_SOURCE_KEYBOARD) && !(source & AINPUT_SOURCE_JOYSTICK))
    {
       if (is_configured_as_physical_keyboard(vendorId, productId, device_name) && kbd_num < MAX_NUM_KEYBOARDS)
@@ -1070,29 +1148,49 @@ static void handle_hotplug(android_input_t *android,
       }
    }
 
-   /* Caso não seja teclado, usa o próprio nome do dispositivo */
-   if (!string_is_empty(device_name))
-      strlcpy(name_buf, device_name, sizeof(name_buf));
+   // --- ETAPA DE RECONEXÃO INTELIGENTE ---
+   // Procura por um slot 'desconectado' que corresponda ao mesmo tipo de controle (VID/PID)
+   for (port = 0; port < android->pads_connected; port++)
+   {
+      if (!android->pad_states[port].is_connected &&
+          android->pad_states[port].vendor_id == vendorId &&
+          android->pad_states[port].product_id == productId)
+      {
+          RARCH_LOG("[Input] Reconexão inteligente! Atribuindo controle '%s' à sua porta anterior: %d.\n", device_name, port + 1);
+          
+          android->pad_states[port].is_connected = true;
+          android->pad_states[port].id = id;
+          strlcpy(android->pad_states[port].name, device_name, sizeof(android->pad_states[port].name));
+          
+          input_autoconfigure_connect(device_name, NULL, android_joypad.ident, port, vendorId, productId);
+          return;
+      }
+   }
 
-   if (*port < 0)
-      *port = android->pads_connected;
+   // --- ETAPA DE NOVA CONEXÃO ---
+   // Se não encontrou um slot para reconectar, adiciona como um novo
+   port = android->pads_connected;
+   if (port >= MAX_USERS)
+      return;
 
-   input_autoconfigure_connect(
-         name_buf,
-         NULL,
-         android_joypad.ident,
-         *port,
-         vendorId,
-         productId);
+   RARCH_LOG("[Input] Nova conexão. Atribuindo controle '%s' à nova porta: %d.\n", device_name, port + 1);
 
-   android->pad_states[android->pads_connected].id   =
-      g_android->id[android->pads_connected]         = id;
-   android->pad_states[android->pads_connected].port = *port;
-
-   strlcpy(android->pad_states[*port].name, name_buf,
-         sizeof(android->pad_states[*port].name));
-
+   // Preenche os dados do novo slot
+   android->pad_states[port].is_connected = true;
+   android->pad_states[port].id = id;
+   android->pad_states[port].port = port;
+   android->pad_states[port].vendor_id = vendorId;
+   android->pad_states[port].product_id = productId;
+   strlcpy(android->pad_states[port].name, device_name, sizeof(android->pad_states[port].name));
+   
+   // Apenas incrementamos se estamos adicionando um slot totalmente novo
    android->pads_connected++;
+
+   // Usa o ponteiro de porta para garantir que a chamada original receba a porta correta
+   if(port_ptr)
+      *port_ptr = port;
+   
+   input_autoconfigure_connect(device_name, NULL, android_joypad.ident, port, vendorId, productId);
 }
 
 static int android_input_get_id(AInputEvent *event)
@@ -1366,6 +1464,7 @@ static void android_input_poll_user(android_input_t *android)
 static void android_input_poll(void *data)
 {
    int ident;
+   static int frame_count = 0; // <<< ADICIONADO
    struct android_app *android_app = (struct android_app*)g_android;
    android_input_t *android        = (android_input_t*)data;
    settings_t            *settings = config_get_ptr();
@@ -1387,6 +1486,16 @@ static void android_input_poll(void *data)
             break;
       }
 
+      // <<< BLOCO ADICIONADO >>>
+      // Verificamos a cada 60 ciclos (~1 vez por segundo) para otimizar
+      frame_count++;
+      if (frame_count >= 60)
+      {
+          android_input_check_unplug(android);
+          frame_count = 0;
+      }
+      // <<< FIM DO BLOCO >>>
+
       if (android_app->destroyRequested != 0)
       {
          retroarch_ctl(RARCH_CTL_SET_SHUTDOWN, NULL);
@@ -1403,7 +1512,6 @@ static void android_input_poll(void *data)
       }
    }
 }
-
 bool android_run_events(void *data)
 {
    struct android_app *android_app = (struct android_app*)g_android;

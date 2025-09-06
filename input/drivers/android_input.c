@@ -45,7 +45,15 @@
 
 #include "../../configuration.h"
 #include "../../retroarch.h"
-#include "../../runloop.h"
+#include "../../runloop.h
+
+#include <android/log.h>
+
+#define LOG_TAG "hotplug"
+
+#define HOTPLUG_LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define HOTPLUG_LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#define HOTPLUG_LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 
 #define MAX_TOUCH 16
 #define MAX_NUM_KEYBOARDS 3
@@ -1043,7 +1051,7 @@ static void handle_hotplug(android_input_t *android,
       int source)
 {
    // LOG 1: Captura o valor exato da 'source'
-   RARCH_LOG("[HOTPLUG DEBUG] Evento. ID: %d, Source: %d (Hex: 0x%X)\n", id, source, source);
+   HOTPLUG_LOGI("[HOTPLUG DEBUG] Evento. ID: %d, Source: %d (Hex: 0x%X)\n", id, source, source);
     
    // Precisamos pegar vendorId e productId antes de chamar a próxima função
    char device_name_tmp[256];
@@ -1052,7 +1060,7 @@ static void handle_hotplug(android_input_t *android,
 
    // LOG 2: Captura o resultado da função suspeita
    bool is_keyboard = is_configured_as_physical_keyboard(vendorId_tmp, productId_tmp, device_name_tmp);
-   RARCH_LOG("[HOTPLUG DEBUG] is_configured_as_physical_keyboard retornou: %s\n", is_keyboard ? "true" : "false");
+   HOTPLUG_LOGI("[HOTPLUG DEBUG] is_configured_as_physical_keyboard retornou: %s\n", is_keyboard ? "true" : "false");
    
    char device_name[256];
    char name_buf[256];

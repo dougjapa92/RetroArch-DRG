@@ -1061,7 +1061,7 @@ static void handle_hotplug(android_input_t *android,
       return;
    }
 
-   if ((source & AINPUT_SOURCE_KEYBOARD) && kbd_num < MAX_NUM_KEYBOARDS &&
+   if ((source & AINPUT_SOURCE_KEYBOARD) && !(source & AINPUT_SOURCE_JOYSTICK) && kbd_num < MAX_NUM_KEYBOARDS &&
        is_configured_as_physical_keyboard(vendorId, productId, device_name))
    {
       kbd_id[kbd_num] = id;

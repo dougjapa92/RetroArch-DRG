@@ -45,7 +45,7 @@
 
 #include "../../configuration.h"
 #include "../../retroarch.h"
-#include "../../runloop.h
+#include "../../runloop.h"
 
 #include <android/log.h>
 

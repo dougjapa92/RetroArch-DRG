@@ -1256,12 +1256,17 @@ static void android_input_poll_input_default(android_input_t *android)
          int            id = android_input_get_id(event);
          int          port = android_input_get_id_port(android, id, source);
 
-         if (port < 0 && !android_is_keyboard_id(id))
+         if (port < 0)
+         {
+            // Tentamos recuperar uma porta caso seja um dispositivo que foi desconectado
             port = android_input_recover_port(android, id);
-
-         if (port < 0 && !android_is_keyboard_id(id))
-            handle_hotplug(android, android_app,
-                  &port, id, source);
+        
+            // Se ainda assim não temos uma porta, é definitivamente um novo dispositivo.
+            if (port < 0)
+            {
+               handle_hotplug(android, android_app, &port, id, source);
+            }
+         } 
 
          switch (type_event)
          {

@@ -761,7 +761,7 @@ static const enum menu_driver_enum MENU_DEFAULT_DRIVER = MENU_RGUI;
 #elif defined(IOS) && !TARGET_OS_TV
 #define MENU_DEFAULT_DRIVER (ios_running_on_ipad() ? MENU_OZONE : MENU_MATERIALUI)
 #elif defined(HAVE_MATERIALUI) && defined(RARCH_MOBILE)
-static const enum menu_driver_enum MENU_DEFAULT_DRIVER = MENU_OZONE;
+static const enum menu_driver_enum MENU_DEFAULT_DRIVER = MENU_MATERIALUI;
 #elif defined(HAVE_OZONE)
 static const enum menu_driver_enum MENU_DEFAULT_DRIVER = MENU_OZONE;
 #elif defined(HAVE_XMB) && !defined(_XBOX)

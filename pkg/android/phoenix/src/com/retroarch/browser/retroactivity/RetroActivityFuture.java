@@ -66,6 +66,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
 
     // ===================== AUTOCONFIGURATION =====================
     private static final int INPUT_SELECT_4 = 4;
+	private static final int INPUT_SELECT_104 = 104;
     private static final int INPUT_SELECT_109 = 109;
     private static final int INPUT_SELECT_196 = 196;
     private static final int TIMEOUT_SECONDS = 10;
@@ -140,7 +141,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     
             dialog.setOnKeyListener((d, keyCode, event) -> {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                    if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {
+                    if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_104 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {
                         selectedInput = keyCode;
                         if (latch.getCount() > 0) latch.countDown();
                         handler.removeCallbacks(countdownRunnable);
@@ -181,6 +182,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             String baseFile;
             switch (selectedInput) {
                 case INPUT_SELECT_4: baseFile = "Base4.cfg"; break;
+				case INPUT_SELECT_104: baseFile = "Base104.cfg"; break;
                 case INPUT_SELECT_109: baseFile = "Base109.cfg"; break;
                 case INPUT_SELECT_196: baseFile = "Base196.cfg"; break;
                 default: baseFile = "Base4.cfg"; break;

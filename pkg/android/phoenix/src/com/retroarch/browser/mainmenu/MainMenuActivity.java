@@ -440,7 +440,12 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     public void finalStartup() {
         Intent retro = new Intent(this, RetroActivityFuture.class);
-        retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        
+        // <<< AQUI ESTÁ A CORREÇÃO FINAL E DEFINITIVA >>>
+        // Estas flags garantem que a RetroActivityFuture comece em uma tarefa
+        // completamente nova, e que a tarefa antiga (do MainMenuActivity)
+        // seja destruída, eliminando qualquer conflito de UI.
+        retro.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
 
         startRetroActivity(
                 retro,

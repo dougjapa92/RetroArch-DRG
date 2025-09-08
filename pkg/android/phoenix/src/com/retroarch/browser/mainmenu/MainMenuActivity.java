@@ -115,14 +115,12 @@ public final class MainMenuActivity extends PreferenceActivity
 
 	public void finalStartup()
 	{
-		Intent retro = new Intent(this, RetroActivityFuture.class);
-		
-		if (RetroActivityFuture.isRunning) {
-			// RetroActivity is already running - just bring it to front
-			retro.setFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
-		} else {
-			// RetroActivity not running - full setup with parameters
-			retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+			Intent retro = new Intent(this, RetroActivityFuture.class);
+			
+			// Usamos as flags que garantem uma inicialização limpa,
+			// tornando a verificação 'isRunning' desnecessária e resolvendo o conflito de UI.
+			retro.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+			
 			final SharedPreferences prefs = PreferenceManager.getDefaultSharedPreferences(this);
 			
 			startRetroActivity(
@@ -133,13 +131,11 @@ public final class MainMenuActivity extends PreferenceActivity
 					Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
 					getApplicationInfo().dataDir,
 					getApplicationInfo().sourceDir);
-		}
-		
-		startActivity(retro);
-		finish();
+			
+			startActivity(retro);
+			finish();
 	}
 	
-
 	@Override
 	public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults)
 	{

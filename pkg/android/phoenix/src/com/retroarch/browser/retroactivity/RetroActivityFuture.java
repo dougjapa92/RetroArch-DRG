@@ -65,7 +65,6 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     };
 
     // ===================== AUTOCONFIGURATION =====================
-    /*
     private static final int INPUT_SELECT_4 = 4;
     private static final int INPUT_SELECT_109 = 109;
     private static final int INPUT_SELECT_196 = 196;
@@ -242,7 +241,6 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             return new String(bytes);
         }
     }
-    */
 
     // ===================== ACTIVITY METHODS =====================
     @Override

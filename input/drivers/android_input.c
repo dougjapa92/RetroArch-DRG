@@ -1320,7 +1320,7 @@ static void handle_hotplug(android_input_t *android,
    }
 
    /* Caso não seja teclado, usa o próprio nome do dispositivo */
-   else if (!string_is_empty(device_name))
+   if (!string_is_empty(device_name))
       strlcpy(name_buf, device_name, sizeof(name_buf));
   
    if (strstr(android_app->current_ime, "net.obsidianx.android.mogaime"))

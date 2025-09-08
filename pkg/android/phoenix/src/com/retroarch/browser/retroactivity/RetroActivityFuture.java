@@ -368,18 +368,4 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             }
         }
     }
-
-    @Override
-    public boolean dispatchKeyEvent(KeyEvent event) {
-        if (latch != null && event.getAction() == KeyEvent.ACTION_DOWN) {
-            int keyCode = event.getKeyCode();
-            if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {
-                selectedInput = keyCode;
-                latch.countDown();
-                if (dialog != null && dialog.isShowing()) dialog.dismiss();
-                return true; // consumiu o evento
-            }
-        }
-        return super.dispatchKeyEvent(event);
-    }
 }

@@ -34,8 +34,6 @@
 #include <compat/msvc.h>
 #endif
 
-#include <retro_miscellaneous.h>
-#include <file/file_path.h>
 #include <string/stdstring.h>
 #include <streams/file_stream.h>
 #define VFS_FRONTEND
@@ -46,7 +44,7 @@
 struct RFILE
 {
    struct retro_vfs_file_handle *hfile;
-   bool err_flag;
+	bool error_flag;
 };
 
 static retro_vfs_get_path_t filestream_get_path_cb = NULL;
@@ -133,7 +131,7 @@ int64_t filestream_get_size(RFILE *stream)
             (libretro_vfs_implementation_file*)stream->hfile);
 
    if (output == VFS_ERROR_RETURN_VALUE)
-      stream->err_flag = true;
+      stream->error_flag = true;
 
    return output;
 }
@@ -149,7 +147,7 @@ int64_t filestream_truncate(RFILE *stream, int64_t length)
             (libretro_vfs_implementation_file*)stream->hfile, length);
 
    if (output == VFS_ERROR_RETURN_VALUE)
-      stream->err_flag = true;
+      stream->error_flag = true;
 
    return output;
 }
@@ -175,8 +173,8 @@ RFILE* filestream_open(const char *path, unsigned mode, unsigned hints)
       return NULL;
    }
 
-   output->err_flag = false;
-   output->hfile    = fp;
+   output->error_flag = false;
+   output->hfile      = fp;
    return output;
 }
 
@@ -356,7 +354,7 @@ int64_t filestream_seek(RFILE *stream, int64_t offset, int seek_position)
             offset, seek_position);
 
    if (output == VFS_ERROR_RETURN_VALUE)
-      stream->err_flag = true;
+      stream->error_flag = true;
 
    return output;
 }
@@ -377,7 +375,7 @@ int64_t filestream_tell(RFILE *stream)
             (libretro_vfs_implementation_file*)stream->hfile);
 
    if (output == VFS_ERROR_RETURN_VALUE)
-      stream->err_flag = true;
+      stream->error_flag = true;
 
    return output;
 }
@@ -387,7 +385,7 @@ void filestream_rewind(RFILE *stream)
    if (!stream)
       return;
    filestream_seek(stream, 0L, RETRO_VFS_SEEK_POSITION_START);
-   stream->err_flag = false;
+   stream->error_flag = false;
 }
 
 int64_t filestream_read(RFILE *stream, void *s, int64_t len)
@@ -401,7 +399,7 @@ int64_t filestream_read(RFILE *stream, void *s, int64_t len)
             (libretro_vfs_implementation_file*)stream->hfile, s, len);
 
    if (output == VFS_ERROR_RETURN_VALUE)
-      stream->err_flag = true;
+      stream->error_flag = true;
 
    return output;
 }
@@ -417,7 +415,7 @@ int filestream_flush(RFILE *stream)
             (libretro_vfs_implementation_file*)stream->hfile);
 
    if (output == VFS_ERROR_RETURN_VALUE)
-      stream->err_flag = true;
+      stream->error_flag = true;
 
    return output;
 }
@@ -436,77 +434,6 @@ int filestream_rename(const char *old_path, const char *new_path)
       return filestream_rename_cb(old_path, new_path);
 
    return retro_vfs_file_rename_impl(old_path, new_path);
-}
-
-int filestream_copy(const char *src, const char *dst)
-{
-   char buf[256] = {0};
-   int64_t n     = 0;
-   int ret       = 0;
-   char path_dst[PATH_MAX_LENGTH] = {0};
-
-   RFILE *fp_src = filestream_open(src, RETRO_VFS_FILE_ACCESS_READ, RETRO_VFS_FILE_ACCESS_HINT_NONE);
-   RFILE *fp_dst = filestream_open(dst, RETRO_VFS_FILE_ACCESS_WRITE, RETRO_VFS_FILE_ACCESS_HINT_NONE);
-
-   if (!fp_src || !fp_dst)
-      ret = -1;
-
-   if (ret < 0)
-      goto close;
-
-   snprintf(path_dst, sizeof(path_dst), "%s", dst);
-   path_basedir(path_dst);
-
-   if (!path_is_directory(path_dst))
-      path_mkdir(path_dst);
-
-   while ((n = filestream_read(fp_src, buf, sizeof(buf))) > 0 && ret == 0)
-   {
-      if (filestream_write(fp_dst, buf, n) != n)
-         ret = -1;
-   }
-
-close:
-   if (fp_src)
-      filestream_close(fp_src);
-   if (fp_dst)
-      filestream_close(fp_dst);
-   return ret;
-}
-
-int filestream_cmp(const char *src, const char *dst)
-{
-   int ret           = 0;
-   RFILE *fp_src     = filestream_open(src, RETRO_VFS_FILE_ACCESS_READ,
-         RETRO_VFS_FILE_ACCESS_HINT_NONE);
-   RFILE *fp_dst     = filestream_open(dst, RETRO_VFS_FILE_ACCESS_READ,
-         RETRO_VFS_FILE_ACCESS_HINT_NONE);
-
-   if (!fp_src || !fp_dst || filestream_get_size(fp_src) != filestream_get_size(fp_dst))
-      ret = -1;
-
-   if (ret >= 0)
-   {
-      char buf_src[256] = {0};
-      char buf_dst[256] = {0};
-      while ((filestream_read(fp_src, buf_src, sizeof(buf_src))) > 0 && ret == 0)
-      {
-         filestream_read(fp_dst, buf_dst, sizeof(buf_dst));
-         ret = memcmp(buf_src, buf_dst, sizeof(buf_src));
-      }
-   }
-
-   if (fp_src)
-   {
-      filestream_close(fp_src);
-      fp_src = NULL;
-   }
-   if (fp_dst)
-   {
-      filestream_close(fp_dst);
-      fp_dst = NULL;
-   }
-   return ret;
 }
 
 const char* filestream_get_path(RFILE *stream)
@@ -529,7 +456,7 @@ int64_t filestream_write(RFILE *stream, const void *s, int64_t len)
             (libretro_vfs_implementation_file*)stream->hfile, s, len);
 
    if (output == VFS_ERROR_RETURN_VALUE)
-      stream->err_flag = true;
+      stream->error_flag = true;
 
    return output;
 }
@@ -547,13 +474,15 @@ int filestream_putc(RFILE *stream, int c)
 int filestream_vprintf(RFILE *stream, const char* format, va_list args)
 {
    static char buffer[8 * 1024];
-   int _len = vsnprintf(buffer, sizeof(buffer),
+   int64_t num_chars = vsnprintf(buffer, sizeof(buffer),
          format, args);
-   if (_len < 0)
+
+   if (num_chars < 0)
       return -1;
-   else if (_len == 0)
+   else if (num_chars == 0)
       return 0;
-   return (int)filestream_write(stream, buffer, _len);
+
+   return (int)filestream_write(stream, buffer, num_chars);
 }
 
 int filestream_printf(RFILE *stream, const char* format, ...)
@@ -568,7 +497,7 @@ int filestream_printf(RFILE *stream, const char* format, ...)
 
 int filestream_error(RFILE *stream)
 {
-   return (stream && stream->err_flag);
+   return (stream && stream->error_flag);
 }
 
 int filestream_close(RFILE *stream)

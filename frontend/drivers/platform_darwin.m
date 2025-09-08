@@ -61,14 +61,6 @@
 #include "../../menu/menu_driver.h"
 #endif
 
-#ifdef HAVE_SWIFT
-#if TARGET_OS_TV
-#import "RetroArchTV-Swift.h"
-#else
-#import "RetroArch-Swift.h"
-#endif
-#endif
-
 #include "../frontend_driver.h"
 #include "../../file_path_special.h"
 #include "../../configuration.h"
@@ -412,10 +404,8 @@ static void frontend_darwin_get_env(int *argc, char *argv[],
    fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_CORE], application_data, "cores", sizeof(g_defaults.dirs[DEFAULT_DIR_CORE]));
 #elif defined(OSX) && defined(HAVE_APPLE_STORE)
    fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_CORE], bundle_path_buf, "Contents/Frameworks", sizeof(g_defaults.dirs[DEFAULT_DIR_CORE]));
-#elif defined(IOS) && defined(HAVE_FRAMEWORKS)
-   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_CORE], bundle_path_buf, "Frameworks", sizeof(g_defaults.dirs[DEFAULT_DIR_CORE]));
 #else
-   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_CORE], bundle_path_buf, "modules", sizeof(g_defaults.dirs[DEFAULT_DIR_CORE]));
+   fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_CORE], bundle_path_buf, "Frameworks", sizeof(g_defaults.dirs[DEFAULT_DIR_CORE]));
 #endif
    fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_DATABASE], application_data, "database/rdb", sizeof(g_defaults.dirs[DEFAULT_DIR_DATABASE]));
    fill_pathname_join(g_defaults.dirs[DEFAULT_DIR_CORE_ASSETS], application_data, "downloads", sizeof(g_defaults.dirs[DEFAULT_DIR_CORE_ASSETS]));
@@ -779,10 +769,21 @@ static uint64_t frontend_darwin_get_total_mem(void)
 static uint64_t frontend_darwin_get_free_mem(void)
 {
 #if (defined(OSX) && (MAC_OS_X_VERSION_MAX_ALLOWED >= 101200))
-   task_vm_info_data_t vm_info;
-   mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
-   if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t) &vm_info, &count) == KERN_SUCCESS)
-        return frontend_darwin_get_total_mem() - vm_info.phys_footprint;
+    vm_size_t page_size;
+    vm_statistics64_data_t vm_stats;
+    mach_port_t mach_port        = mach_host_self();
+    mach_msg_type_number_t count = sizeof(vm_stats) / sizeof(natural_t);
+
+    if (   KERN_SUCCESS == host_page_size(mach_port, &page_size)
+        && KERN_SUCCESS == host_statistics64(mach_port, HOST_VM_INFO,
+           (host_info64_t)&vm_stats, &count))
+    {
+        long long used_memory = (
+              (int64_t)vm_stats.active_count   +
+              (int64_t)vm_stats.inactive_count +
+              (int64_t)vm_stats.wire_count)    * (int64_t)page_size;
+        return used_memory;
+    }
 #elif defined(IOS)
     task_vm_info_data_t vm_info;
     mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
@@ -995,15 +996,6 @@ static bool frontend_darwin_accessibility_speak(int speed,
 #endif
 }
 
-static void frontend_darwin_content_loaded(void)
-{
-#ifdef HAVE_SWIFT
-   if (@available(iOS 16.0, tvOS 16.0, *)) {
-      [RetroArchAppShortcuts contentLoaded];
-   }
-#endif
-}
-
 frontend_ctx_driver_t frontend_ctx_darwin = {
    frontend_darwin_get_env,         /* get_env */
    NULL,                            /* init */
@@ -1016,7 +1008,7 @@ frontend_ctx_driver_t frontend_ctx_darwin = {
    frontend_darwin_get_name,        /* get_name */
    frontend_darwin_get_os,          /* get_os               */
    frontend_darwin_get_rating,      /* get_rating           */
-   frontend_darwin_content_loaded,  /* content_loaded       */
+   NULL,                            /* content_loaded       */
    frontend_darwin_get_arch,        /* get_architecture     */
    frontend_darwin_get_powerstate,  /* get_powerstate       */
    frontend_darwin_parse_drive_list,/* parse_drive_list     */

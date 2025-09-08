@@ -195,14 +195,6 @@ if [ $PLATFORM = "libnx" ]; then
    make -C ../ -f Makefile.${platform} clean || exit 1
 fi
 
-if [ $PLATFORM = "psl1ght" ]; then
-   echo Buildbot: building static core for ${platform}
-   mkdir -p ../pkg/${platform}/pkg/USRDIR
-   make -C ../ -f Makefile.${platform} HAVE_STATIC_DUMMY=1 -j3 || exit 1
-   mv -f ../retroarch_psl1ght.self ../pkg/${platform}/pkg/USRDIR/retroarch_psl1ght.self
-   make -C ../ -f Makefile.${platform} clean || exit 1
-fi
-
 #for f in *_${platform}.${EXT} ; do
 for f in `ls -v *_${platform}.${EXT}`; do
 
@@ -300,8 +292,8 @@ for f in `ls -v *_${platform}.${EXT}`; do
    if [ $platform = "psl1ght" ] ; then
        mv -fv ../retroarch_psl1ght.self ../pkg/psl1ght/pkg/USRDIR/cores/"${name}_libretro_${platform}.SELF"
        if [ -d ../../dist/info ]; then
-           mkdir -p ../pkg/psl1ght/pkg/USRDIR/info
-           cp -fv ../../dist/info/"${name}_libretro.info" ../pkg/psl1ght/pkg/USRDIR/info/"${name}_libretro.info"
+           mkdir -p ../pkg/psl1ght/pkg/USRDIR/cores/info
+           cp -fv ../../dist/info/"${name}_libretro.info" ../pkg/psl1ght/pkg/USRDIR/cores/info/"${name}_libretro.info"
        fi
    elif [ $platform = "ps3" ] ; then
       if [ $PLATFORM = "ode-ps3" ] ; then
@@ -415,26 +407,26 @@ if [ $platform = "ps3" ] || [ $platform = "psl1ght" ] ; then
    if [ $PLATFORM = "ode-ps3" ] ; then
       echo Deploy : Assets...
       if [ -d ../media/assets ]; then
-         mkdir -p ../pkg/${platform}_iso/PS3_GAME/USRDIR/assets
+         mkdir -p ../pkg/${platform}_iso/PS3_GAME/USRDIR/cores/assets
          cp -r ../media/assets/* ../pkg/${platform}_iso/PS3_GAME/USRDIR/cores/assets
       fi
       echo Deploy : Databases...
       if [ -d ../media/libretrodb/rdb ]; then
-         mkdir -p ../pkg/${platform}_iso/PS3_GAME/USRDIR/database/rdb
+         mkdir -p ../pkg/${platform}_iso/PS3_GAME/USRDIR/cores/database/rdb
          cp -r ../media/libretrodb/rdb/* ../pkg/${platform}_iso/PS3_GAME/USRDIR/cores/database/rdb
 	  fi
 	  if [ -d ../media/libretrodb/cursors ]; then
-         mkdir -p ../pkg/${platform}_iso/PS3_GAME/USRDIR/database/cursors
+         mkdir -p ../pkg/${platform}_iso/PS3_GAME/USRDIR/cores/database/cursors
          cp -r ../media/libretrodb/cursors/* ../pkg/${platform}_iso/PS3_GAME/USRDIR/cores/database/cursors
       fi
       echo Deploy : Overlays...
       if [ -d ../media/overlays ]; then
-         mkdir -p ../pkg/${platform}_iso/PS3_GAME/USRDIR/overlays
+         mkdir -p ../pkg/${platform}_iso/PS3_GAME/USRDIR/cores/overlays
          cp -r ../media/overlays/* ../pkg/${platform}_iso/PS3_GAME/USRDIR/cores/overlays
       fi
       echo Deploy : Shaders...
       if [ -d ../media/shaders_cg ]; then
-         mkdir -p ../pkg/${platform}_iso/PS3_GAME/USRDIR/shaders_cg
+         mkdir -p ../pkg/${platform}_iso/PS3_GAME/USRDIR/cores/shaders_cg
          cp -r ../media/shaders_cg/* ../pkg/${platform}_iso/PS3_GAME/USRDIR/cores/shaders_cg
       fi
    else
@@ -444,27 +436,27 @@ if [ $platform = "ps3" ] || [ $platform = "psl1ght" ] ; then
       fi
       echo Deploy : Assets...
       if [ -d ../media/assets ]; then
-         mkdir -p ../${ps3pkgdir}/USRDIR/assets
-         cp -r ../media/assets/* ../${ps3pkgdir}/USRDIR/assets
+         mkdir -p ../${ps3pkgdir}/USRDIR/cores/assets
+         cp -r ../media/assets/* ../${ps3pkgdir}/USRDIR/cores/assets
       fi
       echo Deploy : Databases...
       if [ -d ../media/libretrodb/rdb ]; then
-         mkdir -p ../${ps3pkgdir}/USRDIR/database/rdb
-         cp -r ../media/libretrodb/rdb/* ../${ps3pkgdir}/USRDIR/database/rdb
+         mkdir -p ../${ps3pkgdir}/USRDIR/cores/database/rdb
+         cp -r ../media/libretrodb/rdb/* ../${ps3pkgdir}/USRDIR/cores/database/rdb
 	  fi
 	  if [ -d ../media/libretrodb/cursors ]; then
-         mkdir -p ../${ps3pkgdir}/USRDIR/database/cursors
-         cp -r ../media/libretrodb/cursors/* ../${ps3pkgdir}/USRDIR/database/cursors
+         mkdir -p ../${ps3pkgdir}/USRDIR/cores/database/cursors
+         cp -r ../media/libretrodb/cursors/* ../${ps3pkgdir}/USRDIR/cores/database/cursors
       fi
       echo Deploy : Overlays...
       if [ -d ../media/overlays ]; then
-         mkdir -p ../${ps3pkgdir}/USRDIR/overlays
-         cp -r ../media/overlays/* ../${ps3pkgdir}/USRDIR/overlays
+         mkdir -p ../${ps3pkgdir}/USRDIR/cores/overlays
+         cp -r ../media/overlays/* ../${ps3pkgdir}/USRDIR/cores/overlays
       fi
       echo Deploy : Shaders...
       if [ -d ../media/shaders_cg ]; then
-         mkdir -p ../${ps3pkgdir}/USRDIR/shaders_cg
-         cp -r ../media/shaders_cg/* ../${ps3pkgdir}/USRDIR/shaders_cg
+         mkdir -p ../${ps3pkgdir}/USRDIR/cores/shaders_cg
+         cp -r ../media/shaders_cg/* ../${ps3pkgdir}/USRDIR/cores/shaders_cg
       fi
    fi
 fi

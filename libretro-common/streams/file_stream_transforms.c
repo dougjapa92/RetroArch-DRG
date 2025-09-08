@@ -115,11 +115,12 @@ int64_t rfread(void* buffer,
    return (filestream_read(stream, buffer, elem_size * elem_count) / elem_size);
 }
 
-char *rfgets(char *s, int maxCount, RFILE* stream)
+char *rfgets(char *buffer, int maxCount, RFILE* stream)
 {
    if (!stream)
       return NULL;
-   return filestream_gets(stream, s, maxCount);
+
+   return filestream_gets(stream, buffer, maxCount);
 }
 
 int rfgetc(RFILE* stream)

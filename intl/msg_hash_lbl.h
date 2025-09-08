@@ -512,6 +512,17 @@ MSG_HASH(
    MENU_ENUM_LABEL_CB_MENU_WALLPAPER,
    "cb_menu_wallpaper"
    )
+#if 0
+/* Thumbnailpack removal */
+MSG_HASH(
+   MENU_ENUM_LABEL_CB_THUMBNAILS_UPDATER_DOWNLOAD,
+   "cb_thumbnails_updater_download"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_CB_THUMBNAILS_UPDATER_LIST,
+   "cb_thumbnails_updater_list"
+   )
+#endif
 MSG_HASH(
    MENU_ENUM_LABEL_CB_UPDATE_ASSETS,
    "cb_update_assets"
@@ -921,6 +932,10 @@ MSG_HASH(
 MSG_HASH(
    MENU_ENUM_LABEL_CUSTOM_BIND_ALL,
    "custom_bind_all"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_CUSTOM_RATIO,
+   "custom_ratio"
    )
 MSG_HASH(
    MENU_ENUM_LABEL_DATABASE_MANAGER,
@@ -1436,6 +1451,13 @@ MSG_HASH(
    MENU_ENUM_LABEL_DEFERRED_CLOUD_SYNC_SETTINGS_LIST,
    "deferred_cloud_sync_settings_list"
    )
+#if 0
+/* Thumbnailpack removal */
+MSG_HASH(
+   MENU_ENUM_LABEL_DEFERRED_THUMBNAILS_UPDATER_LIST,
+   "deferred_thumbnails_updater_list"
+   )
+#endif
 MSG_HASH(
    MENU_ENUM_LABEL_DEFERRED_PL_THUMBNAILS_UPDATER_LIST,
    "deferred_pl_thumbnails_updater_list"
@@ -2157,7 +2179,7 @@ MSG_HASH(
 MSG_HASH(
    MENU_ENUM_LABEL_INPUT_REMAP_SORT_BY_CONTROLLER_ENABLE,
    "input_remap_sort_by_controller_enable"
-   )
+   )   
 MSG_HASH(
    MENU_ENUM_LABEL_INPUT_SETTINGS,
    "input_settings"
@@ -2347,10 +2369,6 @@ MSG_HASH(
 MSG_HASH(
    MENU_ENUM_LABEL_RGUI_MENU_THEME_PRESET,
    "rgui_menu_theme_preset"
-   )
-MSG_HASH(
-   MENU_ENUM_LABEL_OZONE_FONT,
-   "ozone_font"
    )
 MSG_HASH(
    MENU_ENUM_LABEL_OZONE_MENU_COLOR_THEME,
@@ -3109,14 +3127,6 @@ MSG_HASH(
    "deferred_cursor_manager_list_rdb_entry_max_users"
    )
 MSG_HASH(
-   MENU_ENUM_LABEL_DEFERRED_CURSOR_MANAGER_LIST_RDB_ENTRY_GENRE,
-   "deferred_cursor_manager_list_rdb_entry_genre"
-   )
-MSG_HASH(
-   MENU_ENUM_LABEL_DEFERRED_CURSOR_MANAGER_LIST_RDB_ENTRY_REGION,
-   "deferred_cursor_manager_list_rdb_entry_region"
-   )
-MSG_HASH(
    MENU_ENUM_LABEL_RDB_ENTRY_DEVELOPER,
    "rdb_entry_developer"
    )
@@ -3631,14 +3641,6 @@ MSG_HASH(
    "save_new_config"
    )
 MSG_HASH(
-   MENU_ENUM_LABEL_SAVE_AS_CONFIG,
-   "save_as_config"
-   )
-MSG_HASH(
-   MENU_ENUM_LABEL_SAVE_MAIN_CONFIG,
-   "save_main_config"
-   )
-MSG_HASH(
    MENU_ENUM_LABEL_SAVE_STATE,
    "save_state"
    )
@@ -4033,10 +4035,6 @@ MSG_HASH(
    "menu_remember_selection"
    )
 MSG_HASH(
-   MENU_ENUM_LABEL_MENU_STARTUP_PAGE,
-   "menu_startup_page"
-   )
-MSG_HASH(
    MENU_ENUM_LABEL_UI_COMPANION_ENABLE,
    "ui_companion_enable"
    )
@@ -4154,19 +4152,19 @@ MSG_HASH(
    )
 MSG_HASH(
    MENU_ENUM_LABEL_CRT_SWITCH_X_AXIS_CENTERING,
-	  "crt_switch_horizontal_shift"
+	  "crt_switch_center_adjust"
    )
 MSG_HASH(
    MENU_ENUM_LABEL_CRT_SWITCH_PORCH_ADJUST,
-	  "crt_switch_horizontal_size"
-   )
-MSG_HASH(
-   MENU_ENUM_LABEL_CRT_SWITCH_VERTICAL_ADJUST,
-	  "crt_switch_vertical_size"
+	  "crt_switch_porch_adjust"
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VIDEO_ASPECT_RATIO,
    "video_aspect_ratio"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VIDEO_ASPECT_RATIO_AUTO,
+   "video_aspect_ratio_auto"
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VIDEO_ASPECT_RATIO_INDEX,
@@ -4417,6 +4415,10 @@ MSG_HASH(
    "video_font_size"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_VIDEO_FORCE_ASPECT,
+   "video_force_aspect"
+   )
+MSG_HASH(
    MENU_ENUM_LABEL_VIDEO_FORCE_SRGB_DISABLE,
    "video_force_srgb_disable"
    )
@@ -4569,10 +4571,6 @@ MSG_HASH(
 MSG_HASH(
    MENU_ENUM_LABEL_VIDEO_NOTCH_WRITE_OVER,
    "video_notch_write_over"
-)
-MSG_HASH(
-   MENU_ENUM_LABEL_VIDEO_USE_METAL_ARG_BUFFERS,
-   "video_use_metal_arg_buffers"
 )
 MSG_HASH(
    MENU_ENUM_LABEL_VIDEO_OUTPUT_SETTINGS,
@@ -4835,6 +4833,10 @@ MSG_HASH(
    "content_show_history"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_CONTENT_SHOW_ADD,
+   "content_show_add"
+   )
+MSG_HASH(
    MENU_ENUM_LABEL_CONTENT_SHOW_ADD_ENTRY,
    "content_show_add_entry"
    )
@@ -4853,10 +4855,6 @@ MSG_HASH(
 MSG_HASH(
    MENU_ENUM_LABEL_CONTENT_SHOW_FAVORITES,
    "content_show_favorites"
-   )
-MSG_HASH(
-   MENU_ENUM_LABEL_CONTENT_SHOW_FAVORITES_FIRST,
-   "content_show_favorites_first"
    )
 MSG_HASH(
    MENU_ENUM_LABEL_CONTENT_SHOW_IMAGES,
@@ -5223,10 +5221,6 @@ MSG_HASH(
 MSG_HASH(
    MENU_ENUM_LABEL_MATERIALUI_THUMBNAIL_BACKGROUND_ENABLE,
    "materialui_thumbnail_background_enable"
-   )
-MSG_HASH(
-   MENU_ENUM_LABEL_MENU_THUMBNAIL_BACKGROUND_ENABLE,
-   "menu_thumbnail_background_enable"
    )
 MSG_HASH(
    MENU_ENUM_LABEL_RENAME_ENTRY,
@@ -6211,6 +6205,10 @@ MSG_HASH(
    "playlist_allow_non_png"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_HELP_SEND_DEBUG_INFO,
+   "help_send_debug_info"
+   )
+MSG_HASH(
    MENU_ENUM_LABEL_VIBRATE_ON_KEYPRESS,
    "vibrate_on_keypress"
    )
@@ -6623,8 +6621,8 @@ MSG_HASH(
    "input_turbo_duty_cycle"
    )
 MSG_HASH(
-   MENU_ENUM_LABEL_INPUT_TURBO_ALLOW_DPAD,
-   "input_turbo_allow_dpad"
+   MENU_ENUM_LABEL_INPUT_ALLOW_TURBO_DPAD,
+   "input_allow_turbo_dpad"
    )
 MSG_HASH(
    MENU_ENUM_LABEL_MENU_VIEWS_SETTINGS,

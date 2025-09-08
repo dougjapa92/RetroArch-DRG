@@ -35,7 +35,7 @@ int main(int argc, char ** argv)
    const char *command                            = NULL;
    const char *path                               = NULL;
    const char *query_exp                          = NULL;
-   const char *err                                = NULL;
+   const char *error                              = NULL;
    libretrodb_t *db                               = NULL;
    libretrodb_cursor_t *cur                       = NULL;
    libretrodb_query_t *q                          = NULL;
@@ -95,12 +95,12 @@ int main(int argc, char ** argv)
       }
 
       query_exp = argv[3];
-      err = NULL;
-      q   = libretrodb_query_compile(db, query_exp, strlen(query_exp), &err);
+      error = NULL;
+      q = libretrodb_query_compile(db, query_exp, strlen(query_exp), &error);
 
-      if (err)
+      if (error)
       {
-         printf("%s\n", err);
+         printf("%s\n", error);
          goto error;
       }
 
@@ -126,12 +126,12 @@ int main(int argc, char ** argv)
       }
 
       query_exp = argv[3];
-      err       = NULL;
-      q = libretrodb_query_compile(db, query_exp, strlen(query_exp), &err);
+      error = NULL;
+      q = libretrodb_query_compile(db, query_exp, strlen(query_exp), &error);
 
-      if (err)
+      if (error)
       {
-         printf("%s\n", err);
+         printf("%s\n", error);
          goto error;
       }
 

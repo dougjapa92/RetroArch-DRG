@@ -32,8 +32,6 @@
 
 #include <retro_miscellaneous.h>
 #include <retro_timers.h>
-#include <lists/string_list.h>
-#include <string/stdstring.h>
 
 #include "../audio_driver.h"
 #include "../../verbosity.h"
@@ -49,8 +47,10 @@ typedef struct al
    ALCcontext *ctx;
    size_t res_ptr;
    ALsizei num_buffers;
+   size_t tmpbuf_ptr;
    int rate;
    ALenum format;
+   uint8_t tmpbuf[OPENAL_BUFSIZE];
    bool nonblock;
    bool is_paused;
 } al_t;
@@ -79,93 +79,19 @@ static void al_free(void *data)
    free(al);
 }
 
-static void *al_list_new(void *u)
-{
-   union string_list_elem_attr attr;
-   const char *audio_out_device_list;
-   struct string_list *sl = string_list_new();
-
-   if (!sl)
-      return NULL;
-
-   attr.i = 0;
-
-   if (alcIsExtensionPresent(NULL, "ALC_ENUMERATE_ALL_EXT"))
-      audio_out_device_list = alcGetString(NULL, ALC_ALL_DEVICES_SPECIFIER);
-   else
-      audio_out_device_list = alcGetString(NULL, ALC_DEVICE_SPECIFIER);
-
-   if (audio_out_device_list)
-   {
-      while (*audio_out_device_list)
-      {
-         string_list_append(sl, audio_out_device_list, attr);
-         audio_out_device_list += strlen(audio_out_device_list) + 1;
-      }
-   }
-
-   return sl;
-}
-
-
 static void *al_init(const char *device, unsigned rate, unsigned latency,
       unsigned block_frames,
       unsigned *new_rate)
 {
-   size_t _latency;
-   char *dev_id = NULL;
-   al_t *al     = (al_t*)calloc(1, sizeof(al_t));
+   al_t *al;
+
+   (void)device;
+
+   al = (al_t*)calloc(1, sizeof(al_t));
    if (!al)
       return NULL;
 
-   if (device)
-   {
-      struct string_list *list = (struct string_list*)al_list_new(NULL);
-
-       /* Search for device name first */
-      if (list && list->elems)
-      {
-         int32_t idx_found = -1;
-         if (list->elems)
-         {
-            size_t i;
-            for (i = 0; i < list->size; i++)
-            {
-               if (string_is_equal(device, list->elems[i].data))
-               {
-                  RARCH_DBG("[OpenAL] Found device #%d: \"%s\".\n", i, list->elems[i].data);
-                  idx_found = i;
-                  dev_id    = strdup(list->elems[i].data);
-                  break;
-               }
-            }
-            /* Index was not found yet based on name string,
-             * just assume id is a one-character number index. */
-
-            if (idx_found == -1 && isdigit(device[0]))
-            {
-               idx_found = strtoul(device, NULL, 0);
-               RARCH_LOG("[OpenAL] Fallback, device index is a single number index instead: %d.\n", idx_found);
-
-               if (idx_found != -1)
-               {
-                  if (idx_found < (int32_t)list->size)
-                  {
-                     RARCH_LOG("[OpenAL] Corresponding name: %s.\n", list->elems[idx_found].data);
-                     dev_id    = strdup(list->elems[idx_found].data);
-                  }
-               }
-            }
-         }
-      }
-
-      string_list_free(list);
-   }
-
-   al->handle = alcOpenDevice(dev_id);
-   if (dev_id)
-      free(dev_id);
-   dev_id = NULL;
+   al->handle = alcOpenDevice(NULL);
    if (!al->handle)
       goto error;
 
@@ -175,26 +101,14 @@ static void *al_init(const char *device, unsigned rate, unsigned latency,
 
    alcMakeContextCurrent(al->ctx);
 
-   al->rate  = rate;
-   *new_rate = rate;
+   al->rate = rate;
 
-   if (alIsExtensionPresent("AL_EXT_FLOAT32"))
-   {
-      al->format      = alGetEnumValue("AL_FORMAT_STEREO_FLOAT32");
-      _latency        = latency * rate * 2 * sizeof(float);
-      RARCH_LOG("[OpenAL] Device supports float sample format\n");
-   }
-   else
-   {
-      al->format      = AL_FORMAT_STEREO16;
-      _latency        = latency * rate * 2 * sizeof(int16_t);
-   }
-
-   al->num_buffers = _latency / (1000 * OPENAL_BUFSIZE);
+   /* We already use one buffer for tmpbuf. */
+   al->num_buffers = (latency * rate * 2 * sizeof(int16_t)) / (1000 * OPENAL_BUFSIZE) - 1;
    if (al->num_buffers < 2)
       al->num_buffers = 2;
 
-   RARCH_LOG("[OpenAL] Using %u buffers of %u bytes (%s format).\n", (unsigned)al->num_buffers, OPENAL_BUFSIZE, (al->format == AL_FORMAT_STEREO16) ? "integer" : "float");
+   RARCH_LOG("[OpenAL]: Using %u buffers of %u bytes.\n", (unsigned)al->num_buffers, OPENAL_BUFSIZE);
 
    al->buffers = (ALuint*)calloc(al->num_buffers, sizeof(ALuint));
    al->res_buf = (ALuint*)calloc(al->num_buffers, sizeof(ALuint));
@@ -202,11 +116,9 @@ static void *al_init(const char *device, unsigned rate, unsigned latency,
       goto error;
 
    alGenSources(1, &al->source);
-   alSourcei(al->source, AL_LOOPING, AL_FALSE);
    alGenBuffers(al->num_buffers, al->buffers);
 
    memcpy(al->res_buf, al->buffers, al->num_buffers * sizeof(ALuint));
-
    al->res_ptr = al->num_buffers;
 
    return al;
@@ -232,53 +144,70 @@ static bool al_unqueue_buffers(al_t *al)
 
 static bool al_get_buffer(al_t *al, ALuint *buffer)
 {
-   while (al->res_ptr == 0)
+   if (!al->res_ptr)
    {
-      if (al_unqueue_buffers(al))
-         break;
+      for (;;)
+      {
+         if (al_unqueue_buffers(al))
+            break;
 
-#ifndef EMSCRIPTEN
-      if (al->nonblock)
-#endif
-         return false;
+         if (al->nonblock)
+            return false;
 
-#ifndef _WIN32
-      /* Must sleep as there is no proper blocking method. */
-      retro_sleep(1);
-#endif
+         /* Must sleep as there is no proper blocking method. */
+         retro_sleep(1);
+      }
    }
 
    *buffer = al->res_buf[--al->res_ptr];
    return true;
 }
 
+static size_t al_fill_internal_buf(al_t *al, const void *s, size_t len)
+{
+   size_t read_size = MIN(OPENAL_BUFSIZE - al->tmpbuf_ptr, len);
+   memcpy(al->tmpbuf + al->tmpbuf_ptr, s, read_size);
+   al->tmpbuf_ptr += read_size;
+   return read_size;
+}
+
 static ssize_t al_write(void *data, const void *s, size_t len)
 {
    al_t           *al = (al_t*)data;
    const uint8_t *buf = (const uint8_t*)s;
-   size_t        _len = 0;
+   size_t     written = 0;
 
    while (len)
    {
       ALint val;
       ALuint buffer;
-      size_t rc    = MIN(OPENAL_BUFSIZE, len);
+      size_t rc = al_fill_internal_buf(al, buf, len);
+
+      written += rc;
+      buf     += rc;
+      len     -= rc;
+
+      if (al->tmpbuf_ptr != OPENAL_BUFSIZE)
+         break;
 
       if (!al_get_buffer(al, &buffer))
          break;
 
-      alBufferData(buffer, al->format, buf, rc, al->rate);
+      alBufferData(buffer, AL_FORMAT_STEREO16, al->tmpbuf, OPENAL_BUFSIZE, al->rate);
+      al->tmpbuf_ptr = 0;
       alSourceQueueBuffers(al->source, 1, &buffer);
-
-      _len           += rc;
-      buf            += rc;
-      len            -= rc;
+      if (alGetError() != AL_NO_ERROR)
+         return -1;
 
       alGetSourcei(al->source, AL_SOURCE_STATE, &val);
       if (val != AL_PLAYING)
          alSourcePlay(al->source);
+
+      if (alGetError() != AL_NO_ERROR)
+         return -1;
    }
-   return _len;
+
+   return written;
 }
 
 static bool al_stop(void *data)
@@ -292,7 +221,9 @@ static bool al_stop(void *data)
 static bool al_alive(void *data)
 {
    al_t *al = (al_t*)data;
-   return al && !al->is_paused;
+   if (!al)
+      return false;
+   return !al->is_paused;
 }
 
 static void al_set_nonblock_state(void *data, bool state)
@@ -314,30 +245,16 @@ static size_t al_write_avail(void *data)
 {
    al_t *al = (al_t*)data;
    al_unqueue_buffers(al);
-   return al->res_ptr * OPENAL_BUFSIZE;
+   return al->res_ptr * OPENAL_BUFSIZE + (OPENAL_BUFSIZE - al->tmpbuf_ptr);
 }
 
 static size_t al_buffer_size(void *data)
 {
    al_t *al = (al_t*)data;
-   return (al->num_buffers) * OPENAL_BUFSIZE;
+   return (al->num_buffers + 1) * OPENAL_BUFSIZE; /* Also got tmpbuf. */
 }
 
-static bool al_use_float(void *data)
-{
-   al_t *al = (al_t*)data;
-   if (al->format == AL_FORMAT_STEREO16)
-      return false;
-   return true;
-}
-
-static void al_device_list_free(void *u, void *slp)
-{
-   struct string_list *sl = (struct string_list*)slp;
-
-   if (sl)
-      string_list_free(sl);
-}
+static bool al_use_float(void *data) { return false; }
 
 audio_driver_t audio_openal = {
    al_init,
@@ -349,8 +266,8 @@ audio_driver_t audio_openal = {
    al_free,
    al_use_float,
    "openal",
-   al_list_new,
-   al_device_list_free,
+   NULL,
+   NULL,
    al_write_avail,
    al_buffer_size,
 };

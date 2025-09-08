@@ -495,10 +495,9 @@ void string_remove_all_chars(char *s, char c)
 
    while (*read_ptr != '\0')
    {
-      /* Only write if the character is not the one to remove */
-      if (*read_ptr != c)
-         *write_ptr++ = *read_ptr;
-      read_ptr++;
+      *write_ptr = *read_ptr++;
+      if (*write_ptr != c)
+         write_ptr++;
    }
 
    *write_ptr = '\0';

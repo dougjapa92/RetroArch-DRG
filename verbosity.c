@@ -188,7 +188,7 @@ void retro_main_log_file_init(const char *path, bool append)
 
    if (!tmp)
    {
-      RARCH_ERR("Failed to open system event log file: \"%s\".\n", path);
+      RARCH_ERR("Failed to open system event log file: %s\n", path);
       return;
    }
 
@@ -291,9 +291,9 @@ void RARCH_LOG_V(const char *tag, const char *fmt, va_list ap)
 #if TARGET_IPHONE_SIMULATOR
    vprintf(fmt, ap);
 #elif __IPHONE_OS_VERSION_MIN_REQUIRED > __IPHONE_10_0 || __TV_OS_VERSION_MIN_REQUIRED > __TVOS_10_0
-   int _len = vsnprintf(NULL, 0, fmt, ap) + 1;
-   char buffer[_len]; /* TODO/FIXME - VLA - C89 backwards compatibility */
-   vsnprintf(buffer, _len, fmt, ap);
+   int sz = vsnprintf(NULL, 0, fmt, ap) + 1;
+   char buffer[sz]; /* TODO/FIXME - VLA - C89 backwards compatibility */
+   vsnprintf(buffer, sz, fmt, ap);
    os_log(OS_LOG_DEFAULT, "%s %s", tag_v, buffer);
 #else
    static aslclient asl_client;
@@ -333,8 +333,7 @@ void RARCH_LOG_V(const char *tag, const char *fmt, va_list ap)
 
 void RARCH_LOG_BUFFER(uint8_t *data, size_t len)
 {
-   size_t i;
-   size_t offset;
+   unsigned i, offset;
    int padding     = len % 16;
    uint8_t buf[16] = {0};
 
@@ -507,10 +506,10 @@ void rarch_log_file_init(
       if (last_slash)
       {
          char tmp_buf[PATH_MAX_LENGTH] = {0};
-         size_t __len                  = last_slash + 1 - override_path;
+         size_t _len                   = last_slash + 1 - override_path;
 
-         if ((__len > 1) && (__len < PATH_MAX_LENGTH))
-            strlcpy(tmp_buf, override_path, __len * sizeof(char));
+         if ((_len > 1) && (_len < PATH_MAX_LENGTH))
+            strlcpy(tmp_buf, override_path, _len * sizeof(char));
          strlcpy(log_directory, tmp_buf, sizeof(log_directory));
       }
 

@@ -128,29 +128,28 @@ struct hostent *gethostbyname(const char *name)
 
    XNetDnsLookup(name, event, &dns);
    if (!dns)
-   {
-      WSACloseEvent(event);
-      return NULL;
-   }
+      goto done;
 
    WaitForSingleObject((HANDLE)event, INFINITE);
 
-   if (!dns->iStatus)
-   {
-      memcpy(&addr, dns->aina, sizeof(addr));
+   if (dns->iStatus)
+      goto done;
 
-      he.h_name      = NULL;
-      he.h_aliases   = NULL;
-      he.h_addrtype  = AF_INET;
-      he.h_length    = sizeof(addr);
-      he.h_addr_list = &he.h_addr;
-      he.h_addr      = (char*)&addr;
+   memcpy(&addr, dns->aina, sizeof(addr));
 
-      ret = &he;
-   }
+   he.h_name      = NULL;
+   he.h_aliases   = NULL;
+   he.h_addrtype  = AF_INET;
+   he.h_length    = sizeof(addr);
+   he.h_addr_list = &he.h_addr;
+   he.h_addr      = (char*)&addr;
 
+   ret = &he;
+
+done:
    WSACloseEvent(event);
-   XNetDnsRelease(dns);
+   if (dns)
+      XNetDnsRelease(dns);
 
    return ret;
 }

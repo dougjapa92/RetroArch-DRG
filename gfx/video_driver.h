@@ -65,11 +65,7 @@
 
 #if defined(_XBOX360)
 #define DEFAULT_SHADER_TYPE RARCH_SHADER_HLSL
-#elif defined(HAVE_OPENGLES2)
-#define DEFAULT_SHADER_TYPE RARCH_SHADER_GLSL
-#elif defined(HAVE_SLANG)
-#define DEFAULT_SHADER_TYPE RARCH_SHADER_SLANG
-#elif defined(HAVE_GLSL)
+#elif defined(HAVE_OPENGLES2) || defined(HAVE_GLSL)
 #define DEFAULT_SHADER_TYPE RARCH_SHADER_GLSL
 #elif defined(HAVE_CG)
 #define DEFAULT_SHADER_TYPE RARCH_SHADER_CG
@@ -279,12 +275,11 @@ typedef struct shader_backend
 
 typedef struct video_shader_ctx_params
 {
+   void *data;
    const void *info;
    const void *prev_info;
    const void *feedback_info;
    const void *fbo_info;
-   unsigned vp_width;
-   unsigned vp_height;
    unsigned width;
    unsigned height;
    unsigned tex_width;
@@ -400,7 +395,6 @@ typedef struct video_frame_info
    int custom_vp_y;
    int crt_switch_center_adjust;
    int crt_switch_porch_adjust;
-   int crt_switch_vert_adjust;
 
    unsigned hard_sync_frames;
    unsigned runahead_frames;
@@ -500,7 +494,6 @@ typedef struct video_frame_info
    bool hdr_enable;
    bool overlay_behind_menu;
    bool scan_subframes;
-   bool shader_active;
 } video_frame_info_t;
 
 typedef void (*update_window_title_cb)(void*);

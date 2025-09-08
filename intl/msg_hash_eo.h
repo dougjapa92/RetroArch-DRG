@@ -297,6 +297,10 @@ MSG_HASH(
    "Change settings for the playlists."
    )
 MSG_HASH(
+   MENU_ENUM_SUBLABEL_USER_SETTINGS,
+   "Change accounts, username, and language."
+   )
+MSG_HASH(
    MENU_ENUM_SUBLABEL_DIRECTORY_SETTINGS,
    "Change default directories for this system."
    )
@@ -391,6 +395,10 @@ MSG_HASH(
 
 /* Settings > Video > Fullscreen Mode */
 
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_VIDEO_FULLSCREEN,
+   "Use Fullscreen Mode"
+   )
 
 /* Settings > Video > Windowed Mode */
 
@@ -555,6 +563,7 @@ MSG_HASH(
    MENU_ENUM_LABEL_VALUE_INPUT_META_CLOSE_CONTENT_KEY,
    "Close"
    )
+
 
 
 

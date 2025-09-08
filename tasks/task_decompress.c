@@ -56,11 +56,16 @@ static int file_decompressed_subdir(const char *name,
    fill_pathname_basedir(path_dir, path, sizeof(path_dir));
 
    /* Make directory */
-   if (path_mkdir(path_dir))
-      if (file_archive_perform_mode(path, valid_exts,
-               cdata, cmode, csize, size, crc32, userdata))
-         return 1;
+   if (!path_mkdir(path_dir))
+      goto error;
 
+   if (!file_archive_perform_mode(path, valid_exts,
+            cdata, cmode, csize, size, crc32, userdata))
+      goto error;
+
+   return 1;
+
+error:
    userdata->dec->callback_error = (char*)malloc(CALLBACK_ERROR_SIZE);
    _len  = strlcpy(userdata->dec->callback_error,
          "Failed to deflate ",
@@ -90,15 +95,18 @@ static int file_decompressed(const char *name, const char *valid_exts,
    fill_pathname_join_special(path, dec->target_dir, name, sizeof(path));
    path_basedir_wrapper(path);
 
-   if (path_mkdir(path))
-   {
-      fill_pathname_join_special(path, dec->target_dir, name, sizeof(path));
+   if (!path_mkdir(path))
+      goto error;
 
-      if (file_archive_perform_mode(path, valid_exts,
-               cdata, cmode, csize, size, crc32, userdata))
-         return 1;
-   }
+   fill_pathname_join_special(path, dec->target_dir, name, sizeof(path));
 
+   if (!file_archive_perform_mode(path, valid_exts,
+            cdata, cmode, csize, size, crc32, userdata))
+      goto error;
+
+   return 1;
+
+error:
    dec->callback_error = (char*)malloc(CALLBACK_ERROR_SIZE);
    _len  = strlcpy(dec->callback_error, "Failed to deflate ",
 		   CALLBACK_ERROR_SIZE);

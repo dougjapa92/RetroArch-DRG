@@ -31,7 +31,6 @@
 #include <stdlib.h>
 #include <stddef.h>
 #include <string.h>
-#include <time.h>
 
 #include <boolean.h>
 #include <retro_inline.h>
@@ -69,8 +68,6 @@ typedef struct
    bool         connected;
 } xinput_joypad_state;
 
-#define RUMBLE_INTERVAL 0.005
-
 /* TODO/FIXME - static globals */
 static int g_xinput_pad_indexes[MAX_USERS];
 static unsigned g_last_xinput_pad_idx       = 0;
@@ -93,11 +90,6 @@ static XINPUT_FEEDBACK     g_xinput_rumble_states[4];
 static XINPUT_VIBRATION    g_xinput_rumble_states[4];
 #endif
 static xinput_joypad_state g_xinput_states[4];
-static bool xinput_active_port[4] = {0};
-static clock_t last_rumble_time[4] = {0};
-
-static unsigned xinput_hotplug_index = 0;
-static unsigned xinput_poll_counter = 0;
 
 /* Buttons are provided by XInput as bits of a uint16.
  * Map from rarch button index (0..10) to a mask to
@@ -131,8 +123,7 @@ static bool guid_is_xinput_device(const GUID* product_guid)
       {MAKELONG(0x045E, 0x02A1),0x0000,0x0000,{0x00,0x00,0x50,0x49,0x44,0x56,0x49,0x44}}, /* Wired 360 pad */
       {MAKELONG(0x045E, 0x028E),0x0000,0x0000,{0x00,0x00,0x50,0x49,0x44,0x56,0x49,0x44}}  /* wireless 360 pad */
    };
-   size_t i;
-   unsigned num_raw_devs        = 0;
+   unsigned i, num_raw_devs     = 0;
    PRAWINPUTDEVICELIST raw_devs = NULL;
 
    /* Check for well known XInput device GUIDs,
@@ -144,8 +135,8 @@ static bool guid_is_xinput_device(const GUID* product_guid)
 
    for (i = 0; i < ARRAY_SIZE(common_xinput_guids); ++i)
    {
-      if (memcmp(product_guid,
-               &common_xinput_guids[i], sizeof(GUID)) == 0)
+      if (string_is_equal_fast(product_guid,
+               &common_xinput_guids[i], sizeof(GUID)))
          return true;
    }
 
@@ -331,7 +322,7 @@ enum_iteration_done:
 
 static void dinput_joypad_init_hybrid(void *data)
 {
-   int i;
+   unsigned i;
 
    g_last_xinput_pad_idx = 0;
 
@@ -357,7 +348,7 @@ static const char *xinput_joypad_name(unsigned pad)
 
 static void *xinput_joypad_init(void *data)
 {
-   int i, j;
+   unsigned i, j;
    XINPUT_STATE dummy_state;
 
 #if defined(HAVE_DYLIB) && !defined(__WINRT__)
@@ -393,14 +384,14 @@ static void *xinput_joypad_init(void *data)
 
       if (!g_XInputGetStateEx)
       {
-         RARCH_ERR("[XInput] Failed to init: DLL is invalid or corrupt.\n");
+         RARCH_ERR("[XInput]: Failed to init: DLL is invalid or corrupt.\n");
 #if defined(HAVE_DYLIB) && !defined(__WINRT__)
          dylib_close(g_xinput_dll);
 #endif
          /* DLL was loaded but did not contain the correct function. */
          goto error;
       }
-      RARCH_WARN("[XInput] No guide button support.\n");
+      RARCH_WARN("[XInput]: No guide button support.\n");
    }
 
 #if defined(HAVE_DYLIB) && !defined(__WINRT__)
@@ -411,7 +402,7 @@ static void *xinput_joypad_init(void *data)
 #endif
    if (!g_XInputSetState)
    {
-      RARCH_ERR("[XInput] Failed to init: DLL is invalid or corrupt.\n");
+      RARCH_ERR("[XInput]: Failed to init: DLL is invalid or corrupt.\n");
 #if defined(HAVE_DYLIB) && !defined(__WINRT__)
       dylib_close(g_xinput_dll);
 #endif
@@ -432,9 +423,6 @@ static void *xinput_joypad_init(void *data)
       g_xinput_states[i].connected                    =
          !(g_XInputGetStateEx(i, &dummy_state) == ERROR_DEVICE_NOT_CONNECTED);
    }
-
-   for (i = 0; i < 4; ++i)
-      xinput_active_port[i] = false;
 
    if (  (!g_xinput_states[0].connected) &&
          (!g_xinput_states[1].connected) &&
@@ -469,10 +457,7 @@ static void *xinput_joypad_init(void *data)
          int32_t dinput_index = 0;
          bool success         = dinput_joypad_get_vidpid_from_xinput_index((int32_t)PAD_INDEX_TO_XUSER_INDEX(j), (int32_t*)&vid, (int32_t*)&pid,
 			 (int32_t*)&dinput_index);
-
          /* On success, found VID/PID from dinput index */
-         if (!success)
-            continue;
 
          input_autoconfigure_connect(
                name,
@@ -482,13 +467,6 @@ static void *xinput_joypad_init(void *data)
                vid,
                pid);
       }
-   }
-
-   for (i = 0; i < MAX_USERS; ++i)
-   {
-      int xuser = PAD_INDEX_TO_XUSER_INDEX(i);
-      if (xuser >= 0 && xuser < 4)
-         xinput_active_port[xuser] = true;
    }
 
 #ifdef __WINRT__
@@ -544,7 +522,7 @@ static int16_t xinput_joypad_state_func(
       const struct retro_keybind *binds,
       unsigned port)
 {
-   int i;
+   unsigned i;
    uint16_t btn_word;
    int16_t ret                = 0;
    uint16_t port_idx          = joypad_info->joy_idx;
@@ -580,48 +558,14 @@ static int16_t xinput_joypad_state_func(
 
 static void xinput_joypad_poll(void)
 {
-   int i;
-   /* Hotplugging detection: scanning one port at a time every few frames,
-    * to avoid polling overload and framerate drops. */
-   xinput_poll_counter++;
-   if (xinput_poll_counter >= 15)
-   {
-      xinput_poll_counter = 0;
-      if (!xinput_active_port[xinput_hotplug_index])
-      {
-         XINPUT_STATE tmp_state;
-         DWORD result = g_XInputGetStateEx(xinput_hotplug_index, &tmp_state);
-         if (result == ERROR_SUCCESS)
-         {
-            const char *name = xinput_joypad_name(xinput_hotplug_index);
-            int32_t vid = 0;
-            int32_t pid = 0;
-            input_autoconfigure_connect(
-               name,
-               NULL,
-               xinput_joypad.ident,
-               xinput_hotplug_index,
-               vid,
-               pid);
-
-            xinput_active_port[xinput_hotplug_index] = true;
-         }
-      }
-         xinput_hotplug_index = (xinput_hotplug_index + 1) % 4;
-   }
+   unsigned i;
 
    for (i = 0; i < 4; ++i)
    {
-      DWORD status;
-      bool success, new_connected;
-      xinput_joypad_state *state;
-      if (!xinput_active_port[i])
-         continue;
-
-      state         = &g_xinput_states[i];
-      status        = g_XInputGetStateEx(i, &state->xstate);
-      success       = (status == ERROR_SUCCESS);
-      new_connected = (status != ERROR_DEVICE_NOT_CONNECTED);
+      xinput_joypad_state *state = &g_xinput_states[i];
+      DWORD status               = g_XInputGetStateEx(i, &state->xstate);
+      bool success               = (status == ERROR_SUCCESS);
+      bool new_connected         = (status != ERROR_DEVICE_NOT_CONNECTED);
       if (new_connected != state->connected)
       {
          state->connected = new_connected;
@@ -697,48 +641,27 @@ static void xinput_joypad_poll(void)
 static bool xinput_joypad_rumble(unsigned pad,
       enum retro_rumble_effect effect, uint16_t strength)
 {
-   clock_t now;
-   double time_since_last_rumble;
-   XINPUT_VIBRATION new_state, *state;
    int xuser = PAD_INDEX_TO_XUSER_INDEX(pad);
 
    if (xuser == -1)
       return dinput_joypad_set_rumble(pad, effect, strength);
 
-   state          = &g_xinput_rumble_states[xuser];
-   new_state      = *state;
-
    /* Consider the low frequency (left) motor the "strong" one. */
    if (effect == RETRO_RUMBLE_STRONG)
-      new_state.wLeftMotorSpeed  = strength;
+      g_xinput_rumble_states[xuser].wLeftMotorSpeed  = strength;
    else if (effect == RETRO_RUMBLE_WEAK)
-      new_state.wRightMotorSpeed = strength;
+      g_xinput_rumble_states[xuser].wRightMotorSpeed = strength;
 
-   /* Rumble state unchanged? */
-   if (   (new_state.wLeftMotorSpeed  == state->wLeftMotorSpeed)
-       && (new_state.wRightMotorSpeed == state->wRightMotorSpeed))
-      return true;
+   if (!g_XInputSetState)
+      return false;
 
-   now                           = clock();
-   time_since_last_rumble        = (double)(now - last_rumble_time[xuser]) / CLOCKS_PER_SEC;
-
-   /* Rumble interval unelapsed? */
-   if (time_since_last_rumble < RUMBLE_INTERVAL)
-      return true;
-
-   if (g_XInputSetState)
-   {
-      *state                  = new_state;
-      last_rumble_time[xuser] = now;
-      if (g_XInputSetState(xuser, state) == ERROR_SUCCESS)
-         return true;
-   }
-   return false;
+   return (g_XInputSetState(xuser, &g_xinput_rumble_states[xuser])
+      == 0);
 }
 
 static void xinput_joypad_destroy(void)
 {
-   int i;
+   unsigned i;
 
    for (i = 0; i < 4; ++i)
    {

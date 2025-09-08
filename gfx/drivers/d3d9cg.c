@@ -32,7 +32,6 @@
 #include <string/stdstring.h>
 #include <retro_math.h>
 
-#define WIN32_LEAN_AND_MEAN
 #include <d3d9.h>
 
 #include <string.h>
@@ -471,13 +470,13 @@ static bool d3d9_cg_load_program(cg_renderchain_t *chain,
             (fragment_profile == CG_PROFILE_UNKNOWN)
          || (vertex_profile   == CG_PROFILE_UNKNOWN))
    {
-      RARCH_ERR("[D3D9 Cg] Invalid profile type.\n");
+      RARCH_ERR("Invalid profile type\n");
       goto error;
    }
 
-   RARCH_LOG("[D3D9 Cg] Vertex profile: %s.\n",
+   RARCH_LOG("[D3D9 Cg]: Vertex profile: %s\n",
          cgGetProfileString(vertex_profile));
-   RARCH_LOG("[D3D9 Cg] Fragment profile: %s.\n",
+   RARCH_LOG("[D3D9 Cg]: Fragment profile: %s\n",
          cgGetProfileString(fragment_profile));
 
    if (path_is_file && !string_is_empty(prog))
@@ -514,11 +513,11 @@ static bool d3d9_cg_load_program(cg_renderchain_t *chain,
    return true;
 
 error:
-   RARCH_ERR("[D3D9 Cg] Cg error: %s.\n", cgGetErrorString(cgGetError()));
+   RARCH_ERR("CG error: %s\n", cgGetErrorString(cgGetError()));
    if (listing_f)
-      RARCH_ERR("[D3D9 Cg] Fragment: %s.\n", listing_f);
+      RARCH_ERR("Fragment:\n%s\n", listing_f);
    else if (listing_v)
-      RARCH_ERR("[D3D9 Cg] Vertex: %s.\n", listing_v);
+      RARCH_ERR("Vertex:\n%s\n", listing_v);
    free(listing_f);
    free(listing_v);
 
@@ -604,7 +603,7 @@ static bool d3d9_cg_renderchain_init_shader_fvf(
 
    for (count = 0; count < MAXD3DDECLLENGTH; count++)
    {
-      if (memcmp(&decl_end, &decl[count], sizeof(decl_end)) == 0)
+      if (string_is_equal_fast(&decl_end, &decl[count], sizeof(decl_end)))
          break;
    }
 
@@ -641,7 +640,7 @@ static bool d3d9_cg_renderchain_init_shader_fvf(
       decl[index]     = element;
       indices[index]  = true;
 
-      RARCH_LOG("[D3D9 Cg] FVF POSITION semantic found.\n");
+      RARCH_LOG("[D3D9 Cg]: FVF POSITION semantic found.\n");
    }
 
    param = d3d9_cg_find_param_from_semantic(cgGetFirstParameter(vprg, CG_PROGRAM), "TEXCOORD");
@@ -657,7 +656,7 @@ static bool d3d9_cg_renderchain_init_shader_fvf(
       decl[index]     = tex_coord0;
       indices[index]  = true;
 
-      RARCH_LOG("[D3D9 Cg] FVF TEXCOORD0 semantic found.\n");
+      RARCH_LOG("[D3D9 Cg]: FVF TEXCOORD0 semantic found.\n");
    }
 
    param = d3d9_cg_find_param_from_semantic(cgGetFirstParameter(vprg, CG_PROGRAM), "TEXCOORD1");
@@ -670,7 +669,7 @@ static bool d3d9_cg_renderchain_init_shader_fvf(
       decl[index]     = tex_coord1;
       indices[index]  = true;
 
-      RARCH_LOG("[D3D9 Cg] FVF TEXCOORD1 semantic found.\n");
+      RARCH_LOG("[D3D9 Cg]: FVF TEXCOORD1 semantic found.\n");
    }
 
    param = d3d9_cg_find_param_from_semantic(cgGetFirstParameter(vprg, CG_PROGRAM), "COLOR");
@@ -685,7 +684,7 @@ static bool d3d9_cg_renderchain_init_shader_fvf(
       decl[index]     = color;
       indices[index]  = true;
 
-      RARCH_LOG("[D3D9 Cg] FVF COLOR0 semantic found.\n");
+      RARCH_LOG("[D3D9 Cg]: FVF COLOR0 semantic found.\n");
    }
 
    /* Stream {0, 1, 2, 3} might be already taken. Find first vacant stream. */
@@ -1048,7 +1047,7 @@ static bool d3d9_cg_renderchain_init_shader(d3d9_video_t *d3d,
 
    if (!cgCtx)
    {
-      RARCH_ERR("[D3D9 Cg] Failed to create Cg context.\n");
+      RARCH_ERR("Failed to create Cg context.\n");
       return false;
    }
 
@@ -1136,7 +1135,7 @@ static bool d3d9_cg_renderchain_init(
       return false;
    if (!d3d9_cg_renderchain_init_shader(d3d, chain))
    {
-      RARCH_ERR("[D3D9 Cg] Failed to initialize shader subsystem.\n");
+      RARCH_ERR("[D3D9 Cg]: Failed to initialize shader subsystem.\n");
       return false;
    }
 
@@ -1597,7 +1596,7 @@ static bool d3d9_cg_init_chain(d3d9_video_t *d3d,
    if (!renderchain_d3d_cg_init_first(GFX_CTX_DIRECT3D9_API,
             &d3d->renderchain_data))
    {
-      RARCH_ERR("[D3D9 Cg] Renderchain could not be initialized.\n");
+      RARCH_ERR("[D3D9]: Renderchain could not be initialized.\n");
       return false;
    }
 
@@ -1611,7 +1610,7 @@ static bool d3d9_cg_init_chain(d3d9_video_t *d3d,
             rgb32)
       )
    {
-      RARCH_ERR("[D3D9 Cg] Failed to init render chain.\n");
+      RARCH_ERR("[D3D9]: Failed to init render chain.\n");
       return false;
    }
 
@@ -1639,7 +1638,7 @@ static bool d3d9_cg_init_chain(d3d9_video_t *d3d,
       if (!d3d9_cg_renderchain_add_pass(
                d3d->renderchain_data, &link_info))
       {
-         RARCH_ERR("[D3D9 Cg] Failed to add pass.\n");
+         RARCH_ERR("[D3D9]: Failed to add pass.\n");
          return false;
       }
       d3d9_log_info(&link_info);
@@ -1659,7 +1658,7 @@ static bool d3d9_cg_init_chain(d3d9_video_t *d3d,
                   ? video_smooth
                   : (d3d->shader.lut[i].filter == RARCH_FILTER_LINEAR)))
          {
-            RARCH_ERR("[D3D9 Cg] Failed to init LUTs.\n");
+            RARCH_ERR("[D3D9]: Failed to init LUTs.\n");
             return false;
          }
       }
@@ -1698,7 +1697,7 @@ static bool d3d9_cg_initialize(d3d9_video_t *d3d, const video_info_t *info)
 
          ret = d3d9_cg_init_base(d3d, info);
          if (ret)
-            RARCH_LOG("[D3D9 Cg] Recovered from dead state.\n");
+            RARCH_LOG("[D3D9]: Recovered from dead state.\n");
       }
 
 #ifdef HAVE_MENU
@@ -1711,7 +1710,7 @@ static bool d3d9_cg_initialize(d3d9_video_t *d3d, const video_info_t *info)
 
    if (!d3d9_cg_init_chain(d3d, info->input_scale, info->rgb32))
    {
-      RARCH_ERR("[D3D9 Cg] Failed to initialize render chain.\n");
+      RARCH_ERR("[D3D9]: Failed to initialize render chain.\n");
       return false;
    }
 
@@ -1781,7 +1780,7 @@ static bool d3d9_cg_restore(d3d9_video_t *d3d)
 
    if (!d3d9_cg_initialize(d3d, &d3d->video_info))
    {
-      RARCH_ERR("[D3D9 Cg] Restore error.\n");
+      RARCH_ERR("[D3D9]: Restore error.\n");
       return false;
    }
 
@@ -1812,12 +1811,12 @@ static bool d3d9_cg_set_shader(void *data,
       case RARCH_SHADER_NONE:
          break;
       default:
-         RARCH_WARN("[D3D9] Only Cg shaders are supported. Falling back to stock.\n");
+         RARCH_WARN("[D3D9]: Only Cg shaders are supported. Falling back to stock.\n");
    }
 
    if (!d3d9_process_shader(d3d) || !d3d9_cg_restore(d3d))
    {
-      RARCH_ERR("[D3D9 Cg] Failed to set shader.\n");
+      RARCH_ERR("[D3D9]: Failed to set shader.\n");
       return false;
    }
 
@@ -1941,8 +1940,8 @@ static bool d3d9_cg_init_internal(d3d9_video_t *d3d,
             LOWORD(ident.DriverVersion.HighPart),
             HIWORD(ident.DriverVersion.LowPart),
             LOWORD(ident.DriverVersion.LowPart));
-      RARCH_LOG("[D3D9 Cg] Using GPU: \"%s\".\n", ident.Description);
-      RARCH_LOG("[D3D9 Cg] GPU API Version: %s.\n", version_str);
+      RARCH_LOG("[D3D9]: Using GPU: \"%s\".\n", ident.Description);
+      RARCH_LOG("[D3D9]: GPU API Version: %s\n", version_str);
       video_driver_set_gpu_api_version_string(version_str);
    }
 
@@ -1978,7 +1977,7 @@ static void *d3d9_cg_init(const video_info_t *info,
 
    if (!d3d9_cg_init_internal(d3d, info, input, input_data))
    {
-      RARCH_ERR("[D3D9 Cg] Failed to init D3D.\n");
+      RARCH_ERR("[D3D9]: Failed to init D3D.\n");
       free(d3d);
       return NULL;
    }
@@ -2063,7 +2062,7 @@ static bool d3d9_cg_frame(void *data, const void *frame,
 
       if (!d3d9_cg_restore(d3d))
       {
-         RARCH_ERR("[D3D9 Cg] Failed to restore.\n");
+         RARCH_ERR("[D3D9]: Failed to restore.\n");
          return false;
       }
    }

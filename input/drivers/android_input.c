@@ -1046,15 +1046,270 @@ static void handle_hotplug(android_input_t *android,
    char name_buf[256];
    int vendorId             = 0;
    int productId            = 0;
+   const char *device_model     = android->device_model;
 
    device_name[0] = name_buf[0] = '\0';
 
    if (!engine_lookup_name(device_name, &vendorId,
             &productId, sizeof(device_name), id))
       return;
+	  
+   /* FIXME - per-device hacks for NVidia Shield, Xperia Play and
+    * similar devices
+    *
+    * These hacks depend on autoconf, but can work with user
+    * created autoconfs properly
+    */
+
+   /* NVIDIA Shield Console
+    * This is the most complicated example, the built-in controller
+    * has an extra button that can't be used and a remote.
+    *
+    * We map the remote for navigation and overwrite whenever a
+    * real controller is connected.
+    * Also group the NVIDIA button on the controller with the
+    * main controller inputs so it's usable. It's mapped to
+    * menu by default
+    *
+    * The NVIDIA button is identified as "Virtual" device when first
+    * pressed. CEC remote input is also identified as "Virtual" device.
+    * If a virtual device is detected before a controller then it will
+    * be assigned to port 0 as "SHIELD Virtual Controller". When a real
+    * controller is detected it will overwrite the virtual controller
+    * and be grouped with the NVIDIA button of the virtual device.
+    *
+    */
+	  
+   if (strstr(device_model, "SHIELD Android TV") && (
+      strstr(device_name, "Virtual") ||
+      strstr(device_name, "NVIDIA Corporation NVIDIA Controller v01.0")))
+   {
+      /* only use the hack if the device is one of the built-in devices */
+      RARCH_LOG("Special Device Detected: %s\n", device_model);
+      {
+#if 0
+         RARCH_LOG("- Pads Mapped: %d\n- Device Name: %s\n- IDS: %d, %d, %d",
+               android->pads_connected, device_name, id, pad_id1, pad_id2);
+#endif
+         /* Remove the remote or virtual controller device if it is mapped */
+         if (strstr(android->pad_states[0].name,"SHIELD Remote") ||
+            strstr(android->pad_states[0].name,"SHIELD Virtual Controller"))
+         {
+            pad_id1 = -1;
+            pad_id2 = -1;
+            android->pads_connected = 0;
+            *port = 0;
+            strlcpy(name_buf, device_name, sizeof(name_buf));
+         }
+
+         /* if the actual controller has not been mapped yet,
+          * then configure Virtual device for now */
+         if (strstr(device_name, "Virtual") && android->pads_connected==0)
+            strlcpy (name_buf, "SHIELD Virtual Controller", sizeof(name_buf));
+         else
+            strlcpy (name_buf, "NVIDIA SHIELD Controller", sizeof(name_buf));
+
+         /* apply the hack only for the first controller
+          * store the id for later use
+         */
+         if (strstr(device_name, "NVIDIA Corporation NVIDIA Controller v01.0")
+               && android->pads_connected==0)
+            pad_id1 = id;
+         else if (strstr(device_name, "Virtual") && pad_id1 != -1)
+         {
+            id = pad_id1;
+            return;
+         }
+      }
+   }
+
+   else if (strstr(device_model, "SHIELD") && (
+      strstr(device_name, "Virtual") || strstr(device_name, "gpio") ||
+      strstr(device_name, "NVIDIA Corporation NVIDIA Controller v01.01") ||
+      strstr(device_name, "NVIDIA Corporation NVIDIA Controller v01.02")))
+   {
+      /* only use the hack if the device is one of the built-in devices */
+      RARCH_LOG("Special Device Detected: %s\n", device_model);
+      {
+         if ( pad_id1 < 0 )
+            pad_id1 = id;
+         else
+            pad_id2 = id;
+
+         if ( pad_id2 > 0)
+            return;
+         strlcpy (name_buf, "NVIDIA SHIELD Portable", sizeof(name_buf));
+      }
+   }
+
+   else if (strstr(device_model, "SHIELD") && (
+      strstr(device_name, "Virtual") || strstr(device_name, "gpio") ||
+      strstr(device_name, "NVIDIA Corporation NVIDIA Controller v01.03")))
+   {
+      /* only use the hack if the device is one of the built-in devices */
+      RARCH_LOG("Special Device Detected: %s\n", device_model);
+      {
+         if (strstr(device_name, "NVIDIA Corporation NVIDIA Controller v01.03")
+             && android->pads_connected==0)
+            pad_id1 = id;
+         else if (strstr(device_name, "Virtual") || strstr(device_name, "gpio"))
+         {
+            id = pad_id1;
+            return;
+         }
+         strlcpy (name_buf, "NVIDIA SHIELD Gamepad", sizeof(name_buf));
+      }
+   }
+
+   /* Other ATV Devices
+    * Add other common ATV devices that will follow the Android
+    * Gaempad convention as "Android Gamepad"
+    */
+    /* to-do: add DS4 on Bravia ATV */
+   else if (strstr(device_name, "NVIDIA"))
+      strlcpy (name_buf, "Android Gamepad", sizeof(name_buf));
+
+   /* GPD XD
+    * This is a simple hack, basically groups the "back"
+    * button with the rest of the gamepad
+    */
+   else if (strstr(device_model, "XD") && (
+      strstr(device_name, "Virtual") || strstr(device_name, "rk29-keypad") ||
+      strstr(device_name,"Playstation3") || strstr(device_name,"XBOX")))
+   {
+      /* only use the hack if the device is one of the built-in devices */
+      RARCH_LOG("Special Device Detected: %s\n", device_model);
+      {
+         if ( pad_id1 < 0 )
+            pad_id1 = id;
+         else
+            pad_id2 = id;
+
+         if ( pad_id2 > 0)
+            return;
+
+         strlcpy (name_buf, "GPD XD", sizeof(name_buf));
+         *port = 0;
+      }
+   }
+
+   /* XPERIA Play
+    * This device is composed of two hid devices
+    * We make it look like one device
+    */
+   else if (
+            (
+               string_starts_with_size(device_model, "R800", STRLEN_CONST("R800")) ||
+               strstr(device_model, "Xperia Play") ||
+               strstr(device_model, "Play") ||
+               strstr(device_model, "SO-01D")
+            ) || (
+               strstr(device_name, "keypad-game-zeus") ||
+               strstr(device_name, "keypad-zeus") ||
+               strstr(device_name, "Android Gamepad")
+            )
+         )
+   {
+      /* only use the hack if the device is one of the built-in devices */
+      RARCH_LOG("Special Device Detected: %s\n", device_model);
+      {
+         if ( pad_id1 < 0 )
+            pad_id1 = id;
+         else
+            pad_id2 = id;
+
+         if ( pad_id2 > 0)
+            return;
+
+         strlcpy (name_buf, "XPERIA Play", sizeof(name_buf));
+         *port = 0;
+      }
+   }
+
+   /* ARCHOS Gamepad
+    * This device is composed of two hid devices
+    * We make it look like one device
+    */
+   else if (strstr(device_model, "ARCHOS GAMEPAD") && (
+      strstr(device_name, "joy_key") || strstr(device_name, "joystick")))
+   {
+      /* only use the hack if the device is one of the built-in devices */
+      RARCH_LOG("ARCHOS GAMEPAD Detected: %s\n", device_model);
+      {
+         if ( pad_id1 < 0 )
+            pad_id1 = id;
+         else
+            pad_id2 = id;
+
+         if ( pad_id2 > 0)
+            return;
+
+         strlcpy (name_buf, "ARCHOS GamePad", sizeof(name_buf));
+         *port = 0;
+      }
+   }
+
+   /* Amazon Fire TV & Fire stick */
+   else if (
+             string_starts_with_size(device_model, "AFT", STRLEN_CONST("AFT")) &&
+             (
+              strstr(device_model, "AFTB") || 
+              strstr(device_model, "AFTT") ||
+              strstr(device_model, "AFTS") || 
+              strstr(device_model, "AFTM") ||
+              strstr(device_model, "AFTRS")
+             )
+         )
+   {
+      RARCH_LOG("Special Device Detected: %s\n", device_model);
+      {
+         /* always map remote to port #0 */
+         if (strstr(device_name, "Amazon Fire TV Remote"))
+         {
+            android->pads_connected = 0;
+            *port = 0;
+            strlcpy(name_buf, device_name, sizeof(name_buf));
+         }
+         /* remove the remote when a gamepad enters */
+         else if (strstr(android->pad_states[0].name,"Amazon Fire TV Remote"))
+         {
+            android->pads_connected = 0;
+            *port = 0;
+            strlcpy(name_buf, device_name, sizeof(name_buf));
+         }
+         else
+            strlcpy(name_buf, device_name, sizeof(name_buf));
+      }
+   }
+
+   /* Other uncommon devices
+    * These are mostly remote control type devices, bind them always to port 0
+    * And overwrite the binding whenever a controller button is pressed
+    */
+   else if (strstr(device_name, "Amazon Fire TV Remote")
+         || strstr(device_name, "Nexus Remote")
+         || strstr(device_name, "SHIELD Remote"))
+   {
+      android->pads_connected = 0;
+      *port = 0;
+      strlcpy(name_buf, device_name, sizeof(name_buf));
+   }
+
+   else if (strstr(device_name, "iControlPad-"))
+      strlcpy(name_buf, "iControlPad HID Joystick profile", sizeof(name_buf));
+
+   else if (strstr(device_name, "TTT THT Arcade console 2P USB Play"))
+   {
+      if (*port == 0)
+         strlcpy(name_buf, "TTT THT Arcade (User 1)", sizeof(name_buf));
+      else if (*port == 1)
+         strlcpy(name_buf, "TTT THT Arcade (User 2)", sizeof(name_buf));
+   }
+   else if (strstr(device_name, "MOGA"))
+      strlcpy(name_buf, "Moga IME", sizeof(name_buf));
 
    /* Se for teclado */
-   if ((source & AINPUT_SOURCE_KEYBOARD) && !(source & AINPUT_SOURCE_JOYSTICK))
+   else if ((source & AINPUT_SOURCE_KEYBOARD) && !(source & AINPUT_SOURCE_JOYSTICK))
    {
       if (is_configured_as_physical_keyboard(vendorId, productId, device_name) && kbd_num < MAX_NUM_KEYBOARDS)
       {
@@ -1065,8 +1320,15 @@ static void handle_hotplug(android_input_t *android,
    }
 
    /* Caso não seja teclado, usa o próprio nome do dispositivo */
-   if (!string_is_empty(device_name))
+   else if (!string_is_empty(device_name))
       strlcpy(name_buf, device_name, sizeof(name_buf));
+  
+   if (strstr(android_app->current_ime, "net.obsidianx.android.mogaime"))
+      strlcpy(name_buf, android_app->current_ime, sizeof(name_buf));
+   else if (strstr(android_app->current_ime, "com.ccpcreations.android.WiiUseAndroid"))
+      strlcpy(name_buf, android_app->current_ime, sizeof(name_buf));
+   else if (strstr(android_app->current_ime, "com.hexad.bluezime"))
+      strlcpy(name_buf, android_app->current_ime, sizeof(name_buf));
 
    if (*port < 0)
       *port = android->pads_connected;

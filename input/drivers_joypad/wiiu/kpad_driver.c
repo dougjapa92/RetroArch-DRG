@@ -31,10 +31,12 @@ static void kpad_deregister(unsigned channel);
 
 static int to_wiimote_channel(unsigned pad)
 {
-   int i;
+   unsigned i;
+
    for (i = 0; i < WIIU_WIIMOTE_CHANNELS; i++)
       if (joypad_state.kpad.channel_slot_map[i] == pad)
          return i;
+
    return -1;
 }
 
@@ -118,9 +120,9 @@ static int16_t kpad_state(
       const struct retro_keybind *binds,
       unsigned port)
 {
-   int i;
-   int16_t ret       = 0;
-   uint16_t port_idx = joypad_info->joy_idx;
+   unsigned i;
+   int16_t ret                          = 0;
+   uint16_t port_idx                    = joypad_info->joy_idx;
 
    for (i = 0; i < RARCH_FIRST_CUSTOM_BIND; i++)
    {
@@ -130,11 +132,11 @@ static int16_t kpad_state(
       const uint32_t joyaxis = (binds[i].joyaxis != AXIS_NONE)
          ? binds[i].joyaxis : joypad_info->auto_binds[i].joyaxis;
       if (
-               (uint16_t)joykey != NO_BTN
+               (uint16_t)joykey != NO_BTN 
             && kpad_button(port_idx, (uint16_t)joykey))
          ret |= ( 1 << i);
       else if (joyaxis != AXIS_NONE &&
-            ((float)abs(kpad_axis(port_idx, joyaxis))
+            ((float)abs(kpad_axis(port_idx, joyaxis)) 
              / 0x8000) > joypad_info->axis_threshold)
          ret |= (1 << i);
    }
@@ -159,7 +161,7 @@ static void kpad_register(unsigned channel, uint8_t device_type)
 
       if (slot < 0)
       {
-         RARCH_ERR("[kpad] Couldn't get a slot for this remote.\n");
+         RARCH_ERR("Couldn't get a slot for this remote.\n");
          return;
       }
 
@@ -272,7 +274,7 @@ static const char *kpad_name(unsigned pad)
       case WIIMOTE_TYPE_NONE:
       default:
 #ifdef DEBUG
-         RARCH_LOG("[kpad] Unknown pad type %d\n", joypad_state.kpad.wiimotes[pad].type);
+         RARCH_LOG("[kpad]: Unknown pad type %d\n", joypad_state.kpad.wiimotes[pad].type);
 #endif
          break;
    }

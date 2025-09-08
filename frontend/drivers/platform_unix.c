@@ -163,14 +163,14 @@ int system_property_get(const char *command,
    FILE *pipe;
    char buffer[BUFSIZ];
    char cmd[NAME_MAX_LENGTH];
-   char *pos                  = NULL;
-   size_t __len               = 0;
-   size_t _len                = strlcpy(cmd, command, sizeof(cmd));
+   int length                   = 0;
+   char *curpos                 = NULL;
+   size_t buf_pos               = strlcpy(cmd, command, sizeof(cmd));
 
-   cmd[  _len]                = ' ';
-   cmd[++_len]                = '\0';
+   cmd[  buf_pos]               = ' ';
+   cmd[++buf_pos]               = '\0';
 
-   strlcpy(cmd + _len, args, sizeof(cmd) - _len);
+   strlcpy(cmd + buf_pos, args, sizeof(cmd) - buf_pos);
 
    if (!(pipe = popen(cmd, "r")))
    {
@@ -178,24 +178,26 @@ int system_property_get(const char *command,
       return 0;
    }
 
-   pos = value;
+   curpos = value;
 
    while (!feof(pipe))
    {
       if (fgets(buffer, sizeof(buffer), pipe))
       {
-         size_t _len = strlen(buffer);
+         size_t curlen = strlen(buffer);
 
-         memcpy(pos, buffer, _len);
+         memcpy(curpos, buffer, curlen);
 
-         pos   += _len;
-         __len += _len;
+         curpos    += curlen;
+         length    += curlen;
       }
    }
 
-   *pos = '\0';
+   *curpos = '\0';
+
    pclose(pipe);
-   return __len;
+
+   return length;
 }
 
 #ifdef ANDROID
@@ -433,7 +435,7 @@ static struct android_app* android_app_create(ANativeActivity* activity,
 
    if (!android_app)
    {
-      RARCH_ERR("Failed to initialize android_app.\n");
+      RARCH_ERR("Failed to initialize android_app\n");
       return NULL;
    }
    android_app->activity = activity;
@@ -498,7 +500,7 @@ void ANativeActivity_onCreate(ANativeActivity* activity,
          | AWINDOW_FLAG_FULLSCREEN, 0);
 
    if (pthread_key_create(&thread_key, jni_thread_destruct))
-      RARCH_ERR("Error initializing pthread_key.\n");
+      RARCH_ERR("Error initializing pthread_key\n");
 
    activity->instance = android_app_create(activity,
          savedState, savedStateSize);
@@ -700,6 +702,7 @@ static void check_proc_acpi_battery(const char * node, bool * have_battery,
       else if (string_is_equal(key, "remaining capacity"))
       {
          char *endptr = NULL;
+
          if (endptr && *endptr == ' ')
             remaining = (int)strtol(val, &endptr, 10);
       }
@@ -1377,7 +1380,7 @@ static void frontend_unix_get_env(int *argc,
       (*env)->ReleaseStringUTFChars(env, jstr, argv);
 
       __android_log_print(ANDROID_LOG_INFO,
-         "RetroArch", "[ENV] Config file: \"%s\".\n", config_path);
+         "RetroArch", "[ENV]: config file: [%s]\n", config_path);
       if (args && *config_path)
          args->config_path = config_path;
    }
@@ -1395,7 +1398,7 @@ static void frontend_unix_get_env(int *argc,
       (*env)->ReleaseStringUTFChars(env, jstr, argv);
 
       __android_log_print(ANDROID_LOG_INFO,
-         "RetroArch", "[ENV] Current IME: \"%s\".\n", android_app->current_ime);
+         "RetroArch", "[ENV]: current IME: [%s]\n", android_app->current_ime);
    }
 
    CALL_OBJ_METHOD_PARAM(env, jstr, obj, android_app->getStringExtra,
@@ -1409,7 +1412,7 @@ static void frontend_unix_get_env(int *argc,
       (*env)->ReleaseStringUTFChars(env, jstr, argv);
 
       __android_log_print(ANDROID_LOG_INFO,
-         "RetroArch", "[ENV] Used: \"%s\".\n", used ? "true" : "false");
+         "RetroArch", "[ENV]: used: [%s].\n", used ? "true" : "false");
    }
 
    /* LIBRETRO. */
@@ -1427,7 +1430,7 @@ static void frontend_unix_get_env(int *argc,
       (*env)->ReleaseStringUTFChars(env, jstr, argv);
 
       __android_log_print(ANDROID_LOG_INFO,
-         "RetroArch", "[ENV] Libretro path: \"%s\".\n", core_path);
+         "RetroArch", "[ENV]: libretro path: [%s]\n", core_path);
       if (args && *core_path)
          args->libretro_path = core_path;
    }
@@ -1450,7 +1453,7 @@ static void frontend_unix_get_env(int *argc,
       if (!string_is_empty(path))
       {
          __android_log_print(ANDROID_LOG_INFO,
-            "RetroArch", "[ENV] Auto-start game \"%s\".\n", path);
+            "RetroArch", "[ENV]: auto-start game [%s]\n", path);
          if (args && *path)
             args->content_path = path;
       }
@@ -1475,7 +1478,7 @@ static void frontend_unix_get_env(int *argc,
       if (!string_is_empty(internal_storage_path))
       {
          __android_log_print(ANDROID_LOG_INFO,
-            "RetroArch", "[ENV] Android internal storage location: \"%s\".\n",
+            "RetroArch", "[ENV]: android internal storage location: [%s]\n",
             internal_storage_path);
       }
    }
@@ -1497,7 +1500,7 @@ static void frontend_unix_get_env(int *argc,
       if (!string_is_empty(apk_dir))
       {
          __android_log_print(ANDROID_LOG_INFO,
-            "RetroArch", "[ENV] APK location \"%s\".\n", apk_dir);
+            "RetroArch", "[ENV]: APK location [%s]\n", apk_dir);
       }
    }
 
@@ -1519,7 +1522,7 @@ static void frontend_unix_get_env(int *argc,
       if (!string_is_empty(internal_storage_app_path))
       {
          __android_log_print(ANDROID_LOG_INFO,
-            "RetroArch", "[ENV] Android external files location \"%s\".\n",
+            "RetroArch", "[ENV]: android external files location [%s]\n",
             internal_storage_app_path);
       }
    }
@@ -1539,7 +1542,7 @@ static void frontend_unix_get_env(int *argc,
       (*env)->ReleaseStringUTFChars(env, jstr, argv);
 
       __android_log_print(ANDROID_LOG_INFO,
-         "RetroArch", "[ENV] App dir: \"%s\".\n", app_dir);
+         "RetroArch", "[ENV]: app dir: [%s]\n", app_dir);
 
       /* set paths depending on the ability to write
        * to internal_storage_path */
@@ -1561,7 +1564,7 @@ static void frontend_unix_get_env(int *argc,
       if (!string_is_empty(app_dir))
       {
          __android_log_print(ANDROID_LOG_INFO,
-            "RetroArch", "[ENV] Application location: \"%s\".\n", app_dir);
+            "RetroArch", "[ENV]: application location: [%s]\n", app_dir);
          if (args && *app_dir)
          {
 
@@ -1666,16 +1669,16 @@ static void frontend_unix_get_env(int *argc,
                   sizeof(g_defaults.dirs[DEFAULT_DIR_CACHE]));
 
             __android_log_print(ANDROID_LOG_INFO,
-               "RetroArch", "[ENV] Default savefile folder: \"%s\".",
+               "RetroArch", "[ENV]: default savefile folder: [%s]",
                g_defaults.dirs[DEFAULT_DIR_SRAM]);
             __android_log_print(ANDROID_LOG_INFO,
-               "RetroArch", "[ENV] Default savestate folder: \"%s\".",
+               "RetroArch", "[ENV]: default savestate folder: [%s]",
                g_defaults.dirs[DEFAULT_DIR_SAVESTATE]);
             __android_log_print(ANDROID_LOG_INFO,
-               "RetroArch", "[ENV] Default system folder: \"%s\".",
+               "RetroArch", "[ENV]: default system folder: [%s]",
                g_defaults.dirs[DEFAULT_DIR_SYSTEM]);
             __android_log_print(ANDROID_LOG_INFO,
-               "RetroArch", "[ENV] Default screenshot folder: \"%s\".",
+               "RetroArch", "[ENV]: default screenshot folder: [%s]",
                g_defaults.dirs[DEFAULT_DIR_SCREENSHOT]);
          }
       }
@@ -1993,7 +1996,7 @@ static bool frontend_unix_set_gamemode(bool on)
    if (gamemode_status < 0)
    {
       if (on)
-         RARCH_WARN("[GameMode] GameMode cannot be enabled on this system (\"%s.\") "
+         RARCH_WARN("[GameMode]: GameMode cannot be enabled on this system (\"%s.\") "
                "https://github.com/FeralInteractive/gamemode needs to be installed.\n",
                gamemode_error_string());
 
@@ -2007,7 +2010,7 @@ static bool frontend_unix_set_gamemode(bool on)
    {
       if (gamemode_request_start() != 0)
       {
-         RARCH_WARN("[GameMode] Failed to enter GameMode: %s.\n", gamemode_error_string());
+         RARCH_WARN("[GameMode]: Failed to enter GameMode: %s.\n", gamemode_error_string());
          return false;
       }
    }
@@ -2015,7 +2018,7 @@ static bool frontend_unix_set_gamemode(bool on)
    {
       if (gamemode_request_end() != 0)
       {
-         RARCH_WARN("[GameMode] Failed to exit GameMode: %s.\n", gamemode_error_string());
+         RARCH_WARN("[GameMode]: Failed to exit GameMode: %s.\n", gamemode_error_string());
          return false;
       }
    }
@@ -2631,7 +2634,7 @@ static void frontend_unix_watch_path_for_changes(struct string_list *list, int f
 
    if (uname(&buffer) != 0)
    {
-      RARCH_WARN("[watch_path_for_changes] Failed to get current kernel version.\n");
+      RARCH_WARN("watch_path_for_changes: Failed to get current kernel version.\n");
       return;
    }
 
@@ -2641,21 +2644,21 @@ static void frontend_unix_watch_path_for_changes(struct string_list *list, int f
    /* check if we are actually running on a high enough kernel version as well */
    if (major < 2)
    {
-      RARCH_WARN("[watch_path_for_changes] inotify unsupported on this kernel version (%d.%d.%u).\n", major, minor, krel);
+      RARCH_WARN("watch_path_for_changes: inotify unsupported on this kernel version (%d.%d.%u).\n", major, minor, krel);
       return;
    }
    else if (major == 2)
    {
       if (minor < 6)
       {
-         RARCH_WARN("[watch_path_for_changes] inotify unsupported on this kernel version (%d.%d.%u).\n", major, minor, krel);
+         RARCH_WARN("watch_path_for_changes: inotify unsupported on this kernel version (%d.%d.%u).\n", major, minor, krel);
          return;
       }
       else if (minor == 6)
       {
          if (krel < 13)
          {
-            RARCH_WARN("[watch_path_for_changes] inotify unsupported on this kernel version (%d.%d.%u).\n", major, minor, krel);
+            RARCH_WARN("watch_path_for_changes: inotify unsupported on this kernel version (%d.%d.%u).\n", major, minor, krel);
             return;
          }
          else
@@ -2677,13 +2680,13 @@ static void frontend_unix_watch_path_for_changes(struct string_list *list, int f
 
    if (fd < 0)
    {
-      RARCH_WARN("[watch_path_for_changes] Could not initialize inotify.\n");
+      RARCH_WARN("watch_path_for_changes: Could not initialize inotify.\n");
       return;
    }
 
    if (fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK))
    {
-      RARCH_WARN("[watch_path_for_changes] Could not set socket to non-blocking.\n");
+      RARCH_WARN("watch_path_for_changes: Could not set socket to non-blocking.\n");
       return;
    }
 

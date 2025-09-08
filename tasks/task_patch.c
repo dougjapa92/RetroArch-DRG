@@ -308,13 +308,16 @@ static uint8_t ups_source_read(struct ups_data *data)
 
 static void ups_target_write(struct ups_data *data, uint8_t n)
 {
-   if (data->target_offset < data->target_length)
+
+   if (data && data->target_offset < data->target_length)
    {
       data->target_data[data->target_offset] = n;
       data->target_checksum =
          ~(encoding_crc32(~data->target_checksum, &n, 1));
    }
-   data->target_offset++;
+
+   if (data)
+      data->target_offset++;
 }
 
 static uint64_t ups_decode(struct ups_data *data)
@@ -396,8 +399,8 @@ static enum patch_error ups_apply_patch(
 
    while (data.patch_offset < data.patch_length - 12)
    {
-      unsigned __len = (unsigned)ups_decode(&data);
-      while (__len--)
+      unsigned length = (unsigned)ups_decode(&data);
+      while (length--)
          ups_target_write(&data, ups_source_read(&data));
 
       for (;;)
@@ -461,7 +464,7 @@ static enum patch_error ips_alloc_targetdata(
    for (;;)
    {
       uint32_t address;
-      size_t _len;
+      unsigned length;
 
       if (offset > patchlen - 3)
          break;
@@ -474,7 +477,7 @@ static enum patch_error ips_alloc_targetdata(
       {
          if (offset == patchlen)
          {
-            prov_alloc     = (uint8_t*)malloc((size_t) * targetlength);
+            prov_alloc     = (uint8_t*)malloc((size_t)*targetlength);
             if (!prov_alloc)
                return PATCH_TARGET_ALLOC_FAILED;
             free(*targetdata);
@@ -487,7 +490,7 @@ static enum patch_error ips_alloc_targetdata(
             size          |= patchdata[offset++] << 8;
             size          |= patchdata[offset++] << 0;
             *targetlength  = size;
-            prov_alloc     = (uint8_t*)malloc((size_t) * targetlength);
+            prov_alloc     = (uint8_t*)malloc((size_t)*targetlength);
 
             if (!prov_alloc)
                return PATCH_TARGET_ALLOC_FAILED;
@@ -500,15 +503,15 @@ static enum patch_error ips_alloc_targetdata(
       if (offset > patchlen - 2)
          break;
 
-      _len  = patchdata[offset++] << 8;
-      _len |= patchdata[offset++] << 0;
+      length  = patchdata[offset++] << 8;
+      length |= patchdata[offset++] << 0;
 
-      if (_len) /* Copy */
+      if (length) /* Copy */
       {
-         if (offset > patchlen - _len)
+         if (offset > patchlen - length)
             break;
 
-         while (_len--)
+         while (length--)
          {
             address++;
             offset++;
@@ -519,13 +522,13 @@ static enum patch_error ips_alloc_targetdata(
          if (offset > patchlen - 3)
             break;
 
-         _len  = patchdata[offset++] << 8;
-         _len |= patchdata[offset++] << 0;
+         length  = patchdata[offset++] << 8;
+         length |= patchdata[offset++] << 0;
 
-         if (_len == 0) /* Illegal */
+         if (length == 0) /* Illegal */
             break;
 
-         while (_len--)
+         while (length--)
             address++;
 
          offset++;
@@ -563,7 +566,7 @@ static enum patch_error ips_apply_patch(
    for (;;)
    {
       uint32_t address;
-      size_t _len;
+      unsigned length;
 
       if (offset > patchlen - 3)
          break;
@@ -578,21 +581,28 @@ static enum patch_error ips_apply_patch(
             return PATCH_SUCCESS;
 
          if (offset == patchlen - 3)
+         {
+#if 0
+            uint32_t size  = patchdata[offset++] << 16;
+            size          |= patchdata[offset++] << 8;
+            size          |= patchdata[offset++] << 0;
+#endif
             return PATCH_SUCCESS;
+         }
       }
 
       if (offset > patchlen - 2)
          break;
 
-      _len  = patchdata[offset++] << 8;
-      _len |= patchdata[offset++] << 0;
+      length  = patchdata[offset++] << 8;
+      length |= patchdata[offset++] << 0;
 
-      if (_len) /* Copy */
+      if (length) /* Copy */
       {
-         if (offset > patchlen - _len)
+         if (offset > patchlen - length)
             break;
 
-         while (_len--)
+         while (length--)
             (*targetdata)[address++] = patchdata[offset++];
       }
       else /* RLE */
@@ -600,13 +610,13 @@ static enum patch_error ips_apply_patch(
          if (offset > patchlen - 3)
             break;
 
-         _len  = patchdata[offset++] << 8;
-         _len |= patchdata[offset++] << 0;
+         length  = patchdata[offset++] << 8;
+         length |= patchdata[offset++] << 0;
 
-         if (_len == 0) /* Illegal */
+         if (length == 0) /* Illegal */
             break;
 
-         while (_len--)
+         while (length--)
             (*targetdata)[address++] = patchdata[offset];
 
          offset++;
@@ -689,7 +699,7 @@ static enum patch_error xdelta_apply_patch(
    } while (stream.avail_in);
 
    *targetdata = (uint8_t*)malloc(*targetlength);
-   switch (xd3_decode_memory(
+   switch (ret = xd3_decode_memory(
            patchdata, patchlen,
            sourcedata, sourcelength,
            *targetdata, targetlength, *targetlength, 0))
@@ -699,11 +709,11 @@ static enum patch_error xdelta_apply_patch(
       case ENOSPC:
          error_patch = PATCH_TARGET_ALLOC_FAILED;
          free(*targetdata);
-         break;
+         goto cleanup_stream;
       default:
          error_patch = PATCH_UNKNOWN;
          free(*targetdata);
-         break;
+         goto cleanup_stream;
    }
 
 cleanup_stream:
@@ -723,7 +733,7 @@ static bool apply_patch_content(uint8_t **buf,
    uint64_t target_size     = 0;
    uint8_t *patched_content = NULL;
 
-   RARCH_LOG("[Patch] Found \"%s\" file in \"%s\", attempting to patch...\n",
+   RARCH_LOG("Found %s file in \"%s\", attempting to patch ...\n",
          patch_desc, patch_path);
 
    if ((err = func((const uint8_t*)patch_data, patch_size, ret_buf,
@@ -746,7 +756,7 @@ static bool apply_patch_content(uint8_t **buf,
       }
    }
    else
-      RARCH_ERR("[Patch] %s %s: %s #%u\n",
+      RARCH_ERR("%s %s: %s #%u\n",
             msg_hash_to_str(MSG_FAILED_TO_PATCH),
             patch_desc,
             msg_hash_to_str(MSG_ERROR),
@@ -893,7 +903,7 @@ bool patch_content(
          + (unsigned)is_ups_pref
          + (unsigned)is_xdelta_pref > 1)
    {
-      RARCH_WARN("[Patch] %s\n",
+      RARCH_WARN("%s\n",
             msg_hash_to_str(MSG_SEVERAL_PATCHES_ARE_EXPLICITLY_DEFINED));
       return false;
    }

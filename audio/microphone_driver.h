@@ -150,7 +150,7 @@ struct retro_microphone
     *
     * @see microphone_state_flags
     */
-   int flags;
+   enum microphone_state_flags flags;
 
    /**
     * Samples that will be sent to the core.
@@ -190,7 +190,7 @@ struct retro_microphone
     * The ratio of the core-requested sample rate to the device's opened sample rate.
     * If this is (almost) equal to 1, then resampling will be skipped.
     */
-   double orig_ratio;
+   double original_ratio;
 };
 
 /**
@@ -525,7 +525,7 @@ typedef struct microphone_driver_state
     */
    retro_microphone_t microphone;
 
-   int flags;
+   enum microphone_driver_state_flags flags;
 
    enum resampler_quality resampler_quality;
 
@@ -645,11 +645,6 @@ extern microphone_driver_t microphone_wasapi;
  * The PipeWire-backed microphone driver.
  */
 extern microphone_driver_t microphone_pipewire;
-
-/**
- * The CoreAudio-backed microphone driver.
- */
-extern microphone_driver_t microphone_coreaudio;
 
 /**
  * @return Pointer to the global microphone driver state.

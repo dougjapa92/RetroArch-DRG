@@ -364,28 +364,25 @@ scond_t *scond_new(void)
     *
     * Note: We might could simplify this using vista+ condition variables,
     * but we wanted an XP compatible solution. */
-   if (!(cond->event = CreateEvent(NULL, FALSE, FALSE, NULL)))
-   {
-      free(cond);
-      return NULL;
-   }
+   if (!(cond->event      = CreateEvent(NULL, FALSE, FALSE, NULL)))
+      goto error;
    if (!(cond->hot_potato = CreateEvent(NULL, FALSE, FALSE, NULL)))
    {
       CloseHandle(cond->event);
-      free(cond);
-      return NULL;
+      goto error;
    }
 
    InitializeCriticalSection(&cond->cs);
 #else
    if (pthread_cond_init(&cond->cond, NULL) != 0)
-   {
-      free(cond);
-      return NULL;
-   }
+      goto error;
 #endif
 
    return cond;
+
+error:
+   free(cond);
+   return NULL;
 }
 
 void scond_free(scond_t *cond)
@@ -768,7 +765,6 @@ bool sthread_tls_delete(sthread_tls_t *tls)
 #ifdef USE_WIN32_THREADS
    return TlsFree(*tls) != 0;
 #else
-   /* TODO/FIXME - broken for UCRT */
    return pthread_key_delete(*tls) == 0;
 #endif
 }
@@ -778,7 +774,6 @@ void *sthread_tls_get(sthread_tls_t *tls)
 #ifdef USE_WIN32_THREADS
    return TlsGetValue(*tls);
 #else
-   /* TODO/FIXME - broken for UCRT */
    return pthread_getspecific(*tls);
 #endif
 }
@@ -788,7 +783,6 @@ bool sthread_tls_set(sthread_tls_t *tls, const void *data)
 #ifdef USE_WIN32_THREADS
    return TlsSetValue(*tls, (void*)data) != 0;
 #else
-   /* TODO/FIXME - broken for UCRT */
    return pthread_setspecific(*tls, data) == 0;
 #endif
 }

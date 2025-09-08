@@ -170,10 +170,6 @@ var Module = {
 			module.ENV["OPFS_MOUNT"] = "/home/web_user";
 		}
 	],
-	locateFile: function(path, prefix) {
-		if (path.endsWith(".js")) return typeof this.mainScriptUrlOrBlob == "string" ? this.mainScriptUrlOrBlob : URL.createObjectURL(this.mainScriptUrlOrBlob);
-		return path;
-	},
 	onRuntimeInitialized: function() {
 		appInitialized();
 	},
@@ -317,15 +313,19 @@ function startRetroArch() {
 
 	btnMenu.classList.remove("disabled");
 	btnMenu.addEventListener("click", function() {
-		Module.retroArchSend("MENU_TOGGLE");
+		Module._cmd_toggle_menu();
 	});
 
 	btnFullscreen.classList.remove("disabled");
 	btnFullscreen.addEventListener("click", function() {
-		Module.retroArchSend("FULLSCREEN_TOGGLE");
+		Module.requestFullscreen(false);
 	});
 
-	// refocus the canvas so that keyboard events work
+	// ensure the canvas is focused so that keyboard events work
+	Module.canvas.focus();
+	Module.canvas.addEventListener("pointerdown", function() {
+		Module.canvas.focus();
+	}, false);
 	menuBar.addEventListener("pointerdown", function() {
 		setTimeout(function() {
 			Module.canvas.focus();

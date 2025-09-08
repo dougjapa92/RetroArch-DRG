@@ -21,9 +21,6 @@
 #include <retro_inline.h>
 #include <gfx/math/matrix_4x4.h>
 
-#ifndef _XBOX
-#define WIN32_LEAN_AND_MEAN
-#endif
 #include <d3d9.h>
 
 #include "d3d_common.h"
@@ -122,17 +119,23 @@ static INLINE bool d3d9_vertex_declaration_new(
 {
    const D3DVERTEXELEMENT9   *vertex_elements = (const D3DVERTEXELEMENT9*)vertex_data;
    LPDIRECT3DVERTEXDECLARATION9 **vertex_decl = (LPDIRECT3DVERTEXDECLARATION9**)decl_data;
-   return (SUCCEEDED(IDirect3DDevice9_CreateVertexDeclaration(dev,
-               vertex_elements, (IDirect3DVertexDeclaration9**)vertex_decl)));
+
+   if (SUCCEEDED(IDirect3DDevice9_CreateVertexDeclaration(dev,
+               vertex_elements, (IDirect3DVertexDeclaration9**)vertex_decl)))
+      return true;
+
+   return false;
 }
 
 static INLINE bool d3d9_device_get_render_target(
       LPDIRECT3DDEVICE9 dev,
       unsigned idx, void **data)
 {
-   return (dev &&
+   if (dev &&
          SUCCEEDED(IDirect3DDevice9_GetRenderTarget(dev,
-               idx, (LPDIRECT3DSURFACE9*)data)));
+               idx, (LPDIRECT3DSURFACE9*)data)))
+      return true;
+   return false;
 }
 
 static INLINE bool d3d9_device_create_offscreen_plain_surface(
@@ -145,14 +148,14 @@ static INLINE bool d3d9_device_create_offscreen_plain_surface(
       void *data)
 {
 #ifndef _XBOX
-   return (SUCCEEDED(IDirect3DDevice9_CreateOffscreenPlainSurface(dev,
+   if (SUCCEEDED(IDirect3DDevice9_CreateOffscreenPlainSurface(dev,
                width, height,
                (D3DFORMAT)format, (D3DPOOL)pool,
                (LPDIRECT3DSURFACE9*)surf_data,
-               (HANDLE*)data)));
-#else
-   return false;
+               (HANDLE*)data)))
+      return true;
 #endif
+   return false;
 }
 
 bool d3d9_create_device(void *dev,
@@ -181,7 +184,7 @@ bool d3d9x_compile_shader(
       const char *pprofile,
       unsigned flags,
       void *ppshader,
-      void *pp_err_msgs,
+      void *pperrormsgs,
       void *ppconstanttable);
 
 bool d3d9x_compile_shader_from_file(
@@ -192,7 +195,7 @@ bool d3d9x_compile_shader_from_file(
       const char *pprofile,
       unsigned flags,
       void *ppshader,
-      void *pp_err_msgs,
+      void *pperrormsgs,
       void *ppconstanttable);
 
 void d3d9x_constant_table_set_float_array(LPDIRECT3DDEVICE9 dev,

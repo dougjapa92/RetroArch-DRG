@@ -23,7 +23,6 @@
 #include <formats/rjson.h>
 #include <formats/rjson_helpers.h>
 #include <retro_endianness.h>
-#include <streams/file_stream.h>
 
 #include "menu_driver.h"
 #include "menu_cbs.h"
@@ -598,20 +597,17 @@ explore_state_t *menu_explore_build_list(const char *directory_playlist,
             continue;
 
          rdb = &rdbs[rdb_num - 1];
-         if (rdb)
+         rdb->count++;
+         entry_crc32 = (uint32_t)strtoul(
+               (entry->crc32 ? entry->crc32 : ""), NULL, 16);
+         src.source = entry;
+         if (entry_crc32)
          {
-            rdb->count++;
-            entry_crc32 = (uint32_t)strtoul(
-                  (entry->crc32 ? entry->crc32 : ""), NULL, 16);
-            src.source = entry;
-            if (entry_crc32)
-            {
-               RHMAP_SET(rdb->playlist_crcs, entry_crc32, src);
-            }
-            else
-            {
-               RHMAP_SET_STR(rdb->playlist_names, entry->label, src);
-            }
+            RHMAP_SET(rdb->playlist_crcs, entry_crc32, src);
+         }
+         else
+         {
+            RHMAP_SET_STR(rdb->playlist_names, entry->label, src);
          }
          used_entries++;
       }
@@ -1085,7 +1081,7 @@ static void explore_action_saveview_complete(void *userdata, const char *name)
    if (!(file = intfstream_open_file(lvwpath,
          RETRO_VFS_FILE_ACCESS_WRITE, RETRO_VFS_FILE_ACCESS_HINT_NONE)))
    {
-      RARCH_ERR("[Explore] Failed to write json file %s.\n", lvwpath);
+      RARCH_ERR("[explore view] Failed to write json file %s.\n", lvwpath);
       return;
    }
 

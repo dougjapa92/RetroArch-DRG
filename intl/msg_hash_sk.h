@@ -520,6 +520,10 @@ MSG_HASH(
    "Uzamknúť Nainštalované Jadro"
    )
 MSG_HASH(
+   MENU_ENUM_SUBLABEL_CORE_LOCK,
+   "Zabráňte úprave aktuálne nainštalovaného jadra. Môže sa použiť na zabránenie nechceným aktualizáciám, keď obsah vyžaduje špecifickú verziu jadra (napr. Sady Arcade ROM)."
+   )
+MSG_HASH(
    MENU_ENUM_SUBLABEL_CORE_SET_STANDALONE_EXEMPT,
    "Zabrániť zobrazeniu tohto jadra na karte/ponuke 'Jadrá bez obsahu'. Platí iba v prípade, že je režim zobrazenia nastavený na 'Vlastný'."
    )
@@ -1321,6 +1325,10 @@ MSG_HASH(
    "Používateľ"
    )
 MSG_HASH(
+   MENU_ENUM_SUBLABEL_USER_SETTINGS,
+   "Zmeniť účet, užívateľské meno a nastavenie jazyka."
+   )
+MSG_HASH(
    MENU_ENUM_LABEL_VALUE_DIRECTORY_SETTINGS,
    "Priečinok"
    )
@@ -1379,6 +1387,10 @@ MSG_HASH(
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_INPUT_DRIVER,
    "Vstup"
+   )
+MSG_HASH(
+   MENU_ENUM_SUBLABEL_INPUT_DRIVER,
+   "Používaný vstupný ovládač. Niektoré ovládače videa vynucujú iný vstupný ovládač."
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_JOYPAD_DRIVER,
@@ -1638,8 +1650,20 @@ MSG_HASH(
    "Prepínanie medzi natívnym a ultraširokým super rozlíšením."
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_CRT_SWITCH_X_AXIS_CENTERING,
+   "Centrovanie X-Axis"
+   )
+MSG_HASH(
    MENU_ENUM_SUBLABEL_CRT_SWITCH_X_AXIS_CENTERING,
    "Ak obraz nie je správne vycentrovaný na displeji, môžete prenastaviť tieto možnosti."
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_CRT_SWITCH_PORCH_ADJUST,
+   "Porch Nastevenie"
+   )
+MSG_HASH(
+   MENU_ENUM_SUBLABEL_CRT_SWITCH_PORCH_ADJUST,
+   "Pomocou týchto možností môžete upravovať nastavenia verandy a meniť veľkosť obrázka."
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_CRT_SWITCH_HIRES_MENU,
@@ -1735,6 +1759,14 @@ MSG_HASH(
 
 /* Settings > Video > Fullscreen Mode */
 
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_VIDEO_FULLSCREEN,
+   "Spustiť v režime celej obrazovky"
+   )
+MSG_HASH(
+   MENU_ENUM_SUBLABEL_VIDEO_FULLSCREEN,
+   "Spustiť v režime na celú obrazovku. Môže byť zmenené počas behu. Môže byť prepísané prepínačom príkazového riadku."
+   )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_VIDEO_WINDOWED_FULLSCREEN,
    "Maximalizované okno"
@@ -2414,6 +2446,10 @@ MSG_HASH(
    MENU_ENUM_LABEL_VALUE_INPUT_HOTKEY_BINDS,
    "Klávesové skratky"
    )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_QUIT_PRESS_TWICE,
+   "Potvrdiť ukončenie"
+   )
 
 /* Settings > Input > Haptic Feedback/Vibration */
 
@@ -2601,6 +2637,15 @@ MSG_HASH(
    )
 
 
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_INPUT_META_SEND_DEBUG_INFO,
+   "Odoslať ladiace informácie"
+   )
+MSG_HASH(
+   MENU_ENUM_SUBLABEL_INPUT_META_SEND_DEBUG_INFO,
+   "Odoslať diagnostické informácie o zariadení a nastaveniach RetroArch na naše serveri na analýzu."
+   )
+
 /* Settings > Input > Port # Controls */
 
 MSG_HASH(
@@ -2746,10 +2791,6 @@ MSG_HASH(
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_INPUT_LIGHTGUN_START,
    "Spustenie zbrane"
-   )
-MSG_HASH(
-   MENU_ENUM_LABEL_VALUE_INPUT_TURBO,
-   "Rýchlo streľba"
    )
 
 /* Settings > Latency */
@@ -3304,8 +3345,16 @@ MSG_HASH(
    "Zobraziť 'História'"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_CONTENT_SHOW_ADD,
+   "Zobraziť 'Importovať obsah'"
+   )
+MSG_HASH( /* FIXME can now be replaced with MENU_ENUM_LABEL_VALUE_CONTENT_SHOW_ADD */
    MENU_ENUM_LABEL_VALUE_CONTENT_SHOW_ADD_ENTRY,
    "Zobraziť 'Importovať obsah'"
+   )
+MSG_HASH(
+   MENU_ENUM_SUBLABEL_CONTENT_SHOW_ADD_ENTRY,
+   "Zobraziť položku 'Importovať obsah' v hlavnej ponuke alebo ponuke hracích zoznamov."
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_MENU_ADD_CONTENT_ENTRY_DISPLAY_MAIN_TAB,
@@ -5487,32 +5536,12 @@ MSG_HASH(
 /* Ozone: Settings > User Interface > Appearance */
 
 MSG_HASH(
-   MENU_ENUM_LABEL_VALUE_OZONE_FONT,
-   "Písmo"
-   )
-MSG_HASH(
-   MENU_ENUM_LABEL_VALUE_OZONE_FONT_SCALE,
-   "Mierka písma"
-   )
-MSG_HASH(
    MENU_ENUM_LABEL_VALUE_LEFT_THUMBNAILS_OZONE,
    "Sekundárna miniatúra"
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_OZONE_THUMBNAIL_SCALE_FACTOR,
    "Mierka zväčšenia miniatúry"
-   )
-MSG_HASH(
-   MENU_ENUM_LABEL_VALUE_OZONE_HEADER_SEPARATOR_NONE,
-   "Žiadne"
-   )
-MSG_HASH(
-   MENU_ENUM_LABEL_VALUE_OZONE_HEADER_SEPARATOR_NORMAL,
-   "Normálne"
-   )
-MSG_HASH(
-   MENU_ENUM_LABEL_VALUE_OZONE_HEADER_SEPARATOR_MAXIMUM,
-   "Maximálne"
    )
 
 MSG_HASH(
@@ -6116,6 +6145,14 @@ MSG_HASH(
    "Stav"
    )
 MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_CUSTOM_RATIO,
+   "Vlastný pomer"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_VIDEO_FORCE_ASPECT,
+   "Vynútiť pomer strán"
+   )
+MSG_HASH(
    MENU_ENUM_LABEL_VALUE_CHEAT_DELETE_OPTION,
    "Vymazať túto zhodu"
    )
@@ -6142,6 +6179,14 @@ MSG_HASH(
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_HELP_WHAT_IS_A_CORE,
    "Čo je jadro?"
+   )
+MSG_HASH(
+   MENU_ENUM_LABEL_VALUE_HELP_SEND_DEBUG_INFO,
+   "Odoslať ladiace informácie"
+   )
+MSG_HASH(
+   MENU_ENUM_SUBLABEL_HELP_SEND_DEBUG_INFO,
+   "Odoslať diagnostické informácie o zariadení a nastaveniach RetroArch na naše serveri na analýzu."
    )
 MSG_HASH(
    MENU_ENUM_LABEL_VALUE_MANAGEMENT,
@@ -6346,6 +6391,14 @@ MSG_HASH(
    "Kontrola jadra: "
    )
 MSG_HASH(
+   MSG_NUM_CORES_UPDATED,
+   "aktualizované jadrá: "
+   )
+MSG_HASH(
+   MSG_NUM_CORES_LOCKED,
+   "preskočené jadrá: "
+   )
+MSG_HASH(
    MSG_AUDIO_MUTED,
    "Zvuk stlmený."
    )
@@ -6376,6 +6429,14 @@ MSG_HASH(
 MSG_HASH(
    MSG_EXTRACTING,
    "Extrahujem"
+   )
+MSG_HASH(
+   MSG_FAILED_TO_LOAD,
+   "Načítanie zlyhalo"
+   )
+MSG_HASH(
+   MSG_FAILED_TO_LOAD_CONTENT,
+   "Obsah sa nepodarilo načítať"
    )
 MSG_HASH(
    MSG_FILE_NOT_FOUND,

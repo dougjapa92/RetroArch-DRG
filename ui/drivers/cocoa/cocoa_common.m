@@ -21,7 +21,6 @@
 #include "apple_platform.h"
 #include "../ui_cocoa.h"
 #include <compat/apple_compat.h>
-#include "RetroArchPlaylistManager.h"
 
 #ifdef HAVE_COCOATOUCH
 #import "../../../pkg/apple/WebServer/GCDWebUploader/GCDWebUploader.h"
@@ -56,10 +55,6 @@
 
 #ifdef HAVE_MENU
 #include "../../menu/menu_driver.h"
-#endif
-
-#ifdef HAVE_MIST
-#include "steam/steam.h"
 #endif
 
 #if IOS
@@ -100,56 +95,6 @@ void cocoa_file_load_with_detect_core(const char *filename);
 >
 @end
 #endif
-
-static CFRunLoopObserverRef iterate_observer;
-
-static void rarch_draw_observer(CFRunLoopObserverRef observer,
-    CFRunLoopActivity activity, void *info)
-{
-   uint32_t runloop_flags;
-   int          ret   = runloop_iterate();
-
-   if (ret == -1)
-   {
-#ifdef HAVE_QT
-      application->quit();
-#endif
-      main_exit(NULL);
-      exit(0);
-      return;
-   }
-
-   task_queue_check();
-
-#ifdef HAVE_MIST
-   steam_poll();
-#endif
-
-   runloop_flags = runloop_get_flags();
-   if (!(runloop_flags & RUNLOOP_FLAG_IDLE))
-      CFRunLoopWakeUp(CFRunLoopGetMain());
-}
-
-void rarch_start_draw_observer(void)
-{
-   if (iterate_observer && CFRunLoopObserverIsValid(iterate_observer))
-       return;
-
-   if (iterate_observer != NULL)
-      CFRelease(iterate_observer);
-   iterate_observer = CFRunLoopObserverCreate(0, kCFRunLoopBeforeWaiting,
-                                              true, 0, rarch_draw_observer, 0);
-   CFRunLoopAddObserver(CFRunLoopGetMain(), iterate_observer, kCFRunLoopCommonModes);
-}
-
-void rarch_stop_draw_observer(void)
-{
-    if (!iterate_observer || !CFRunLoopObserverIsValid(iterate_observer))
-        return;
-    CFRunLoopObserverInvalidate(iterate_observer);
-    CFRelease(iterate_observer);
-    iterate_observer = NULL;
-}
 
 @implementation CocoaView
 
@@ -576,48 +521,23 @@ void rarch_stop_draw_observer(void)
 -(void)adjustViewFrameForSafeArea
 {
    /* This is for adjusting the view frame to account for
-    * the notch in iPhone X phones. In multitasking mode,
-    * we should only adjust within the current view bounds,
-    * not force full screen dimensions. */
+    * the notch in iPhone X phones */
    if (@available(iOS 11, *))
    {
-      /* Early return if core systems aren't initialized yet */
-      settings_t *settings = config_get_ptr();
-      if (!settings)
-         return;
-
-      /* Check if we're in multitasking mode (Split View or Slide Over)
-       * by comparing our view size to the full screen size */
-      RAScreen *screen     = (BRIDGE RAScreen*)cocoa_screen_get_chosen();
-      if (!screen)
-         return;
-
-      CGRect screenSize    = [screen bounds];
-
-      if (ios_running_on_ipad())
-      {
-         CGRect currentBounds = self.view.bounds;
-         bool isMultitasking  = (currentBounds.size.width < screenSize.size.width ||
-                                 currentBounds.size.height < screenSize.size.height);
-
-         /* In multitasking mode, don't override the frame - let iOS handle it */
-         if (isMultitasking)
-            return;
-      }
+      settings_t *settings               = config_get_ptr();
+      RAScreen *screen                   = (BRIDGE RAScreen*)cocoa_screen_get_chosen();
+      CGRect screenSize                  = [screen bounds];
+      UIEdgeInsets inset                 = [[UIApplication sharedApplication] delegate].window.safeAreaInsets;
+      UIInterfaceOrientation orientation = [[UIApplication sharedApplication] statusBarOrientation];
 
       if (settings->bools.video_notch_write_over_enable)
       {
-         self.view.frame = screenSize;
+         self.view.frame = CGRectMake(screenSize.origin.x,
+                     screenSize.origin.y,
+                     screenSize.size.width,
+                     screenSize.size.height);
          return;
       }
-
-      /* Only apply safe area adjustments when in full screen mode */
-      UIWindow *window     = [[UIApplication sharedApplication] delegate].window;
-      if (!window)
-         return;
-
-      UIEdgeInsets inset   = window.safeAreaInsets;
-      UIInterfaceOrientation orientation = [[UIApplication sharedApplication] statusBarOrientation];
 
       switch (orientation)
       {
@@ -770,10 +690,8 @@ void rarch_stop_draw_observer(void)
 -(void)viewWillAppear:(BOOL)animated
 {
     [super viewWillAppear:animated];
-#if !TARGET_OS_SIMULATOR
     [[WebServer sharedInstance] startServers];
     [WebServer sharedInstance].webUploader.delegate = self;
-#endif
 }
 
 #if TARGET_OS_IOS && HAVE_IOS_TOUCHMOUSE
@@ -1228,96 +1146,4 @@ void cocoa_file_load_with_detect_core(const char *filename)
                CORE_TYPE_PLAIN,
                NULL, NULL);
    }
-}
-
-bool cocoa_launch_game_by_filename(NSString *filename)
-{
-   core_info_list_t *core_info_list = NULL;
-   const core_info_t *core_info = NULL;
-   size_t list_size = 0;
-   char full_path[PATH_MAX_LENGTH] = {0};
-   content_ctx_info_t content_info = { 0 };
-
-   RARCH_LOG("Launching game by filename: %s\n", [filename UTF8String]);
-
-   // Strategy 1: Try to find game in playlists first (existing behavior)
-   RetroArchPlaylistGame *game = [RetroArchPlaylistManager findGameByFilename:filename];
-
-   if (game && game.corePath && game.fullPath) {
-      char core_path[PATH_MAX_LENGTH] = {0};
-
-      RARCH_LOG("Found game '%s' in playlist with core '%s'\n",
-                [game.fullPath UTF8String], [game.corePath UTF8String]);
-
-      fill_pathname_expand_special(core_path, [game.corePath UTF8String], sizeof(core_path));
-      fill_pathname_expand_special(full_path, [game.fullPath UTF8String], sizeof(full_path));
-
-      bool success = task_push_load_content_with_new_core_from_companion_ui(core_path, full_path,
-                                                                            NULL, NULL, NULL,
-                                                                            &content_info, NULL, NULL);
-      if (success) {
-         RARCH_LOG("Successfully launched playlist game '%s'\n", [filename UTF8String]);
-         return YES;
-      } else {
-         RARCH_WARN("Failed to launch playlist game '%s'\n", [filename UTF8String]);
-         return NO;
-      }
-   }
-
-   // Strategy 2: Fallback to automatic core detection for non-playlist content
-   RARCH_LOG("Game '%s' not found in playlists, trying automatic core detection\n", [filename UTF8String]);
-
-   fill_pathname_expand_special(full_path, [filename UTF8String], sizeof(full_path));
-   if (!path_is_valid(full_path)) {
-      RARCH_WARN("Could not find file '%s'\n", full_path);
-      return NO;
-   }
-
-   RARCH_LOG("Found file at path: %s\n", full_path);
-
-   // Get list of compatible cores for this content file
-   core_info_get_list(&core_info_list);
-   if (!core_info_list) {
-      RARCH_WARN("No core info list available\n");
-      return NO;
-   }
-
-   core_info_list_get_supported_cores(core_info_list, full_path, &core_info, &list_size);
-
-   if (list_size == 0) {
-      RARCH_WARN("No compatible cores found for '%s'\n", full_path);
-      return NO;
-   }
-
-   RARCH_LOG("Found %zu compatible core(s) for '%s'\n", list_size, full_path);
-
-   path_set(RARCH_PATH_CONTENT, full_path);
-
-   // Strategy 2a: Check if current core supports this content
-   if (!path_is_empty(RARCH_PATH_CORE)) {
-      const char *current_core = path_get(RARCH_PATH_CORE);
-      for (size_t i = 0; i < list_size; i++) {
-         const core_info_t *info = &core_info[i];
-         if (string_is_equal(current_core, info->path)) {
-            RARCH_LOG("Current core '%s' supports this content, using it\n", info->display_name);
-            return task_push_load_content_with_current_core_from_companion_ui(
-               NULL, &content_info, CORE_TYPE_PLAIN, NULL, NULL);
-         }
-      }
-   }
-
-   // Strategy 2b: If only one compatible core, use it automatically
-   if (list_size == 1) {
-      const core_info_t *info = &core_info[0];
-      RARCH_LOG("Only one compatible core found: '%s', using it automatically\n", info->display_name);
-      return task_push_load_content_with_new_core_from_companion_ui(
-         info->path, full_path, NULL, NULL, NULL, &content_info, NULL, NULL);
-   }
-
-   // Strategy 2c: Multiple cores available - use the first one
-   // In a future implementation, this could present a user choice dialog
-   const core_info_t *info = &core_info[0];
-   RARCH_LOG("Multiple cores available, automatically selecting first: '%s'\n", info->display_name);
-   return task_push_load_content_with_new_core_from_companion_ui(
-      info->path, full_path, NULL, NULL, NULL, &content_info, NULL, NULL);
 }

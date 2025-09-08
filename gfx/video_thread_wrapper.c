@@ -1139,10 +1139,7 @@ static void thread_set_texture_frame(void *data, const void *frame,
       void *tmp_frame = realloc(thr->texture.frame, required);
 
       if (!tmp_frame)
-      {
-         slock_unlock(thr->frame.lock);
-         return;
-      }
+         goto end;
 
       thr->texture.frame     = tmp_frame;
       thr->texture.frame_cap = required;
@@ -1156,6 +1153,7 @@ static void thread_set_texture_frame(void *data, const void *frame,
    thr->texture.alpha         = alpha;
    thr->texture.frame_updated = true;
 
+end:
    slock_unlock(thr->frame.lock);
 }
 

@@ -678,8 +678,8 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
 
     /* --- Verifica se já existe CFG --- */
     match_found = input_autoconfigure_scan_config_files_external(autoconfig_handle);
-
-    // --- Chamada JNI se não houver configuração externa ---
+    
+    /* --- Chamada JNI se não houver configuração externa --- */
     if (!match_found)
     {
         LOGD("[Autoconf] Nenhuma config externa, chamando JNI...");
@@ -714,7 +714,7 @@ static void input_autoconfigure_connect_handler(retro_task_t *task)
                     else if (created == JNI_TRUE)
                     {
                         LOGD("[Autoconf] JNI criou novo cfg");
-                        // Reescaneia pois agora o arquivo existe
+                        /* Reescaneia pois agora o arquivo existe */
                         match_found = input_autoconfigure_scan_config_files_external(autoconfig_handle);
                     }
     

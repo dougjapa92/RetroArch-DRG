@@ -116,7 +116,8 @@ static INLINE int16_t udev_compute_axis(const struct input_absinfo *info, int va
 
 static int udev_find_vacant_pad(void)
 {
-   int i;
+   unsigned i;
+
    for (i = 0; i < MAX_USERS; i++)
       if (udev_pads[i].fd < 0)
          return i;
@@ -170,7 +171,7 @@ static bool udev_set_rumble_gain(unsigned i, unsigned gain)
 
    if (write(pad->fd, &ie, sizeof(ie)) < (ssize_t)sizeof(ie))
    {
-      RARCH_ERR("[udev] Failed to set rumble gain on pad #%u.\n", i);
+      RARCH_ERR("[udev]: Failed to set rumble gain on pad #%u.\n", i);
       return false;
    }
 
@@ -290,12 +291,12 @@ static int udev_add_pad(struct udev_device *dev, unsigned p, int fd, const char 
    if (ioctl(fd, EVIOCGBIT(EV_FF, sizeof(ffbit)), ffbit) >= 0)
    {
       if (test_bit(FF_RUMBLE, ffbit))
-         RARCH_LOG("[udev] Pad #%u (%s) supports force feedback.\n",
+         RARCH_LOG("[udev]: Pad #%u (%s) supports force feedback.\n",
                p, path);
 
       if (ioctl(fd, EVIOCGEFFECTS, &pad->num_effects) >= 0)
          RARCH_LOG(
-               "[udev] Pad #%u (%s) supports %d force feedback effects.\n",
+               "[udev]: Pad #%u (%s) supports %d force feedback effects.\n",
                p, path, pad->num_effects);
    }
 
@@ -315,9 +316,9 @@ static int udev_add_pad(struct udev_device *dev, unsigned p, int fd, const char 
 
 static void udev_check_device(struct udev_device *dev, const char *path)
 {
-   int i;
    int ret;
    int pad, fd;
+   unsigned i;
    struct stat st;
 
    if (stat(path, &st) < 0)
@@ -328,7 +329,7 @@ static void udev_check_device(struct udev_device *dev, const char *path)
       if (st.st_rdev == udev_pads[i].device)
       {
          RARCH_LOG(
-               "[udev] Device ID %u is already plugged.\n",
+               "[udev]: Device ID %u is already plugged.\n",
                (unsigned)st.st_rdev);
          return;
       }
@@ -342,7 +343,7 @@ static void udev_check_device(struct udev_device *dev, const char *path)
 
    if (udev_add_pad(dev, pad, fd, path) == -1)
    {
-      RARCH_ERR("[udev] Failed to add pad: %s.\n", path);
+      RARCH_ERR("[udev]: Failed to add pad: %s.\n", path);
       close(fd);
    }
 }
@@ -365,7 +366,7 @@ static void udev_free_pad(unsigned pad)
 
 static void udev_joypad_remove_device(const char *path)
 {
-   int i;
+   unsigned i;
 
    for (i = 0; i < MAX_USERS; i++)
    {
@@ -381,7 +382,7 @@ static void udev_joypad_remove_device(const char *path)
 
 static void udev_joypad_destroy(void)
 {
-   int i;
+   unsigned i;
 
    for (i = 0; i < MAX_USERS; i++)
       udev_free_pad(i);
@@ -441,7 +442,7 @@ static bool udev_set_rumble(unsigned i,
 
          if (ioctl(pad->fd, EVIOCSFF, &e) < 0)
          {
-            RARCH_ERR("[udev] Failed to set rumble effect on pad #%u.\n", i);
+            RARCH_ERR("Failed to set rumble effect on pad #%u.\n", i);
             return false;
          }
 
@@ -462,7 +463,7 @@ static bool udev_set_rumble(unsigned i,
 
          if (write(pad->fd, &play, sizeof(play)) < (ssize_t)sizeof(play))
          {
-            RARCH_ERR("[udev] Failed to play rumble effect #%u on pad #%u.\n",
+            RARCH_ERR("[udev]: Failed to play rumble effect #%u on pad #%u.\n",
                   effect, i);
             return false;
          }
@@ -585,7 +586,7 @@ static void udev_joypad_poll(void)
 
 static void *udev_joypad_init(void *data)
 {
-   int i;
+   unsigned i;
    unsigned sorted_count = 0;
    struct udev_list_entry *devs     = NULL;
    struct udev_list_entry *item     = NULL;
@@ -612,7 +613,7 @@ static void *udev_joypad_init(void *data)
    udev_enumerate_add_match_subsystem(enumerate, "input");
    udev_enumerate_scan_devices(enumerate);
    if (!(devs = udev_enumerate_get_list_entry(enumerate)))
-      RARCH_DBG("[udev] Couldn't open any joypads. Are permissions set correctly for /dev/input/event* and /run/udev/?\n");
+      RARCH_DBG("[udev]: Couldn't open any joypads. Are permissions set correctly for /dev/input/event* and /run/udev/?\n");
 
    udev_list_entry_foreach(item, devs)
    {
@@ -621,9 +622,9 @@ static void *udev_joypad_init(void *data)
       const char      *devnode = udev_device_get_devnode(dev);
 #if defined(DEBUG)
       struct udev_list_entry *list_entry = NULL;
-      RARCH_DBG("[udev] udev_joypad_init entry name=%s devnode=%s\n", name, devnode);
+      RARCH_DBG("udev_joypad_init entry name=%s devnode=%s\n", name, devnode);
       udev_list_entry_foreach(list_entry, udev_device_get_properties_list_entry(dev))
-         RARCH_DBG("[udev] udev_joypad_init property %s=%s\n",
+         RARCH_DBG("udev_joypad_init property %s=%s\n",
                        udev_list_entry_get_name(list_entry),
                        udev_list_entry_get_value(list_entry));
 #endif
@@ -744,7 +745,7 @@ static int16_t udev_joypad_state(
 
    if (port_idx < MAX_USERS)
    {
-      int i;
+      unsigned i;
       const struct udev_joypad *pad     = (const struct udev_joypad*)
          &udev_pads[port_idx];
       for (i = 0; i < RARCH_FIRST_CUSTOM_BIND; i++)

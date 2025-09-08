@@ -251,19 +251,23 @@ static bool audio_thread_use_float(void *data)
 
 static ssize_t audio_thread_write(void *data, const void *s, size_t len)
 {
-   ssize_t _len;
+   ssize_t ret;
    audio_thread_t *thr = (audio_thread_t*)data;
+
    if (!thr)
       return 0;
-   _len = thr->driver->write(thr->driver_data, s, len);
-   if (_len < 0)
+
+   ret = thr->driver->write(thr->driver_data, s, len);
+
+   if (ret < 0)
    {
       slock_lock(thr->lock);
       thr->alive = false;
       scond_signal(thr->cond);
       slock_unlock(thr->lock);
    }
-   return _len;
+
+   return ret;
 }
 
 static const audio_driver_t audio_thread = {

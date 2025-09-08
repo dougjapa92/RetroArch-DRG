@@ -27,9 +27,6 @@
 
 #pragma mark - ringbuffer
 
-#define UNLIKELY(x) __builtin_expect((x), 0)
-#define LIKELY(x)   __builtin_expect((x), 1)
-
 typedef struct ringbuffer
 {
    float *buffer;
@@ -96,6 +93,9 @@ static void rb_free(ringbuffer_h r)
    memset(r, 0, sizeof(*r));
 }
 
+#define UNLIKELY(x) __builtin_expect((x), 0)
+#define LIKELY(x)   __builtin_expect((x), 1)
+
 static void rb_write_data(ringbuffer_h r, const float *data, size_t len)
 {
    size_t avail       = rb_avail(r);
@@ -109,8 +109,8 @@ static void rb_write_data(ringbuffer_h r, const float *data, size_t len)
       rest_write      = n - first_write;
    }
 
-   memcpy(r->buffer + r->write_ptr, data, first_write * sizeof(float));
-   memcpy(r->buffer, data + first_write, rest_write * sizeof(float));
+   memcpy(r->buffer + r->write_ptr, data, first_write*sizeof(float));
+   memcpy(r->buffer, data + first_write, rest_write*sizeof(float));
 
    rb_advance_write_n(r, n);
    rb_len_add(r, (int)n);
@@ -155,7 +155,7 @@ static void rb_read_data(ringbuffer_h r,
 
 #pragma mark - CoreAudio3
 
-static bool coreaudio3_g_interrupted;
+static bool g_interrupted;
 
 @interface CoreAudio3 : NSObject {
    ringbuffer_t _rb;
@@ -227,7 +227,7 @@ static bool coreaudio3_g_interrupted;
 
       _au = au;
 
-      RARCH_LOG("[CoreAudio3] Using buffer size of %u bytes: (latency = %u ms).\n", (unsigned)self.bufferSizeInBytes, latency);
+      RARCH_LOG("[CoreAudio3]: Using buffer size of %u bytes: (latency = %u ms)\n", (unsigned)self.bufferSizeInBytes, latency);
 
       [self start];
    }
@@ -260,8 +260,8 @@ static bool coreaudio3_g_interrupted;
 }
 
 - (ssize_t)writeFloat:(const float *)data samples:(size_t)samples {
-   size_t _len = 0;
-   while (!coreaudio3_g_interrupted && samples > 0)
+   size_t written = 0;
+   while (!g_interrupted && samples > 0)
    {
       size_t write_avail = rb_avail(&_rb);
       if (write_avail > samples)
@@ -269,7 +269,7 @@ static bool coreaudio3_g_interrupted;
 
       rb_write_data(&_rb, data, write_avail);
       data    += write_avail;
-      _len    += write_avail;
+      written += write_avail;
       samples -= write_avail;
 
       if (_nonBlock)
@@ -279,7 +279,7 @@ static bool coreaudio3_g_interrupted;
          dispatch_semaphore_wait(_sema, DISPATCH_TIME_FOREVER);
    }
 
-   return _len;
+   return written;
 }
 
 @end
@@ -327,7 +327,8 @@ static bool coreaudio3_alive(void *data)
 {
    CoreAudio3 *dev = (__bridge CoreAudio3 *)data;
    if (dev == nil)
-      return false;
+      return NO;
+
    return !dev.paused;
 }
 
@@ -335,7 +336,8 @@ static bool coreaudio3_stop(void *data)
 {
    CoreAudio3 *dev = (__bridge CoreAudio3 *)data;
    if (dev == nil)
-      return false;
+      return NO;
+
    [dev stop];
    return dev.paused;
 }
@@ -344,13 +346,16 @@ static bool coreaudio3_start(void *data, bool is_shutdown)
 {
    CoreAudio3 *dev = (__bridge CoreAudio3 *)data;
    if (dev == nil)
-      return false;
+      return NO;
 
    [dev start];
    return !dev.paused;
 }
 
-static bool coreaudio3_use_float(void *data) { return true; }
+static bool coreaudio3_use_float(void *data)
+{
+   return YES;
+}
 
 static size_t coreaudio3_write_avail(void *data)
 {

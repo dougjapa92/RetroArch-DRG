@@ -602,20 +602,18 @@ static void core_info_cache_list_free(
    if (!core_info_cache_list)
       return;
 
-   if (core_info_cache_list->items)
+   for (i = 0; i < core_info_cache_list->length; i++)
    {
-      for (i = 0; i < core_info_cache_list->length; i++)
-      {
-         core_info_t* info = (core_info_t*)&core_info_cache_list->items[i];
-         core_info_free(info);
-      }
-      free(core_info_cache_list->items);
+      core_info_t* info = (core_info_t*)&core_info_cache_list->items[i];
+      core_info_free(info);
    }
-   core_info_cache_list->items = NULL;
+
+   free(core_info_cache_list->items);
 
    if (core_info_cache_list->version)
       free(core_info_cache_list->version);
-   core_info_cache_list->version = NULL;
+
+   free(core_info_cache_list);
 }
 
 static core_info_t *core_info_cache_find(
@@ -694,19 +692,14 @@ static core_info_cache_list_t *core_info_cache_list_new(void)
    if (!core_info_cache_list)
       return NULL;
 
-   core_info_cache_list->items    = (core_info_t *)
+   core_info_cache_list->length = 0;
+   core_info_cache_list->items  = (core_info_t *)
       calloc(CORE_INFO_CACHE_DEFAULT_CAPACITY,
             sizeof(core_info_t));
-   core_info_cache_list->length   = 0;
-   core_info_cache_list->capacity = 0;
-   core_info_cache_list->version  = NULL;
-   core_info_cache_list->refresh  = false;
 
    if (!core_info_cache_list->items)
    {
       core_info_cache_list_free(core_info_cache_list);
-      free(core_info_cache_list);
-      core_info_cache_list = NULL;
       return NULL;
    }
 
@@ -761,7 +754,7 @@ static core_info_cache_list_t *core_info_cache_read(const char *info_dir)
    /* Parse info cache file */
    if (!(parser = rjson_open_stream(file)))
    {
-      RARCH_ERR("[Core info] Failed to create JSON parser.\n");
+      RARCH_ERR("[Core Info]: Failed to create JSON parser.\n");
       goto end;
    }
 
@@ -783,10 +776,10 @@ static core_info_cache_list_t *core_info_cache_read(const char *info_dir)
          NULL) /* Unused null handler */
          != RJSON_DONE)
    {
-      RARCH_WARN("[Core info] Error parsing chunk:\n---snip---\n%.*s\n---snip---\n",
+      RARCH_WARN("[Core Info]: Error parsing chunk:\n---snip---\n%.*s\n---snip---\n",
             rjson_get_source_context_len(parser),
             rjson_get_source_context_buf(parser));
-      RARCH_WARN("[Core info] Error: Invalid JSON at line %d, column %d - %s.\n",
+      RARCH_WARN("[Core Info]: Error: Invalid JSON at line %d, column %d - %s.\n",
             (int)rjson_get_source_line(parser),
             (int)rjson_get_source_column(parser),
             (*rjson_get_error(parser)
@@ -819,7 +812,7 @@ static core_info_cache_list_t *core_info_cache_read(const char *info_dir)
        || !string_is_equal(core_info_cache_list->version,
             CORE_INFO_CACHE_VERSION))
    {
-      RARCH_WARN("[Core info] Core info cache has invalid version"
+      RARCH_WARN("[Core Info]: Core info cache has invalid version"
             " - forcing refresh (required v%s, found v%s).\n",
             CORE_INFO_CACHE_VERSION,
             core_info_cache_list->version);
@@ -865,14 +858,14 @@ static bool core_info_cache_write(core_info_cache_list_t *list, const char *info
 
    if (!file)
    {
-      RARCH_ERR("[Core info] Failed to write core info cache file: \"%s\".\n", file_path);
+      RARCH_ERR("[Core Info]: Failed to write core info cache file: \"%s\".\n", file_path);
       return false;
    }
 
    /* Write info cache */
    if (!(writer = rjsonwriter_open_stream(file)))
    {
-      RARCH_ERR("[Core info] Failed to create JSON writer.\n");
+      RARCH_ERR("[Core Info]: Failed to create JSON writer.\n");
       goto end;
    }
 
@@ -1195,7 +1188,7 @@ static bool core_info_cache_write(core_info_cache_list_t *list, const char *info
    rjsonwriter_raw(writer, "\n", 1);
    rjsonwriter_free(writer);
 
-   RARCH_LOG("[Core info] Wrote to cache file: \"%s\".\n", file_path);
+   RARCH_LOG("[Core Info]: Wrote to cache file: \"%s\".\n", file_path);
    success = true;
 
    /* Remove 'force refresh' file, if required */
@@ -1578,7 +1571,7 @@ static size_t core_info_get_file_id(const char *core_filename,
        && !string_is_equal(last_underscore, "_libretro"))
    {
       *last_underscore = '\0';
-      _len = last_underscore - s;
+      _len = strlen(s); /* TODO/FIXME - make this unnecessary later on */
    }
    return _len;
 }
@@ -1885,10 +1878,9 @@ static void core_info_parse_config_file(
    list->info_count++;
 }
 
-static size_t core_info_list_resolve_all_extensions(
+static void core_info_list_resolve_all_extensions(
       core_info_list_t *core_info_list)
 {
-   size_t _len;
    size_t i              = 0;
    size_t all_ext_len    = 0;
    char *all_ext         = NULL;
@@ -1902,29 +1894,26 @@ static size_t core_info_list_resolve_all_extensions(
 
    all_ext_len       += STRLEN_CONST("7z|") + STRLEN_CONST("zip|");
    if (!(all_ext      = (char*)calloc(1, all_ext_len)))
-      return 0;
+      return;
 
    core_info_list->all_ext = all_ext;
-   _len                    = strlen(all_ext);
 
    for (i = 0; i < core_info_list->count; i++)
    {
+      size_t _len;
       if (!core_info_list->list[i].supported_extensions)
          continue;
 
-      _len += strlcpy(core_info_list->all_ext + _len,
-            core_info_list->list[i].supported_extensions,
-                      all_ext_len - _len);
-      _len += strlcpy(core_info_list->all_ext + _len, "|",
-                      all_ext_len - _len);
+      _len = strlcat(core_info_list->all_ext,
+            core_info_list->list[i].supported_extensions, all_ext_len);
+      strlcpy(core_info_list->all_ext + _len, "|", all_ext_len - _len);
    }
 #ifdef HAVE_7ZIP
-   _len += strlcpy(core_info_list->all_ext + _len, "7z|", all_ext_len - _len);
+   strlcat(core_info_list->all_ext, "7z|", all_ext_len);
 #endif
 #ifdef HAVE_ZLIB
-   _len += strlcpy(core_info_list->all_ext + _len, "zip|", all_ext_len - _len);
+   strlcat(core_info_list->all_ext, "zip|", all_ext_len);
 #endif
-   return _len;
 }
 
 static void core_info_free(core_info_t* info)
@@ -1972,26 +1961,20 @@ static void core_info_free(core_info_t* info)
 
 static void core_info_list_free(core_info_list_t *core_info_list)
 {
+   size_t i;
+
    if (!core_info_list)
       return;
 
-   if (core_info_list->list)
+   for (i = 0; i < core_info_list->count; i++)
    {
-      size_t i;
-      for (i = 0; i < core_info_list->count; i++)
-      {
-         core_info_t *info = (core_info_t*)&core_info_list->list[i];
-         core_info_free(info);
-      }
+      core_info_t *info = (core_info_t*)&core_info_list->list[i];
+      core_info_free(info);
    }
 
-   if (core_info_list->all_ext)
-      free(core_info_list->all_ext);
-   core_info_list->all_ext = NULL;
-
-   if (core_info_list->list)
-      free(core_info_list->list);
-   core_info_list->list = NULL;
+   free(core_info_list->all_ext);
+   free(core_info_list->list);
+   free(core_info_list);
 }
 
 static core_info_list_t *core_info_list_new(const char *path,
@@ -2009,13 +1992,10 @@ static core_info_list_t *core_info_list_new(const char *path,
    core_path_list_t *path_list                  = core_info_path_list_new(
          path, exts, dir_show_hidden_files);
    if (!path_list)
-      return NULL;
+      goto error;
 
    if (!(core_info_list = (core_info_list_t*)malloc(sizeof(*core_info_list))))
-   {
-      core_info_path_list_free(path_list);
-      return NULL;
-   }
+      goto error;
 
    core_info_list->list       = NULL;
    core_info_list->count      = 0;
@@ -2026,11 +2006,7 @@ static core_info_list_t *core_info_list_new(const char *path,
          sizeof(*core_info))))
    {
       core_info_list_free(core_info_list);
-      core_info_path_list_free(path_list);
-      free(core_info_list);
-      core_info_list = NULL;
-      path_list      = NULL;
-      return NULL;
+      goto error;
    }
 
    core_info_list->list  = core_info;
@@ -2038,14 +2014,10 @@ static core_info_list_t *core_info_list_new(const char *path,
 
 #ifdef HAVE_CORE_INFO_CACHE
    /* Read core info cache, if enabled */
-   if (enable_cache && !(core_info_cache_list = core_info_cache_read(info_dir)))
+   if (enable_cache)
    {
-      core_info_list_free(core_info_list);
-      core_info_path_list_free(path_list);
-      free(core_info_list);
-      core_info_list = NULL;
-      path_list      = NULL;
-      return NULL;
+      if (!(core_info_cache_list = core_info_cache_read(info_dir)))
+         goto error;
    }
 #endif
 
@@ -2125,11 +2097,6 @@ static core_info_list_t *core_info_list_new(const char *path,
          config_file_free(conf);
       }
 
-      /* Start with 'full' savestate support when info is missing */
-      if (!conf)
-         info->savestate_support_level =
-               CORE_INFO_SAVESTATE_DETERMINISTIC;
-
       /* Get fallback display name, if required */
       if (!info->display_name)
          info->display_name = strdup(core_filename);
@@ -2171,12 +2138,14 @@ static core_info_list_t *core_info_list_new(const char *path,
                core_info_cache_list, info_dir);
 
       core_info_cache_list_free(core_info_cache_list);
-      free(core_info_cache_list);
-      core_info_cache_list = NULL;
    }
 
    core_info_path_list_free(path_list);
    return core_info_list;
+
+error:
+   core_info_path_list_free(path_list);
+   return NULL;
 }
 
 /* Shallow-copies internal state.

@@ -30,7 +30,7 @@
  * @in_size                     : input size
  * @s                           : output data
  * @len                         : output size
- * @err                         : (optional) output for error code
+ * @error                       : (optional) output for error code
  *
  * Perform a full transcoding from a source to a destination.
  */
@@ -38,7 +38,7 @@ bool trans_stream_trans_full(
     struct trans_stream_backend *backend, void **data,
     const uint8_t *in, uint32_t in_size,
     uint8_t *s, uint32_t len,
-    enum trans_stream_error *err)
+    enum trans_stream_error *error)
 {
    void *rdata;
    bool ret;
@@ -50,15 +50,15 @@ bool trans_stream_trans_full(
    {
       if (!(rdata = backend->stream_new()))
       {
-         if (err)
-            *err = TRANS_STREAM_ERROR_ALLOCATION_FAILURE;
+         if (error)
+            *error = TRANS_STREAM_ERROR_ALLOCATION_FAILURE;
          return false;
       }
    }
 
    backend->set_in(rdata, in, in_size);
    backend->set_out(rdata, s, len);
-   ret = backend->trans(rdata, true, &rd, &wn, err);
+   ret = backend->trans(rdata, true, &rd, &wn, error);
 
    if (data)
       *data = rdata;

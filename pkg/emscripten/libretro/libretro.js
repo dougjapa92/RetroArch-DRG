@@ -187,14 +187,18 @@ function startRetroArch() {
       selectFiles(e.target.files);
    });
    $('#btnMenu').removeClass("disabled").removeAttr("disabled").click(function() {
-      Module.retroArchSend("MENU_TOGGLE");
+      Module._cmd_toggle_menu();
       Module.canvas.focus();
    });
    $('#btnFullscreen').removeClass("disabled").removeAttr("disabled").click(function() {
-      Module.retroArchSend("FULLSCREEN_TOGGLE");
+      Module.requestFullscreen(false);
       Module.canvas.focus();
    });
 
+   Module.canvas.focus();
+   Module.canvas.addEventListener("pointerdown", function() {
+      Module.canvas.focus();
+   }, false);
    Module.callMain(Module.arguments);
 }
 

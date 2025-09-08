@@ -155,13 +155,8 @@ static int dir_list_read(const char *dir,
 {
    struct RDIR *entry = retro_opendir_include_hidden(dir, include_hidden);
 
-   if (!entry)
-      return -1;
-   if (retro_dirent_error(entry))
-   {
-      retro_closedir(entry);
-      return -1;
-   }
+   if (!entry || retro_dirent_error(entry))
+      goto error;
 
    while (retro_readdir(entry))
    {
@@ -198,10 +193,7 @@ static int dir_list_read(const char *dir,
          {
             attr.i = RARCH_PLAIN_FILE;
             if (!string_list_append(list, file_path, attr))
-            {
-               retro_closedir(entry);
-               return -1;
-            }
+               goto error;
             continue;
          }
 #endif
@@ -242,15 +234,17 @@ static int dir_list_read(const char *dir,
       }
 
       if (!string_list_append(list, file_path, attr))
-      {
-         retro_closedir(entry);
-         return -1;
-      }
+         goto error;
    }
 
    retro_closedir(entry);
 
    return 0;
+
+error:
+   if (entry)
+      retro_closedir(entry);
+   return -1;
 }
 
 /**

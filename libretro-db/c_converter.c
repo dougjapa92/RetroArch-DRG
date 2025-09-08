@@ -769,7 +769,7 @@ int main(int argc, char** argv)
 {
    const char* rdb_path;
    dat_converter_match_key_t* match_key = NULL;
-   intfstream_t* rdb_file;
+   RFILE* rdb_file;
 
    if (argc < 2)
    {
@@ -829,7 +829,9 @@ int main(int argc, char** argv)
       dat_buffer++;
    }
 
-   rdb_file = intfstream_open_file(rdb_path, RETRO_VFS_FILE_ACCESS_WRITE, RETRO_VFS_FILE_ACCESS_HINT_NONE);
+   rdb_file = filestream_open(rdb_path,
+         RETRO_VFS_FILE_ACCESS_WRITE,
+         RETRO_VFS_FILE_ACCESS_HINT_NONE);
 
    if (!rdb_file)
    {
@@ -850,7 +852,7 @@ int main(int argc, char** argv)
          &current_item);
    dat_converter_value_provider_free();
 
-   intfstream_close(rdb_file);
+   filestream_close(rdb_file);
 
    dat_converter_list_free(dat_parser_list);
 

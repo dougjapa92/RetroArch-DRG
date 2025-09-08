@@ -20,10 +20,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <mach/task.h>
-#include <mach/mach_init.h>
-#include <mach/mach_port.h>
-
 #include <boolean.h>
 #include <file/file_path.h>
 #include <string/stdstring.h>
@@ -51,10 +47,6 @@
 #include "../../verbosity.h"
 
 #include "ui_cocoa.h"
-
-#ifdef HAVE_SWIFT
-#import "RetroArch-Swift.h"
-#endif
 
 #ifdef HAVE_MIST
 #include "steam/steam.h"
@@ -650,19 +642,7 @@ static ui_application_t ui_application_cocoa = {
    [self setupMainWindow];
 #endif
 
-#if HAVE_SWIFT
-   if (@available(macOS 13.0, *)) {
-      [RetroArchAppShortcuts updateAppShortcuts];
-   }
-#endif
-
-#ifdef HAVE_QT
-   /* I think the draw observer should be absolutely fine for qt but I'm not testing it;
-    * whoever does test it and confirm it works can just delete this */
    [self performSelectorOnMainThread:@selector(rarch_main) withObject:nil waitUntilDone:NO];
-#else
-   rarch_start_draw_observer();
-#endif
 }
 
 #pragma mark - ApplePlatform
@@ -808,7 +788,6 @@ static ui_application_t ui_application_cocoa = {
 }
 #endif
 
-#ifdef HAVE_QT
 - (void) rarch_main
 {
     for (;;)
@@ -843,7 +822,6 @@ static ui_application_t ui_application_cocoa = {
 
     main_exit(NULL);
 }
-#endif
 
 - (void)applicationDidBecomeActive:(NSNotification *)notification  { }
 - (void)applicationWillResignActive:(NSNotification *)notification
@@ -854,10 +832,12 @@ static ui_application_t ui_application_cocoa = {
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender
 {
    NSApplicationTerminateReply reply = NSTerminateNow;
+   uint32_t runloop_flags            = runloop_get_flags();
+
+   if (runloop_flags & RUNLOOP_FLAG_IS_INITED)
+      reply = NSTerminateCancel;
 
    command_event(CMD_EVENT_QUIT, NULL);
-
-   rarch_stop_draw_observer();
 
    return reply;
 }
@@ -1093,10 +1073,6 @@ static void open_document_handler(
 
 int main(int argc, char *argv[])
 {
-#ifndef NDEBUG
-   task_set_exception_ports(mach_task_self(), EXC_MASK_BAD_ACCESS, MACH_PORT_NULL, EXCEPTION_DEFAULT, THREAD_STATE_NONE);
-#endif
-
    if (argc == 2)
    {
        if (argv[1])

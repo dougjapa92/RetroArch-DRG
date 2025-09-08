@@ -281,9 +281,13 @@ generic_queue_iterator_t *generic_queue_iterator_remove(generic_queue_iterator_t
          iterator->item = iterator->forward ? item->next : item->previous;
          free(item);
          if (iterator->item)
+         {
             return iterator;
-         free(iterator);
-         return NULL;
+         } else
+         {
+            free(iterator);
+            return NULL;
+         }
       }
 
       item = iterator->forward ? item->next : item->previous;

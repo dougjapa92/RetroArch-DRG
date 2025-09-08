@@ -78,27 +78,27 @@ bool gl_query_extension(const char *ext)
    return ret;
 }
 
-bool gl_check_error(char **err_string)
+bool gl_check_error(char **error_string)
 {
-   int err = glGetError();
-   switch (err)
+   int error = glGetError();
+   switch (error)
    {
       case GL_INVALID_ENUM:
-         *err_string = strdup("GL: Invalid enum.");
+         *error_string = strdup("GL: Invalid enum.");
          break;
       case GL_INVALID_VALUE:
-         *err_string = strdup("GL: Invalid value.");
+         *error_string = strdup("GL: Invalid value.");
          break;
       case GL_INVALID_OPERATION:
-         *err_string = strdup("GL: Invalid operation.");
+         *error_string = strdup("GL: Invalid operation.");
          break;
       case GL_OUT_OF_MEMORY:
-         *err_string = strdup("GL: Out of memory.");
+         *error_string = strdup("GL: Out of memory.");
          break;
       case GL_NO_ERROR:
          return true;
       default:
-         *err_string = strdup("Non specified GL error.");
+         *error_string = strdup("Non specified GL error.");
          break;
    }
 

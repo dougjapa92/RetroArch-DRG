@@ -40,10 +40,6 @@ jobs:
           mkdir -p pkg/android/phoenix/keystore
           echo "$KEYSTORE_BASE64" | base64 -d > pkg/android/phoenix/keystore/release.keystore
 
-      - name: Set execute permissions recursively
-        run: |
-          chmod -R 775 pkg/android/phoenix
-
       - name: Download and update cores (32-bit)
         run: |
           source ./pkg/android/phoenix/cores.sh
@@ -53,6 +49,10 @@ jobs:
         run: |
           source ./pkg/android/phoenix/cores.sh
           baixar_cores "arm64-v8a" "pkg/android/phoenix/assets/cores64" "tmp_cores64"
+          
+      - name: Set execute permissions recursively
+        run: |
+          chmod -R 775 pkg/android/phoenix
 
       - name: Compile Phoenix - debug
         run: |

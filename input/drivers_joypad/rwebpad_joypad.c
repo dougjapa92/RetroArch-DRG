@@ -30,18 +30,9 @@
 #define NUM_BUTTONS 64
 #define NUM_AXES 64
 
-struct rwebpad_joypad_rumble_state
-{
-   uint16_t pending_strong;
-   uint16_t pending_weak;
-   uint16_t strong;
-   uint16_t weak;
-};
-
 typedef struct
 {
    struct EmscriptenGamepadEvent pads[DEFAULT_MAX_PADS];
-   struct rwebpad_joypad_rumble_state rumble[DEFAULT_MAX_PADS];
    bool live_pads[DEFAULT_MAX_PADS];
 } rwebpad_joypad_data_t;
 
@@ -53,9 +44,6 @@ static EM_BOOL rwebpad_gamepad_cb(int event_type,
 {
    unsigned vid = 1;
    unsigned pid = 1;
-
-   if (gamepad_event->index >= DEFAULT_MAX_PADS)
-      return EM_FALSE;
 
    switch (event_type)
    {
@@ -105,11 +93,12 @@ static void *rwebpad_joypad_init(void *data)
    return (void*)(-1);
 }
 
-static const char *rwebpad_joypad_name(unsigned port)
+static const char *rwebpad_joypad_name(unsigned pad)
 {
-   if (port >= DEFAULT_MAX_PADS || !rwebpad_joypad_data->live_pads[port])
+   if (pad >= DEFAULT_MAX_PADS || !rwebpad_joypad_data->live_pads[pad]) {
       return "";
-   return rwebpad_joypad_data->pads[port].id;
+   }
+   return rwebpad_joypad_data->pads[pad].id;
 }
 
 static int32_t rwebpad_joypad_button(unsigned port, uint16_t joykey)
@@ -127,8 +116,7 @@ static void rwebpad_joypad_get_buttons(unsigned port, input_bits_t *state)
 {
    EmscriptenGamepadEvent gamepad_state;
    unsigned i;
-   if (port >= DEFAULT_MAX_PADS || !rwebpad_joypad_data->live_pads[port])
-   {
+   if (port >= DEFAULT_MAX_PADS || !rwebpad_joypad_data->live_pads[port]) {
       BIT256_CLEAR_ALL_PTR(state);
       return;
    }
@@ -163,8 +151,9 @@ static int16_t rwebpad_joypad_axis_state(
 
 static int16_t rwebpad_joypad_axis(unsigned port, uint32_t joyaxis)
 {
-   if (port >= DEFAULT_MAX_PADS || !rwebpad_joypad_data->live_pads[port])
+   if (port >= DEFAULT_MAX_PADS || !rwebpad_joypad_data->live_pads[port]) {
       return 0;
+   }
    return rwebpad_joypad_axis_state(&rwebpad_joypad_data->pads[port], port, joyaxis);
 }
 
@@ -203,41 +192,14 @@ static int16_t rwebpad_joypad_state(
    return ret;
 }
 
-static void rwebpad_joypad_update_rumble(unsigned port)
-{
-   bool rumble_old_state = rwebpad_joypad_data->rumble[port].strong || rwebpad_joypad_data->rumble[port].weak;
-   bool rumble_new_state = rwebpad_joypad_data->rumble[port].pending_strong || rwebpad_joypad_data->rumble[port].pending_weak;
-   rwebpad_joypad_data->rumble[port].strong = rwebpad_joypad_data->rumble[port].pending_strong;
-   rwebpad_joypad_data->rumble[port].weak   = rwebpad_joypad_data->rumble[port].pending_weak;
-
-   if (rumble_new_state)
-   {
-      EM_ASM({
-         try {
-            JSEvents?.lastGamepadState?.[$0]?.vibrationActuator?.playEffect?.("dual-rumble", {startDelay: 0, duration: 200, strongMagnitude: $1 / 65536, weakMagnitude: $2 / 65536});
-         } catch (e) {}
-      }, port, rwebpad_joypad_data->rumble[port].strong, rwebpad_joypad_data->rumble[port].weak);
-   }
-   else if (rumble_old_state && !rumble_new_state)
-   {
-      EM_ASM({
-         try {
-            JSEvents?.lastGamepadState?.[$0]?.vibrationActuator?.reset?.();
-         } catch (e) {}
-      }, port);
-   }
-}
-
 static void rwebpad_joypad_do_poll(void *data)
 {
-   unsigned port;
+   int i;
    emscripten_sample_gamepad_data();
-   for (port = 0; port < DEFAULT_MAX_PADS; port++)
+   for (i = 0; i < DEFAULT_MAX_PADS; i++)
    {
-      if (!rwebpad_joypad_data->live_pads[port])
-         continue;
-      emscripten_get_gamepad_status(port, &rwebpad_joypad_data->pads[port]);
-      rwebpad_joypad_update_rumble(port);
+      if (rwebpad_joypad_data->live_pads[i])
+         emscripten_get_gamepad_status(i, &rwebpad_joypad_data->pads[i]);
    }
 }
 
@@ -246,29 +208,9 @@ static void rwebpad_joypad_poll(void)
    platform_emscripten_run_on_browser_thread_sync(rwebpad_joypad_do_poll, NULL);
 }
 
-static bool rwebpad_joypad_query_pad(unsigned port)
+static bool rwebpad_joypad_query_pad(unsigned pad)
 {
-   return rwebpad_joypad_data->live_pads[port];
-}
-
-static bool rwebpad_joypad_set_rumble(unsigned port, enum retro_rumble_effect effect, uint16_t strength)
-{
-   if (port >= DEFAULT_MAX_PADS || !rwebpad_joypad_data->live_pads[port])
-      return false;
-
-   switch (effect)
-   {
-      case RETRO_RUMBLE_STRONG:
-         rwebpad_joypad_data->rumble[port].pending_strong = strength;
-         break;
-      case RETRO_RUMBLE_WEAK:
-         rwebpad_joypad_data->rumble[port].pending_weak = strength;
-         break;
-      default:
-         return false;
-   }
-
-   return true;
+   return rwebpad_joypad_data->live_pads[pad];
 }
 
 static void rwebpad_joypad_destroy(void) { }
@@ -282,7 +224,7 @@ input_device_driver_t rwebpad_joypad = {
    rwebpad_joypad_get_buttons,
    rwebpad_joypad_axis,
    rwebpad_joypad_poll,
-   rwebpad_joypad_set_rumble,
+   NULL, /* set_rumble */
    NULL, /* set_rumble_gain */
    NULL, /* set_sensor_state */
    NULL, /* get_sensor_input */

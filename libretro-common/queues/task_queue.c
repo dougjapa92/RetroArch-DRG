@@ -943,12 +943,12 @@ bool task_is_on_main_thread(void)
 #endif
 }
 
-void task_set_error(retro_task_t *task, char *err)
+void task_set_error(retro_task_t *task, char *error)
 {
 #ifdef HAVE_THREADS
    slock_lock(property_lock);
 #endif
-   task->error = err;
+   task->error = error;
 #ifdef HAVE_THREADS
    slock_unlock(property_lock);
 #endif
@@ -1044,15 +1044,17 @@ uint8_t task_get_flags(retro_task_t *task)
 
 char* task_get_error(retro_task_t *task)
 {
-   char *s = NULL;
+   char *error = NULL;
+
 #ifdef HAVE_THREADS
    slock_lock(property_lock);
 #endif
-   s = task->error;
+   error = task->error;
 #ifdef HAVE_THREADS
    slock_unlock(property_lock);
 #endif
-   return s;
+
+   return error;
 }
 
 int8_t task_get_progress(retro_task_t *task)

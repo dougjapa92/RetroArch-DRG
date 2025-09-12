@@ -223,10 +223,11 @@ public final class MainMenuActivity extends PreferenceActivity {
     
         // 2. Criar e configurar o Título
         TextView titleView = new TextView(context);
-        titleView.setText("Escolha a proporção de tela dos jogos:");
-        titleView.setTextSize(16); // Tamanho da fonte em SP
+        titleView.setText("Escolha a proporção de tela dos jogos: ");
+        titleView.setTextSize(18); // Tamanho da fonte em SP
         titleView.setGravity(Gravity.CENTER);
         titleView.setTextColor(Color.BLACK);
+        titleView.setTypeface(titleView.getTypeface(), Typeface.BOLD);
     
         // Adicionar um espaçamento abaixo do título
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(

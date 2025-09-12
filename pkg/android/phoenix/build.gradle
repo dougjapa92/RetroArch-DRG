@@ -31,7 +31,7 @@ android {
     flavorDimensions "variant"
 
     defaultConfig {
-        minSdkVersion 19
+        minSdkVersion 16
         targetSdkVersion 32
         versionCode System.currentTimeSeconds().toInteger()
         versionName "${getManifestAttribute("versionName")}_DRG"
@@ -124,7 +124,7 @@ android {
 }
 
 dependencies {
-    implementation 'com.google.android.material:material:1.12.0'
+    // Suas dependências aqui
 }
 
 String getManifestAttribute(String attribute) {

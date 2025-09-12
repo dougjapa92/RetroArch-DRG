@@ -246,20 +246,8 @@ public final class MainMenuActivity extends PreferenceActivity {
         buttonLayout.setLayoutParams(buttonContainerParams);
     
         // 4. Criar e posicionar os botões
-        
-        // Botão da Esquerda (Original)
-        Button btnOriginal = new Button(context);
-        btnOriginal.setText("Original");
-        btnOriginal.setBackgroundColor(Color.TRANSPARENT); // Remove o fundo padrão do botão
-        btnOriginal.setTextColor(Color.DKGRAY); // Define uma cor para o texto
-        RelativeLayout.LayoutParams originalParams = new RelativeLayout.LayoutParams(
-                RelativeLayout.LayoutParams.WRAP_CONTENT,
-                RelativeLayout.LayoutParams.WRAP_CONTENT
-        );
-        originalParams.addRule(RelativeLayout.ALIGN_PARENT_START); // Alinha à esquerda
-        btnOriginal.setLayoutParams(originalParams);
-    
-        // Botão da Direita (Tela Cheia)
+
+        // Botão da Esquerda (Tela Cheia)
         Button btnTelaCheia = new Button(context);
         btnTelaCheia.setText("Tela Cheia");
         btnTelaCheia.setBackgroundColor(Color.TRANSPARENT); // Remove o fundo padrão do botão
@@ -268,8 +256,22 @@ public final class MainMenuActivity extends PreferenceActivity {
                 RelativeLayout.LayoutParams.WRAP_CONTENT,
                 RelativeLayout.LayoutParams.WRAP_CONTENT
         );
-        telaCheiaParams.addRule(RelativeLayout.ALIGN_PARENT_END); // Alinha à direita
+        
+        // Botão da Direita (Original)
+        Button btnOriginal = new Button(context);
+        btnOriginal.setText("Original");
+        btnOriginal.setBackgroundColor(Color.TRANSPARENT); // Remove o fundo padrão do botão
+        btnOriginal.setTextColor(Color.DKGRAY); // Define uma cor para o texto
+        RelativeLayout.LayoutParams originalParams = new RelativeLayout.LayoutParams(
+                RelativeLayout.LayoutParams.WRAP_CONTENT,
+                RelativeLayout.LayoutParams.WRAP_CONTENT
+        );
+
+        telaCheiaParams.addRule(RelativeLayout.ALIGN_PARENT_START); // Alinha à esquerda
         btnTelaCheia.setLayoutParams(telaCheiaParams);
+        
+        originalParams.addRule(RelativeLayout.ALIGN_PARENT_END); // Alinha à direita
+        btnOriginal.setLayoutParams(originalParams);
     
         // 5. Adicionar os componentes aos seus containers
         buttonLayout.addView(btnOriginal);

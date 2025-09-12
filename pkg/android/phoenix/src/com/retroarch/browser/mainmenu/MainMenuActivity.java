@@ -223,9 +223,10 @@ public final class MainMenuActivity extends PreferenceActivity {
         // 2. Criar e configurar o Título
         TextView titleView = new TextView(context);
         titleView.setText("Escolha a proporção de tela dos jogos:");
-        titleView.setTextSize(20); // Tamanho da fonte em SP
+        titleView.setTextSize(18); // Tamanho da fonte em SP
         titleView.setTypeface(null, Typeface.BOLD);
         titleView.setGravity(Gravity.CENTER);
+        titleView.setTextColor(Color.BLACK);
     
         // Adicionar um espaçamento abaixo do título
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
@@ -251,7 +252,8 @@ public final class MainMenuActivity extends PreferenceActivity {
         Button btnTelaCheia = new Button(context);
         btnTelaCheia.setText("Tela Cheia");
         btnTelaCheia.setBackgroundColor(Color.TRANSPARENT); // Remove o fundo padrão do botão
-        btnTelaCheia.setTextColor(Color.DKGRAY); // Define uma cor para o texto
+        btnTelaCheia.setTextSize(14);
+        btnTelaCheia.setTextColor(Color.parseColor("#2196F3")); // Define uma cor para o texto
         RelativeLayout.LayoutParams telaCheiaParams = new RelativeLayout.LayoutParams(
                 RelativeLayout.LayoutParams.WRAP_CONTENT,
                 RelativeLayout.LayoutParams.WRAP_CONTENT
@@ -261,7 +263,8 @@ public final class MainMenuActivity extends PreferenceActivity {
         Button btnOriginal = new Button(context);
         btnOriginal.setText("Original");
         btnOriginal.setBackgroundColor(Color.TRANSPARENT); // Remove o fundo padrão do botão
-        btnOriginal.setTextColor(Color.DKGRAY); // Define uma cor para o texto
+        btnOriginal.setTextSize(14);
+        btnOriginal.setTextColor(Color.parseColor("#2196F3")); // Define uma cor para o texto
         RelativeLayout.LayoutParams originalParams = new RelativeLayout.LayoutParams(
                 RelativeLayout.LayoutParams.WRAP_CONTENT,
                 RelativeLayout.LayoutParams.WRAP_CONTENT

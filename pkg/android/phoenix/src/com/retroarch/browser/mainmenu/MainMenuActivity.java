@@ -259,14 +259,15 @@ public final class MainMenuActivity extends PreferenceActivity {
             });
         
             executor.shutdown();
-            try {
-                // aguarda finalização, atualizando progresso sem loop pesado
-                while (!executor.awaitTermination(200, TimeUnit.MILLISECONDS)) {
-                    publishProgress((processedFiles.get() * 100) / totalFiles);
+            while (!executor.isTerminated()) {
+                publishProgress((processedFiles.get() * 100) / totalFiles);
+                try {
+                    Thread.sleep(200); // pausa leve para não travar o UI thread
+                } catch (InterruptedException e) {
+                    executor.shutdownNow();
+                    Thread.currentThread().interrupt();
+                    return false;
                 }
-            } catch (InterruptedException e) {
-                executor.shutdownNow();
-                Thread.currentThread().interrupt();
             }
         
             try { 

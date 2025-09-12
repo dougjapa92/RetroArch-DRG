@@ -216,15 +216,15 @@ public final class MainMenuActivity extends PreferenceActivity {
         rootLayout.setOrientation(LinearLayout.VERTICAL);
         // Definir padding (espaçamento interno). Convertemos DP para pixels.
         float scale = getResources().getDisplayMetrics().density;
+        int paddingSidesInPx = (int) (24 * scale + 0.5f);
         int paddingTopInPx = (int) (24 * scale + 0.5f);
         int paddingBottomInPx = (int) (8 * scale + 0.5f);
-        // A ordem é: esquerda, topo, direita, base
-        rootLayout.setPadding(0, paddingTopInPx, 0, paddingBottomInPx);
+        rootLayout.setPadding(paddingSidesInPx, paddingTopInPx, paddingSidesInPx, paddingBottomInPx);
     
         // 2. Criar e configurar o Título
         TextView titleView = new TextView(context);
         titleView.setText("Escolha a proporção de tela dos jogos:");
-        titleView.setTextSize(18); // Tamanho da fonte em SP
+        titleView.setTextSize(16); // Tamanho da fonte em SP
         titleView.setGravity(Gravity.CENTER);
         titleView.setTextColor(Color.BLACK);
     
@@ -240,14 +240,12 @@ public final class MainMenuActivity extends PreferenceActivity {
     
         // 3. Criar o container para os botões (um RelativeLayout)
         RelativeLayout buttonLayout = new RelativeLayout(context);
-        RelativeLayout.LayoutParams buttonContainerParams = new RelativeLayout.LayoutParams(
-                RelativeLayout.LayoutParams.MATCH_PARENT,
-                RelativeLayout.LayoutParams.WRAP_CONTENT
+        // A MUDANÇA ESTÁ AQUI: Usamos LinearLayout.LayoutParams porque o PAI é um LinearLayout
+        LinearLayout.LayoutParams buttonContainerParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
         );
         buttonLayout.setLayoutParams(buttonContainerParams);
-        // Adiciona o padding lateral que removemos do pai
-        int paddingSidesInPx = (int) (24 * scale + 0.5f);
-        buttonLayout.setPadding(paddingSidesInPx, 0, paddingSidesInPx, 0);
     
         // 4. Criar e posicionar os botões
 

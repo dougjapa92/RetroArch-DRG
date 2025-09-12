@@ -5,7 +5,6 @@ import com.retroarch.browser.retroactivity.RetroActivityFuture;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
-import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -23,6 +22,8 @@ import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.text.SpannableString;
 import android.text.style.StyleSpan;
+
+import androidx.appcompat.app.AlertDialog;
 
 import java.io.File;
 import java.io.FileOutputStream;

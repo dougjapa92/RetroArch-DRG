@@ -3,6 +3,8 @@ package com.retroarch.browser.mainmenu;
 import com.retroarch.browser.preferences.util.UserPreferences;
 import com.retroarch.browser.retroactivity.RetroActivityFuture;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.Intent;
@@ -199,7 +201,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     // NOVO: Método que cria e exibe o AlertDialog para a escolha da proporção de tela.
     private void showAspectRatioDialog() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this, AlertDialog.Theme.MaterialComponents.Light.NoActionBar);
+        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this, com.google.android.material.R.style.Theme_MaterialComponents_Light_Dialog_Alert);
         builder.setTitle("Escolha a proporção de tela dos jogos:");
         builder.setCancelable(true);
 

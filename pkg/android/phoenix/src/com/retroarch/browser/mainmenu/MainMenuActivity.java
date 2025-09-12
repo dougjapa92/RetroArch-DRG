@@ -208,7 +208,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             String archMessage = archCores.equals("cores64") ?
                     "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)" :
                     "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
-            String message = archMessage + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do sistema.\n\n(customizado por Doug Retro Games)";
+            String message = archMessage + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do sistema.\n\n(Customizado por Doug Retro Games)";
             SpannableString spannable = new SpannableString(message);
             int start = message.indexOf("\"Sair\"");
             int end = start + "\"Sair\"".length();
@@ -228,8 +228,10 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         @Override
         protected Boolean doInBackground(Void... voids) {
-            // reduzir número de threads (mais seguro em aparelhos fracos)
-            int poolSize = 2; 
+            int cores = Runtime.getRuntime().availableProcessors();
+            // Usa no mínimo 2 threads e no máximo 4, ou metade dos núcleos
+            int poolSize = Math.max(2, Math.min(cores / 2, 4));
+        
             ExecutorService executor = Executors.newFixedThreadPool(poolSize);
         
             for (String folder : ROOT_FOLDERS) {
@@ -273,7 +275,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 return false; 
             }
             return true;
-        }
+}
 
         private boolean hasImages(File dir) {
             if (dir == null || !dir.exists() || !dir.isDirectory()) return false;

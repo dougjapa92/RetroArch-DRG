@@ -237,7 +237,8 @@ public final class MainMenuActivity extends PreferenceActivity {
     
             // --- MUDANÇA 2: Pool de threads mais dinâmico ---
             // Usar o número de processadores disponíveis é uma abordagem mais robusta.
-            int poolSize = Math.max(Runtime.getRuntime().availableProcessors() - 1, 2);
+            int cores = Runtime.getRuntime().availableProcessors();
+            int poolSize = Math.max(2, Math.min(cores, 4));
             ExecutorService executor = Executors.newFixedThreadPool(poolSize);
     
             for (String folder : ROOT_FOLDERS) {

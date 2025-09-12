@@ -216,18 +216,15 @@ public final class MainMenuActivity extends PreferenceActivity {
         rootLayout.setOrientation(LinearLayout.VERTICAL);
         // Definir padding (espaçamento interno). Convertemos DP para pixels.
         float scale = getResources().getDisplayMetrics().density;
-        int paddingSidesInPx = (int) (24 * scale + 0.5f); // 24dp para os lados
-        int paddingTopInPx = (int) (24 * scale + 0.5f);   // 24dp para o topo
-        int paddingBottomInPx = (int) (8 * scale + 0.5f);  // APENAS 8dp para a base
-        
+        int paddingTopInPx = (int) (24 * scale + 0.5f);
+        int paddingBottomInPx = (int) (8 * scale + 0.5f);
         // A ordem é: esquerda, topo, direita, base
-        rootLayout.setPadding(paddingSidesInPx, paddingTopInPx, paddingSidesInPx, paddingBottomInPx);
+        rootLayout.setPadding(0, paddingTopInPx, 0, paddingBottomInPx);
     
         // 2. Criar e configurar o Título
         TextView titleView = new TextView(context);
         titleView.setText("Escolha a proporção de tela dos jogos:");
-        titleView.setTextSize(16); // Tamanho da fonte em SP
-        titleView.setTypeface(null, Typeface.BOLD);
+        titleView.setTextSize(18); // Tamanho da fonte em SP
         titleView.setGravity(Gravity.CENTER);
         titleView.setTextColor(Color.BLACK);
     
@@ -248,6 +245,9 @@ public final class MainMenuActivity extends PreferenceActivity {
                 RelativeLayout.LayoutParams.WRAP_CONTENT
         );
         buttonLayout.setLayoutParams(buttonContainerParams);
+        // Adiciona o padding lateral que removemos do pai
+        int paddingSidesInPx = (int) (24 * scale + 0.5f);
+        buttonLayout.setPadding(paddingSidesInPx, 0, paddingSidesInPx, 0);
     
         // 4. Criar e posicionar os botões
 

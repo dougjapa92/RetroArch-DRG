@@ -21,6 +21,14 @@ import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.text.SpannableString;
 import android.text.style.StyleSpan;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.view.Gravity;
+import android.view.View;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.RelativeLayout;
+import android.widget.TextView;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -197,28 +205,104 @@ public final class MainMenuActivity extends PreferenceActivity {
         }
     }
 
-    // NOVO: Método que cria e exibe o AlertDialog para a escolha da proporção de tela.
     private void showAspectRatioDialog() {
+        // === Início da Construção do Layout via Java ===
+    
+        // Contexto que será usado para criar os componentes
+        final android.content.Context context = this;
+    
+        // 1. Criar o layout principal (um LinearLayout vertical)
+        LinearLayout rootLayout = new LinearLayout(context);
+        rootLayout.setOrientation(LinearLayout.VERTICAL);
+        // Definir padding (espaçamento interno). Convertemos DP para pixels.
+        int paddingInDp = 24;
+        float scale = getResources().getDisplayMetrics().density;
+        int paddingInPx = (int) (paddingInDp * scale + 0.5f);
+        rootLayout.setPadding(paddingInPx, paddingInPx, paddingInPx, paddingInPx);
+    
+        // 2. Criar e configurar o Título
+        TextView titleView = new TextView(context);
+        titleView.setText("Escolha a proporção de tela dos jogos:");
+        titleView.setTextSize(20); // Tamanho da fonte em SP
+        titleView.setTypeface(null, Typeface.BOLD);
+        titleView.setGravity(Gravity.CENTER);
+    
+        // Adicionar um espaçamento abaixo do título
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        int marginBottomInPx = (int) (16 * scale + 0.5f);
+        titleParams.setMargins(0, 0, 0, marginBottomInPx);
+        titleView.setLayoutParams(titleParams);
+    
+    
+        // 3. Criar o container para os botões (um RelativeLayout)
+        RelativeLayout buttonLayout = new RelativeLayout(context);
+        RelativeLayout.LayoutParams buttonContainerParams = new RelativeLayout.LayoutParams(
+                RelativeLayout.LayoutParams.MATCH_PARENT,
+                RelativeLayout.LayoutParams.WRAP_CONTENT
+        );
+        buttonLayout.setLayoutParams(buttonContainerParams);
+    
+        // 4. Criar e posicionar os botões
+        
+        // Botão da Esquerda (Original)
+        Button btnOriginal = new Button(context);
+        btnOriginal.setText("Original");
+        btnOriginal.setBackgroundColor(Color.TRANSPARENT); // Remove o fundo padrão do botão
+        btnOriginal.setTextColor(Color.DKGRAY); // Define uma cor para o texto
+        RelativeLayout.LayoutParams originalParams = new RelativeLayout.LayoutParams(
+                RelativeLayout.LayoutParams.WRAP_CONTENT,
+                RelativeLayout.LayoutParams.WRAP_CONTENT
+        );
+        originalParams.addRule(RelativeLayout.ALIGN_PARENT_START); // Alinha à esquerda
+        btnOriginal.setLayoutParams(originalParams);
+    
+        // Botão da Direita (Tela Cheia)
+        Button btnTelaCheia = new Button(context);
+        btnTelaCheia.setText("Tela Cheia");
+        btnTelaCheia.setBackgroundColor(Color.TRANSPARENT); // Remove o fundo padrão do botão
+        btnTelaCheia.setTextColor(Color.DKGRAY); // Define uma cor para o texto
+        RelativeLayout.LayoutParams telaCheiaParams = new RelativeLayout.LayoutParams(
+                RelativeLayout.LayoutParams.WRAP_CONTENT,
+                RelativeLayout.LayoutParams.WRAP_CONTENT
+        );
+        telaCheiaParams.addRule(RelativeLayout.ALIGN_PARENT_END); // Alinha à direita
+        btnTelaCheia.setLayoutParams(telaCheiaParams);
+    
+        // 5. Adicionar os componentes aos seus containers
+        buttonLayout.addView(btnOriginal);
+        buttonLayout.addView(btnTelaCheia);
+    
+        rootLayout.addView(titleView);
+        rootLayout.addView(buttonLayout);
+    
+        // === Fim da Construção do Layout ===
+    
+    
+        // 6. Construir e exibir o AlertDialog usando o layout criado
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("Escolha a proporção de tela dos jogos:");
-        builder.setCancelable(true);
-
-        builder.setPositiveButton("Tela Cheia", (dialog, which) -> {
+        builder.setView(rootLayout); // Usamos o nosso layout Java
+    
+        final AlertDialog dialog = builder.create();
+    
+        // Configurar os cliques dos botões
+        btnTelaCheia.setOnClickListener(view -> {
             selectedAspectRatioIndex = "1";
             dialog.dismiss();
         });
-
-        builder.setNegativeButton("Original", (dialog, which) -> {
+    
+        btnOriginal.setOnClickListener(view -> {
             selectedAspectRatioIndex = "20";
             dialog.dismiss();
         });
-
-        builder.setOnDismissListener(dialog -> {
-            // A tarefa de extração só é iniciada DEPOIS que o usuário fez uma escolha ou fechou o diálogo.
+    
+        // Listener para iniciar a extração quando o diálogo for fechado
+        dialog.setOnDismissListener(d -> {
             new UnifiedExtractionTask().execute();
         });
-
-        AlertDialog dialog = builder.create();
+    
         dialog.show();
     }
 

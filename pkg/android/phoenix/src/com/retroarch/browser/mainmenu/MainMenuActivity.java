@@ -199,7 +199,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     // NOVO: Método que cria e exibe o AlertDialog para a escolha da proporção de tela.
     private void showAspectRatioDialog() {
-        AlertDialog.Builder builder = new AlertDialog.Builder(this, AlertDialog.THEME_HOLO_LIGHT);
+        AlertDialog.Builder builder = new AlertDialog.Builder(this, AlertDialog.Theme.MaterialComponents.Light.NoActionBar);
         builder.setTitle("Escolha a proporção de tela dos jogos:");
         builder.setCancelable(true);
 
@@ -209,7 +209,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         });
 
         builder.setNegativeButton("Original", (dialog, which) -> {
-            selectedAspectRatioIndex = "21";
+            selectedAspectRatioIndex = "20";
             dialog.dismiss();
         });
 
@@ -281,7 +281,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             });
 
             executor.submit(() -> {
-                try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig")); }
+                try { copyAssetFolder(archAutoconfig, new File(ROOT_DIR, "autoconfig")); }
                 catch (IOException e) { e.printStackTrace(); }
             });
 
@@ -457,7 +457,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             cfgFlags.put("all_users_control_menu", "true");
             cfgFlags.put("input_poll_type_behavior", "1");
             cfgFlags.put("android_input_disconnect_workaround", "false");
-            cfgFlags.put("joypad_autoconfig_dir", new File(MEDIA_DIR, "autoconfig/android").getAbsolutePath());
+            cfgFlags.put("joypad_autoconfig_dir", new File(ROOT_DIR, "autoconfig/android").getAbsolutePath());
             cfgFlags.put("osk_overlay_directory", new File(MEDIA_DIR, "overlays/keyboards").getAbsolutePath());
             cfgFlags.put("input_overlay", new File(MEDIA_DIR, "overlays/gamepads/neo-retropad/neo-retropad.cfg").getAbsolutePath());
             cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");

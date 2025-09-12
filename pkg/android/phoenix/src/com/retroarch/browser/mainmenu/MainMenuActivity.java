@@ -253,7 +253,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         // Botão da Esquerda (Tela Cheia)
         Button btnTelaCheia = new Button(context);
-        btnTelaCheia.setText("Tela Cheia");
+        btnTelaCheia.setText("TELA CHEIA");
         btnTelaCheia.setBackgroundColor(Color.TRANSPARENT); // Remove o fundo padrão do botão
         btnTelaCheia.setTextSize(14);
         btnTelaCheia.setTextColor(Color.parseColor("#2196F3")); // Define uma cor para o texto
@@ -264,7 +264,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         
         // Botão da Direita (Original)
         Button btnOriginal = new Button(context);
-        btnOriginal.setText("Original");
+        btnOriginal.setText("ORIGINAL");
         btnOriginal.setBackgroundColor(Color.TRANSPARENT); // Remove o fundo padrão do botão
         btnOriginal.setTextSize(14);
         btnOriginal.setTextColor(Color.parseColor("#2196F3")); // Define uma cor para o texto

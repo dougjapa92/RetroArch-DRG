@@ -226,7 +226,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         titleView.setText("Escolha a proporção de tela dos jogos: ");
         titleView.setTextSize(18); // Tamanho da fonte em SP
         titleView.setGravity(Gravity.CENTER);
-        titleView.setTextColor(Color.parseColor("#5F616D"));
+        titleView.setTextColor(Color.parseColor("#1B1D29"));
         titleView.setTypeface(titleView.getTypeface(), Typeface.BOLD);
     
         // Adicionar um espaçamento abaixo do título

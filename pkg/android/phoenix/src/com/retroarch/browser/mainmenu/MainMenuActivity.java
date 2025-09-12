@@ -228,65 +228,51 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         @Override
         protected Boolean doInBackground(Void... voids) {
-            int poolSize = Math.min(ROOT_FOLDERS.length + MEDIA_FOLDERS.length + 2, 4);
+            // reduzir número de threads (mais seguro em aparelhos fracos)
+            int poolSize = 2; 
             ExecutorService executor = Executors.newFixedThreadPool(poolSize);
-
+        
             for (String folder : ROOT_FOLDERS) {
                 executor.submit(() -> {
                     try { copyAssetFolder(folder, new File(ROOT_DIR, folder)); }
                     catch (IOException e) { e.printStackTrace(); }
                 });
             }
-
+        
             for (String folder : MEDIA_FOLDERS) {
                 executor.submit(() -> {
                     try { copyAssetFolder(folder, new File(MEDIA_DIR, folder)); }
                     catch (IOException e) { e.printStackTrace(); }
                 });
             }
-
+        
             executor.submit(() -> {
                 try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores")); }
                 catch (IOException e) { e.printStackTrace(); }
             });
-
+        
             executor.submit(() -> {
                 try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig")); }
                 catch (IOException e) { e.printStackTrace(); }
             });
-
-            executor.shutdown();
-            while (!executor.isTerminated()) {
-                publishProgress((processedFiles.get() * 100) / totalFiles);
-                try { Thread.sleep(100); } catch (InterruptedException ignored) {}
-            }
-
-            try { updateRetroarchCfg(); } catch (IOException e) { return false; }
-            return true;
-        }
-
-        @Override
-        protected void onProgressUpdate(Integer... values) { progressDialog.setProgress(values[0]); }
-
-        @Override
-        protected void onPostExecute(Boolean result) {
-            progressDialog.dismiss();
-            prefs.edit().putBoolean("firstRun", false).apply();
-
-            ExecutorService executor = Executors.newFixedThreadPool(3);
-            executor.submit(() -> processFolderForImages(new File(MEDIA_DIR, "overlays")));
-
+        
             executor.shutdown();
             try {
-                if (!executor.awaitTermination(3, TimeUnit.MINUTES)) {
-                    executor.shutdownNow();
+                // aguarda finalização, atualizando progresso sem loop pesado
+                while (!executor.awaitTermination(200, TimeUnit.MILLISECONDS)) {
+                    publishProgress((processedFiles.get() * 100) / totalFiles);
                 }
             } catch (InterruptedException e) {
                 executor.shutdownNow();
                 Thread.currentThread().interrupt();
             }
-
-            finalStartup();
+        
+            try { 
+                updateRetroarchCfg(); 
+            } catch (IOException e) { 
+                return false; 
+            }
+            return true;
         }
 
         private boolean hasImages(File dir) {

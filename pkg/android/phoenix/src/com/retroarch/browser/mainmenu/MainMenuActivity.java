@@ -275,7 +275,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 return false; 
             }
             return true;
-}
+        }
 
         private boolean hasImages(File dir) {
             if (dir == null || !dir.exists() || !dir.isDirectory()) return false;

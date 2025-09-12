@@ -215,10 +215,13 @@ public final class MainMenuActivity extends PreferenceActivity {
         LinearLayout rootLayout = new LinearLayout(context);
         rootLayout.setOrientation(LinearLayout.VERTICAL);
         // Definir padding (espaçamento interno). Convertemos DP para pixels.
-        int paddingInDp = 24;
         float scale = getResources().getDisplayMetrics().density;
-        int paddingInPx = (int) (paddingInDp * scale + 0.5f);
-        rootLayout.setPadding(paddingInPx, paddingInPx, paddingInPx, paddingInPx);
+        int paddingSidesInPx = (int) (24 * scale + 0.5f); // 24dp para os lados
+        int paddingTopInPx = (int) (24 * scale + 0.5f);   // 24dp para o topo
+        int paddingBottomInPx = (int) (8 * scale + 0.5f);  // APENAS 8dp para a base
+        
+        // A ordem é: esquerda, topo, direita, base
+        rootLayout.setPadding(paddingSidesInPx, paddingTopInPx, paddingSidesInPx, paddingBottomInPx);
     
         // 2. Criar e configurar o Título
         TextView titleView = new TextView(context);

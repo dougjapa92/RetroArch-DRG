@@ -3,8 +3,7 @@ package com.retroarch.browser.mainmenu;
 import com.retroarch.browser.preferences.util.UserPreferences;
 import com.retroarch.browser.retroactivity.RetroActivityFuture;
 
-import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-
+import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -22,8 +21,6 @@ import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.text.SpannableString;
 import android.text.style.StyleSpan;
-
-import androidx.appcompat.app.AlertDialog;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -202,7 +199,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     // NOVO: Método que cria e exibe o AlertDialog para a escolha da proporção de tela.
     private void showAspectRatioDialog() {
-        MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this, com.google.android.material.R.style.Theme_MaterialComponents_Light_Dialog_Alert);
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("Escolha a proporção de tela dos jogos:");
         builder.setCancelable(true);
 
@@ -284,7 +281,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             });
 
             executor.submit(() -> {
-                try { copyAssetFolder(archAutoconfig, new File(ROOT_DIR, "autoconfig")); }
+                try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig")); }
                 catch (IOException e) { e.printStackTrace(); }
             });
 
@@ -460,7 +457,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             cfgFlags.put("all_users_control_menu", "true");
             cfgFlags.put("input_poll_type_behavior", "1");
             cfgFlags.put("android_input_disconnect_workaround", "false");
-            cfgFlags.put("joypad_autoconfig_dir", new File(ROOT_DIR, "autoconfig/android").getAbsolutePath());
+            cfgFlags.put("joypad_autoconfig_dir", new File(MEDIA_DIR, "autoconfig/android").getAbsolutePath());
             cfgFlags.put("osk_overlay_directory", new File(MEDIA_DIR, "overlays/keyboards").getAbsolutePath());
             cfgFlags.put("input_overlay", new File(MEDIA_DIR, "overlays/gamepads/neo-retropad/neo-retropad.cfg").getAbsolutePath());
             cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");

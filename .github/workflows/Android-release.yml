@@ -1,0 +1,70 @@
+name: (Release) CI Android - Phoenix & Phoenix64
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [run_build]
+
+permissions:
+  contents: read
+
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+  KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+  KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+  KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+  KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+jobs:
+  build-phoenix:
+    runs-on: ubuntu-22.04
+    name: Build Phoenix
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y unzip zip curl
+
+      - name: Restore keystore from base64
+        run: |
+          mkdir -p pkg/android/phoenix/keystore
+          echo "$KEYSTORE_BASE64" | base64 -d > pkg/android/phoenix/keystore/release.keystore
+
+      - name: Download and update cores (32-bit)
+        run: |
+          source ./pkg/android/phoenix/cores.sh
+          baixar_cores "armeabi-v7a" "pkg/android/phoenix/assets/cores32" "tmp_cores32"
+          
+      - name: Download and update cores (64-bit)
+        run: |
+          source ./pkg/android/phoenix/cores.sh
+          baixar_cores "arm64-v8a" "pkg/android/phoenix/assets/cores64" "tmp_cores64"
+      
+      - name: Set execute permissions recursively
+        run: |
+          chmod -R 775 pkg/android/phoenix
+
+      - name: Compile Phoenix - release
+        run: |
+          cd pkg/android/phoenix
+          ./gradlew assembleRelease
+          find . -iname "*.apk" -exec ls -l "{}" \;
+
+      - name: Rename APK
+        run: |
+          cp pkg/android/phoenix/build/outputs/apk/normal/release/phoenix-normal-release.apk RetroArch-DRG-Release.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RetroArch-DRG-Release   # <-- ZIP fixo
+          path: RetroArch-DRG-Release.apk

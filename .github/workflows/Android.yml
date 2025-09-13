@@ -60,15 +60,11 @@ jobs:
           ./gradlew assembleRelease
           find . -iname "*.apk" -exec ls -l "{}" \;
 
-      - name: Get short SHA
-        id: slug_phoenix
-        run: echo "sha8=$(echo ${GITHUB_SHA} | cut -c1-8)" >> $GITHUB_OUTPUT
-
-      - name: Find APK
+      - name: Rename APK
         run: |
-          find pkg/android/phoenix/build -type f -name "*.apk"
+          cp pkg/android/phoenix/build/outputs/apk/normal/release/phoenix-normal-release.apk RetroArch-DRG-Release.apk
 
       - uses: actions/upload-artifact@v4
         with:
-          name: retroarch-phoenix-${{ steps.slug_phoenix.outputs.sha8 }}
-          path: pkg/android/phoenix/build/outputs/apk/normal/release/phoenix-normal-release.apk
+          name: RetroArch-DRG-Release   # <-- ZIP fixo
+          path: RetroArch-DRG-Release.apk 

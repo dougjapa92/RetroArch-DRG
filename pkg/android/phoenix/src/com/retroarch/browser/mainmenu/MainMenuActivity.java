@@ -326,17 +326,6 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             finalStartup();
         }
-        
-        private boolean isArm64() {
-            if (Build.SUPPORTED_ABIS != null) {
-                for (String abi : Build.SUPPORTED_ABIS) {
-                    if (abi.toLowerCase().startsWith("arm64")) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        } 
 
         private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
             String[] assets = getAssets().list(assetFolder);
@@ -347,9 +336,20 @@ public final class MainMenuActivity extends PreferenceActivity {
                     String fullPath = assetFolder + "/" + asset;
                     File outFile = new File(targetFolder, asset);
 
-                    if (!isArm64() && fullPath.equals("config/global.glslp")) {
-                        publishProgress(processedFiles.incrementAndGet());
-                        continue;
+                    if (fullPath.equals("config/global.glslp")) {
+                        boolean hasArm64 = false;
+                        if (Build.SUPPORTED_ABIS != null) {
+                            for (String abi : Build.SUPPORTED_ABIS) {
+                                if (abi.toLowerCase().contains("arm64")) {
+                                    hasArm64 = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!hasArm64) {
+                            publishProgress(processedFiles.incrementAndGet());
+                            continue;
+                        }
                     }
 
                     boolean isDir = false;

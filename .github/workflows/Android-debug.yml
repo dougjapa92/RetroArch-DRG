@@ -68,7 +68,11 @@ jobs:
         run: |
           find pkg/android/phoenix/build -type f -name "*.apk"
 
+      - name: Rename APK
+        run: |
+          cp pkg/android/phoenix/build/outputs/apk/normal/debug/phoenix-normal-debug.apk RetroArch-DRG-Debug.apk
+
       - uses: actions/upload-artifact@v4
         with:
           name: retroarch-phoenix-debug-${{ steps.slug_phoenix.outputs.sha8 }}
-          path: pkg/android/phoenix/build/outputs/apk/normal/debug/phoenix-normal-debug.apk  
+          path: RetroArch-DRG-Debug.apk 

@@ -150,14 +150,14 @@ public final class MainMenuActivity extends PreferenceActivity {
                         .setTitle("Permissão Negada!")
                         .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
                         .setCancelable(false)
-                        .setPositiveButton("Abrir Configurações", (dialog, which) -> {
+                        .setPositiveButton("ABRIR CONFIGURAÇÕES", (dialog, which) -> {
                             wentToSettings = true;
                             Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
                             Uri uri = Uri.fromParts("package", getPackageName(), null);
                             intent.setData(uri);
                             startActivity(intent);
                         })
-                        .setNegativeButton("Sair", (dialog, which) -> finish())
+                        .setNegativeButton("SAIR", (dialog, which) -> finish())
                         .show();
             } else if (!firstDenialHandled) {
                 firstDenialHandled = true;
@@ -165,13 +165,13 @@ public final class MainMenuActivity extends PreferenceActivity {
                         .setTitle("Permissões Necessárias!")
                         .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
                         .setCancelable(false)
-                        .setPositiveButton("Conceder", (dialog, which) -> {
+                        .setPositiveButton("CONCEDER", (dialog, which) -> {
                             if (permissions != null)
                                 requestPermissions(permissions, REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
                             else
                                 checkRuntimePermissions();
                         })
-                        .setNegativeButton("Sair", (dialog, which) -> finish())
+                        .setNegativeButton("SAIR", (dialog, which) -> finish())
                         .show();
             }
         }

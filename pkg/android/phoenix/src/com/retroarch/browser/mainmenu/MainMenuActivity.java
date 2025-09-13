@@ -209,11 +209,11 @@ public final class MainMenuActivity extends PreferenceActivity {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setMessage("Escolha a proporção de tela dos jogos:");
     
-        builder.setPositiveButton("Tela Cheia", (dialog, which) -> {
+        builder.setPositiveButton("TELA CHEIA (16:9)", (dialog, which) -> {
             selectedAspectRatioIndex = "1";
         });
     
-        builder.setNegativeButton("Original", (dialog, which) -> {
+        builder.setNegativeButton("ORIGINAL (4:3)", (dialog, which) -> {
             selectedAspectRatioIndex = "20";
         });
     

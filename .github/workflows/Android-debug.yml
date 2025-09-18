@@ -64,7 +64,11 @@ jobs:
         run: |
           cp pkg/android/phoenix/build/outputs/apk/normal/debug/phoenix-normal-debug.apk RetroArch-DRG-Debug.apk
 
+      - name: Definir nome do artefato
+        id: vars
+        run: echo "artifact_name=RetroArch-DRG-Debug-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+
       - uses: actions/upload-artifact@v4
         with:
-          name: RetroArch-DRG-Debug   # <-- ZIP fixo
-          path: RetroArch-DRG-Debug.apk 
+          name: ${{ steps.vars.outputs.artifact_name }}
+          path: RetroArch-DRG-Debug.apk

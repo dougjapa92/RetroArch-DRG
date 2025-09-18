@@ -1319,9 +1319,22 @@ static void handle_hotplug(android_input_t *android,
       }
    }
 
-   /* Caso não seja teclado, usa o próprio nome do dispositivo */
-   if (!string_is_empty(device_name))
-      strlcpy(name_buf, device_name, sizeof(name_buf));
+   // Lógica para tratar dispositivos genéricos e "Virtual"
+   if (strcmp(device_name, "Virtual") == 0)
+   {
+       // Se o nome for "Virtual", criamos o novo nome com VID/PID para garantir unicidade.
+       snprintf(name_buf, sizeof(name_buf), "Generic Gamepad (%d-%d)", vendorId, productId);
+   }
+   else if (!string_is_empty(device_name))
+   {
+       // Se não for "Virtual" mas tiver um nome, usamos o nome original.
+       strlcpy(name_buf, device_name, sizeof(name_buf));
+   }
+   else
+   {
+       // Se não tiver nome algum, usamos um fallback genérico com VID/PID 0-0.
+       snprintf(name_buf, sizeof(name_buf), "Generic Gamepad (0-0)");
+   }
   
    if (strstr(android_app->current_ime, "net.obsidianx.android.mogaime"))
       strlcpy(name_buf, android_app->current_ime, sizeof(name_buf));

@@ -1,18 +1,18 @@
 buildscript {
-  repositories {
-    google()
-    jcenter()
-  }
+    repositories {
+        google()
+        mavenCentral()
+    }
 
-  dependencies {
-    classpath 'com.android.tools.build:gradle:4.2.0'
-  }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.13.0'
+    }
 }
 
 allprojects {
     repositories {
         google()
-        jcenter()
+        mavenCentral()
     }
 
     Properties props = new Properties()
@@ -25,169 +25,109 @@ allprojects {
 apply plugin: 'com.android.application'
 
 android {
-  compileSdkVersion 30
-  buildToolsVersion "30.0.3"
-  ndkVersion "22.0.7026061"
+    namespace "com.retroarch"
+    compileSdkVersion 35
+    ndkVersion "22.0.7026061"
+    flavorDimensions "variant"
 
-  flavorDimensions "variant"
+    defaultConfig {
+        minSdkVersion 16
+        targetSdkVersion 29
+        versionCode System.currentTimeSeconds().toInteger()
+        versionName "${getManifestAttribute("versionName")}_DRG"
 
-  defaultConfig {
-    minSdkVersion 16
+        externalNativeBuild {
+            ndkBuild {
+                arguments "-j${Runtime.runtime.availableProcessors()}"
+            }
+        }
+
+        ndk {
+            abiFilters 'armeabi-v7a', 'arm64-v8a'
+        }
+    }
+
+    buildFeatures {
+        buildConfig = true
+    }
+
+    productFlavors {
+        normal {
+            resValue "string", "app_name", "RetroArch DRG"
+            buildConfigField "boolean", "PLAY_STORE_BUILD", "false"
+            dimension "variant"
+        }
+    }
+
+    sourceSets {
+        main {
+            manifest.srcFile 'AndroidManifest.xml'
+            assets.srcDirs = ['assets']
+            java.srcDirs = ['src', '../phoenix-common/src']
+            jniLibs.srcDir '../phoenix-common/libs'
+            jni.srcDirs = []
+            res.srcDirs = ['res', '../phoenix-common/res']
+            assets.srcDirs += 'pkg/android/phoenix/assets'
+        }
+        normal {
+            java.srcDirs += ['../play-core-stub']
+        }
+    }
+
     externalNativeBuild {
-      ndkBuild {
-        arguments "-j${Runtime.runtime.availableProcessors()}"
-      }
+        ndkBuild {
+            path '../phoenix-common/jni/Android.mk'
+        }
     }
-    targetSdkVersion 28
-    versionCode System.currentTimeSeconds().toInteger()
-    versionName "${getManifestAttribute("versionName")}_GIT"
-  }
 
-  productFlavors {
-    normal {
-      resValue "string", "app_name", "RetroArch"
-      buildConfigField "boolean", "PLAY_STORE_BUILD", "false"
+    signingConfigs {
+        release {
+            def keystorePath = "${buildDir}/keystore/release.keystore"
+            def keystoreBase64 = System.getenv("KEYSTORE_BASE64")
+            def keystoreBytes = keystoreBase64?.decodeBase64()
+            if (keystoreBytes != null) {
+                def keystoreFile = new File(keystorePath)
+                keystoreFile.parentFile.mkdirs()
+                keystoreFile.bytes = keystoreBytes
+                storeFile keystoreFile
+                storePassword System.getenv("KEYSTORE_PASSWORD")
+                keyAlias System.getenv("KEY_ALIAS")
+                keyPassword System.getenv("KEY_PASSWORD")
+            } else {
+                throw new GradleException("Keystore base64 não encontrado ou inválido")
+            }
+        }
+    }
 
-      dimension "variant"
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+            shrinkResources false
+        }
+        debug {
+            signingConfig signingConfigs.debug
+        }
     }
-    aarch64 {
-      applicationIdSuffix '.aarch64'
-      resValue "string", "app_name", "RetroArch (AArch64)"
-      buildConfigField "boolean", "PLAY_STORE_BUILD", "false"
 
-      dimension "variant"
-      ndk {
-        abiFilters 'arm64-v8a', 'x86_64'
-      }
+    lint {
+        checkReleaseBuilds true
+        abortOnError false
     }
-    ra32 {
-      applicationIdSuffix '.ra32'
-      resValue "string", "app_name", "RetroArch (32-bit)"
-      buildConfigField "boolean", "PLAY_STORE_BUILD", "false"
 
-      dimension "variant"
-      ndk {
-        abiFilters 'armeabi-v7a', 'x86'
-      }
+    aaptOptions {
+        ignoreAssetsPattern "!*.nomedia"
     }
-    playStoreNormal {
-      minSdkVersion 21
-      targetSdkVersion 35
-      versionCode getPlayStoreVersionCode()
-      versionName getPlayStoreVersionName()
-
-      resValue "string", "app_name", "RetroArch"
-      buildConfigField "boolean", "PLAY_STORE_BUILD", "true"
-
-      dimension "variant"
+    packagingOptions {
+        pickFirst '**/.nomedia'
     }
-    playStorePlus {
-      minSdkVersion 26
-      targetSdkVersion 35
-      versionCode getPlayStoreVersionCode()
-      versionName getPlayStoreVersionName()
-
-      applicationIdSuffix '.aarch64'
-      resValue "string", "app_name", "RetroArch Plus"
-      buildConfigField "boolean", "PLAY_STORE_BUILD", "true"
-
-      dimension "variant"
-    }
-  }
-
-  sourceSets {
-    main {
-      manifest.srcFile 'AndroidManifest.xml'
-      assets.srcDirs = ['assets']
-      java.srcDirs = ['src', '../phoenix-common/src', '../../../libretro-common/vfs/saf/src']
-      jniLibs.srcDir '../phoenix-common/libs'
-      jni.srcDirs = []
-      res.srcDirs = ['res', '../phoenix-common/res']
-    }
-    normal {
-      java.srcDirs += ['../play-core-stub']
-    }
-    aarch64 {
-      java.srcDirs += ['../play-core-stub']
-      res.srcDirs = ['res', 'res64']
-    }
-    ra32 {
-      java.srcDirs += ['../play-core-stub']
-    }
-    playStoreNormal {
-      java.srcDirs += ['../play-core-impl']
-    }
-    playStorePlus {
-      java.srcDirs += ['../play-core-impl']
-    }
-  }
-
-  externalNativeBuild {
-    ndkBuild {
-      path '../phoenix-common/jni/Android.mk'
-    }
-  }
-
-  signingConfigs {
-    if (project.hasProperty("RELEASE_STORE_FILE")) {
-      release {
-        storeFile file(RELEASE_STORE_FILE)
-        storePassword RELEASE_STORE_PASSWORD
-        keyAlias RELEASE_KEY_ALIAS
-        keyPassword RELEASE_KEY_PASSWORD
-      }
-    }
-  }
-
-  buildTypes {
-    if (project.hasProperty("RELEASE_STORE_FILE")) {
-      release {
-        signingConfig signingConfigs.release
-      }
-    }
-    else {
-      release {
-        signingConfig signingConfigs.debug
-      }
-    }
-  }
 }
-
-def playCore = 'com.google.android.play:core:1.10.3'
 
 dependencies {
-  playStoreNormalImplementation playCore
-  playStorePlusImplementation playCore
-}
-
-def dynamicFeatures = file("dynamic_features.gradle")
-if(dynamicFeatures.exists()) {
-  apply from: "dynamic_features.gradle"
-}
-
-int getPlayStoreVersionCode() {
-  def baseVersion = getManifestAttribute("versionCode").toInteger()
-  def baseTime = 1609632000
-  def halfWeek = 302400
-  def increment = (System.currentTimeSeconds() - baseTime) / halfWeek
-
-  return baseVersion + increment
-}
-
-String getPlayStoreVersionName() {
-  def versionName = getManifestAttribute("versionName")
-  return "$versionName (${new Date().format("yyyy-MM-dd")})"
+    // Suas dependências aqui
 }
 
 String getManifestAttribute(String attribute) {
-  def manifest = new XmlParser().parse("${project.projectDir}/AndroidManifest.xml")
-  return manifest.attributes().find {
-    ((String) it.key).contains(attribute)
-  }.value
-}
-
-tasks.register("outputVersionCode") {
-  doLast {
-    println getPlayStoreVersionCode()
-  }
-}
+    def manifest = new XmlParser().parse("${project.projectDir}/AndroidManifest.xml")
+    return manifest.attributes().find { ((String) it.key).contains(attribute) }?.value
+} 

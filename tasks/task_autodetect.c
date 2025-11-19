@@ -122,7 +122,8 @@ static void input_autoconfigure_free(retro_task_t *task)
  * > 0: No match
  * > 20-29: Device name matches
  * > 30-39: VID+PID match
- * > 50-59: Both device name and VID+PID match */
+ * > 50-59: Both device name and VID+PID match
+ * > A physical port match adds 10, a physical port mismatch subtracts 10. */
 static unsigned input_autoconfigure_get_config_file_affinity(
       autoconfig_handle_t *autoconfig_handle,
       config_file_t *config)
@@ -194,6 +195,22 @@ static unsigned input_autoconfigure_get_config_file_affinity(
             &&  string_is_equal(entry->value,
                 autoconfig_handle->device_info.name))
          affinity += 20;
+
+      /* Check for matching physical location */
+      _len  = strlcpy(config_key, "input_phys",
+               sizeof(config_key));
+      _len += strlcpy(config_key + _len, config_key_postfix,
+               sizeof(config_key) - _len);
+      if (     affinity >= 20
+            && (entry = config_get_entry(config, config_key))
+            && !string_is_empty(entry->value))
+      {
+         if (strstr(autoconfig_handle->device_info.phys,
+                       entry->value))
+            affinity += 10;
+         else
+            affinity -= 10;
+      }
 
       /* Store the selected alternative as last digit of affinity. */
       if (affinity > 0)
@@ -324,9 +341,9 @@ static bool input_autoconfigure_scan_config_files_external(
                config       = NULL;
                max_affinity = affinity;
 
-               /* An affinity of 5x is a 'perfect' match,
+               /* An affinity of 6x is a 'perfect' match,
                 * and means we can return immediately */
-               if (affinity >= 50)
+               if (affinity >= 60)
                   break;
             }
             /* No match - just clean up config file */
@@ -350,6 +367,13 @@ static bool input_autoconfigure_scan_config_files_external(
       }
       string_list_free(config_file_list);
       config_file_list = NULL;
+      RARCH_DBG("[Autoconf] Config files scanned: driver %s, pad name %s (%04x/%04x), phys %s, affinity %d\n",
+                autoconfig_handle->device_info.joypad_driver,
+                autoconfig_handle->device_info.name,
+                autoconfig_handle->device_info.vid, autoconfig_handle->device_info.pid,
+                autoconfig_handle->device_info.phys,
+                max_affinity);
+
       if (match_found)
          return true;
    }
@@ -425,15 +449,19 @@ static bool input_autoconfigure_scan_config_files_internal(
  * - if there is no reservation, do not change anything
  *      (not even the assignment to first free player port)
  */
-static void reallocate_port_if_needed(unsigned detected_port, int vendor_id,
-      int product_id, const char *device_name, const char *device_display_name)
+static void reallocate_port_if_needed(
+      unsigned detected_port,
+      unsigned int vendor_id,
+      unsigned int product_id,
+      const char *device_name,
+      const char *device_display_name)
 {
    int player;
    char settings_value[NAME_MAX_LENGTH];
    char settings_value_device_name[NAME_MAX_LENGTH];
-   unsigned prev_assigned_player_slots[MAX_USERS];
-   int  settings_value_vendor_id;
-   int  settings_value_product_id;
+   unsigned prev_assigned_player_slots[MAX_USERS] = {0};
+   unsigned int settings_value_vendor_id;
+   unsigned int settings_value_product_id;
    unsigned first_free_player_slot = MAX_USERS + 1;
    bool device_has_reserved_slot   = false;
    bool no_reservation_at_all      = true;
@@ -835,6 +863,7 @@ static bool autoconfigure_connect_finder(retro_task_t *task, void *user_data)
 bool input_autoconfigure_connect(
       const char *name,
       const char *display_name,
+      const char *phys,
       const char *driver,
       unsigned port,
       unsigned vid,
@@ -875,6 +904,7 @@ bool input_autoconfigure_connect(
    autoconfig_handle->device_info.pid              = pid;
    autoconfig_handle->device_info.name[0]          = '\0';
    autoconfig_handle->device_info.display_name[0]  = '\0';
+   autoconfig_handle->device_info.phys[0]          = '\0';
    autoconfig_handle->device_info.config_name[0]   = '\0';
    autoconfig_handle->device_info.joypad_driver[0] = '\0';
    autoconfig_handle->device_info.autoconfigured   = false;
@@ -896,6 +926,10 @@ bool input_autoconfigure_connect(
    if (!string_is_empty(display_name))
       strlcpy(autoconfig_handle->device_info.display_name, display_name,
             sizeof(autoconfig_handle->device_info.display_name));
+
+   if (!string_is_empty(phys))
+       strlcpy(autoconfig_handle->device_info.phys, phys,
+             sizeof(autoconfig_handle->device_info.phys));
 
    if ((driver_valid = !string_is_empty(driver)))
       strlcpy(autoconfig_handle->device_info.joypad_driver,

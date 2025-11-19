@@ -52,11 +52,25 @@
 #include "../../runloop.h"
 #include "../../verbosity.h"
 #include "../../paths.h"
-
 #include "../common/ctr_defines.h"
+
 #ifndef HAVE_THREADS
 #include "../../tasks/tasks_internal.h"
 #endif
+
+#define COLOR_ABGR(r, g, b, a) (((unsigned)(a) << 24) | ((b) << 16) | ((g) << 8) | ((r) << 0))
+
+#define CTR_TOP_FRAMEBUFFER_WIDTH      400
+#define CTR_TOP_FRAMEBUFFER_HEIGHT     240
+#define CTR_BOTTOM_FRAMEBUFFER_WIDTH   320
+#define CTR_BOTTOM_FRAMEBUFFER_HEIGHT  240
+#define CTR_STATE_DATE_SIZE            11
+
+#define CTR_SET_SCALE_VECTOR(vec, vp_width, vp_height, tex_width, tex_height) \
+   (vec)->x = -2.0f / (vp_width); \
+   (vec)->y = -2.0f / (vp_height); \
+   (vec)->u =  1.0f / (tex_width); \
+   (vec)->v = -1.0f / (tex_height)
 
 enum
 {
@@ -64,6 +78,155 @@ enum
    CTR_TEXTURE_STATE_THUMBNAIL,
    CTR_TEXTURE_LAST
 };
+
+typedef enum
+{
+   CTR_BOTTOM_MENU_NOT_AVAILABLE = 0,
+   CTR_BOTTOM_MENU_DEFAULT,
+   CTR_BOTTOM_MENU_SELECT
+} ctr_bottom_menu;
+
+typedef struct
+{
+   float v;
+   float u;
+   float y;
+   float x;
+} ctr_scale_vector_t;
+
+typedef struct
+{
+   s16 x0, y0, x1, y1;
+   s16 u0, v0, u1, v1;
+} ctr_vertex_t;
+
+#ifdef USE_CTRULIB_2
+extern u8* gfxTopLeftFramebuffers[2];
+extern u8* gfxTopRightFramebuffers[2];
+extern u8* gfxBottomFramebuffers[2];
+#endif
+
+#ifdef CONSOLE_LOG
+extern PrintConsole* ctrConsole;
+#endif
+
+extern const u8 ctr_sprite_shbin[];
+extern const u32 ctr_sprite_shbin_size;
+
+
+typedef struct ctr_video
+{
+   struct
+   {
+      struct
+      {
+         void* left;
+         void* right;
+      }top;
+      void* bottom;
+   }drawbuffers;
+   void* depthbuffer;
+
+   struct
+   {
+      uint32_t* display_list;
+      void* texture_linear;
+      void* texture_swizzled;
+      ctr_vertex_t* frame_coords;
+      int display_list_size;
+      int texture_width;
+      int texture_height;
+      ctr_scale_vector_t scale_vector;
+   }menu;
+
+   uint32_t *display_list;
+   void *texture_linear;
+   void *texture_swizzled;
+   int display_list_size;
+   unsigned int texture_width;
+   unsigned int texture_height;
+
+   ctr_scale_vector_t scale_vector;
+   ctr_vertex_t* frame_coords;
+
+   DVLB_s*         dvlb;
+   shaderProgram_s shader;
+
+   video_viewport_t vp;
+
+   unsigned rotation;
+
+#ifdef HAVE_OVERLAY
+   struct ctr_overlay_data *overlay;
+   unsigned overlays;
+#endif
+
+   aptHookCookie lcd_aptHook;
+   ctr_video_mode_enum video_mode;
+   int current_buffer_top;
+   int current_buffer_bottom;
+
+   struct
+   {
+      ctr_vertex_t* buffer;
+      ctr_vertex_t* current;
+      size_t size;
+   }vertex_cache;
+
+   int state_slot;
+   u64  idle_timestamp;
+   ctr_bottom_menu bottom_menu;
+   ctr_bottom_menu prev_bottom_menu;
+   struct ctr_bottom_texture_data *bottom_textures;
+
+   volatile bool vsync_event_pending;
+#ifdef HAVE_OVERLAY
+   bool overlay_enabled;
+   bool overlay_full_screen;
+#endif
+   bool rgb32;
+   bool vsync;
+   bool smooth;
+   bool menu_texture_enable;
+   bool menu_texture_frame_enable;
+   bool keep_aspect;
+   bool should_resize;
+   bool msg_rendering_enabled;
+   bool supports_wide_display;
+   bool enable_3d;
+   bool p3d_event_pending;
+   bool ppf_event_pending;
+   bool init_bottom_menu;
+   bool refresh_bottom_menu;
+   bool render_font_bottom;
+   bool render_state_from_png_file;
+   bool state_data_exist;
+   bool bottom_check_idle;
+   bool bottom_is_idle;
+   bool bottom_is_fading;
+   char state_date[CTR_STATE_DATE_SIZE];
+} ctr_video_t;
+
+typedef struct ctr_texture
+{
+   unsigned int width;
+   unsigned int height;
+   unsigned int active_width;
+   unsigned int active_height;
+
+   enum texture_filter_type type;
+   void* data;
+} ctr_texture_t;
+
+#ifdef HAVE_OVERLAY
+struct ctr_overlay_data
+{
+   ctr_texture_t texture;
+   ctr_vertex_t* frame_coords;
+   ctr_scale_vector_t scale_vector;
+   float alpha_mod;
+};
+#endif
 
 struct ctr_bottom_texture_data
 {
@@ -668,18 +831,15 @@ static INLINE void ctr_check_3D_slider(ctr_video_t* ctr, ctr_video_mode_enum vid
 
             GSPGPU_FlushDataCache(ctr->frame_coords, 3 * sizeof(ctr_vertex_t));
 
-            if (ctr->supports_parallax_disable)
-               ctr_set_parallax_layer(true);
             ctr->enable_3d = true;
          }
          break;
       case CTR_VIDEO_MODE_2D_400X240:
       case CTR_VIDEO_MODE_2D_800X240:
-         if (ctr->supports_parallax_disable)
+         if (ctr->supports_wide_display)
          {
             ctr->video_mode = video_mode;
-            ctr_set_parallax_layer(false);
-            ctr->enable_3d = true;
+            ctr->enable_3d = false;
          }
          else
          {
@@ -690,8 +850,6 @@ static INLINE void ctr_check_3D_slider(ctr_video_t* ctr, ctr_video_mode_enum vid
       case CTR_VIDEO_MODE_2D:
       default:
          ctr->video_mode = CTR_VIDEO_MODE_2D;
-         if (ctr->supports_parallax_disable)
-            ctr_set_parallax_layer(false);
          ctr->enable_3d = false;
          break;
    }
@@ -980,7 +1138,8 @@ static void save_state_to_file(void *data)
    command_event(CMD_EVENT_RAM_STATE_TO_FILE, state_path);
 }
 
-static void ctr_bottom_menu_control(void* data, bool lcd_bottom, uint32_t flags)
+static void ctr_bottom_menu_control(void* data,
+      bool lcd_bottom, uint32_t flags)
 {
    touchPosition state_tmp_touch;
    uint32_t state_tmp   = 0;
@@ -1558,8 +1717,6 @@ static void ctr_lcd_aptHook(APT_HookType hook, void* param)
                   gfxTopRightFramebuffers[
                   ctr->current_buffer_top], 400 * 240 * 3);
          }
-         if (ctr->supports_parallax_disable)
-            ctr_set_parallax_layer(*(float*)0x1FF81080 != 0.0);
          ctr_set_bottom_screen_enable(true, ctr->bottom_is_idle);
          save_state_to_file(ctr);
          break;
@@ -1790,7 +1947,7 @@ static void* ctr_init(const video_info_t* video,
     * (i.e. these are the only platforms that can use
     * CTR_VIDEO_MODE_2D_400X240 and CTR_VIDEO_MODE_2D_800X240) */
    CFGU_GetSystemModel(&device_model); /* (0 = O3DS, 1 = O3DSXL, 2 = N3DS, 3 = 2DS, 4 = N3DSXL, 5 = N2DSXL) */
-   ctr->supports_parallax_disable = (device_model == 0) || (device_model == 1);
+   ctr->supports_wide_display = device_model != 3;
 
    refresh_rate = (32730.0 * 8192.0) / 4481134.0;
 
@@ -2284,14 +2441,16 @@ static bool ctr_frame(void* data, const void* frame,
 
 #ifdef USE_CTRULIB_2
    u32 *buf0, *buf1, *bottom;
-   u32 stride;
+   u32 stride = 240 * 3;
+   u8 bit5, bit6;
 
    buf0 = (u32*)gfxTopLeftFramebuffers[ctr->current_buffer_top];
 
    if (ctr->video_mode == CTR_VIDEO_MODE_2D_800X240)
    {
-      buf1 = (u32*)(gfxTopLeftFramebuffers[ctr->current_buffer_top] + 240 * 3);
-      stride = 240 * 3 * 2;
+      buf1 = buf0;
+      bit5 = false;
+      bit6 = false;
    }
    else
    {
@@ -2300,13 +2459,14 @@ static bool ctr_frame(void* data, const void* frame,
       else
          buf1 = buf0;
 
-      stride = 240 * 3;
+      bit5 = (ctr->enable_3d != 0);
+      bit6 = 1^bit5;
    }
 
-   u8 bit5 = (ctr->enable_3d != 0);
+
 
    gspPresentBuffer(GFX_TOP, ctr->current_buffer_top, buf0, buf1,
-                    stride, (1<<8)|((1^bit5)<<6)|((bit5)<<5)|GSP_BGR8_OES);
+                    stride, (1<<8)|((bit6)<<6)|((bit5)<<5)|GSP_BGR8_OES);
 
 #ifndef CONSOLE_LOG
    if (ctr->refresh_bottom_menu)
@@ -2326,13 +2486,13 @@ static bool ctr_frame(void* data, const void* frame,
       active_framebuf           = ctr->current_buffer_top;
    topFramebufferInfo.
       framebuf0_vaddr           = (u32*)gfxTopLeftFramebuffers[ctr->current_buffer_top];
+   topFramebufferInfo.
+      framebuf_widthbytesize = 240 * 3;
 
    if (ctr->video_mode == CTR_VIDEO_MODE_2D_800X240)
    {
       topFramebufferInfo.
          framebuf1_vaddr        = (u32*)(gfxTopLeftFramebuffers[ctr->current_buffer_top] + 240 * 3);
-      topFramebufferInfo.
-         framebuf_widthbytesize = 240 * 3 * 2;
    }
    else
    {
@@ -2343,11 +2503,10 @@ static bool ctr_frame(void* data, const void* frame,
          topFramebufferInfo.
             framebuf1_vaddr     = topFramebufferInfo.framebuf0_vaddr;
 
-      topFramebufferInfo.
-         framebuf_widthbytesize = 240 * 3;
    }
 
-   u8 bit5                      = (ctr->enable_3d != 0);
+   u8 bit5                      = (ctr->enable_3d != 0) & (ctr->video_mode != CTR_VIDEO_MODE_2D_800X240);
+   u8 bit6                      = (1^bit5) & (ctr->video_mode != CTR_VIDEO_MODE_2D_800X240);
    topFramebufferInfo.format    = (1<<8)|((1^bit5)<<6)|((bit5)<<5)|GSP_BGR8_OES;
    topFramebufferInfo.
       framebuf_dispselect       = ctr->current_buffer_top;
@@ -2827,11 +2986,12 @@ static void ctr_overlay_full_screen(void *data, bool enable)
    ctr->overlay_full_screen = enable;
 }
 
-static void ctr_overlay_set_alpha(void *data, unsigned image, float mod){ }
+/* TODO/FIXME - implement? */
+static void ctr_overlay_set_alpha(void *data, unsigned image, float mod) { }
 
 static void ctr_render_overlay(ctr_video_t *ctr)
 {
-   unsigned int i;
+   size_t i;
 
    for (i = 0; i < ctr->overlays; i++)
    {

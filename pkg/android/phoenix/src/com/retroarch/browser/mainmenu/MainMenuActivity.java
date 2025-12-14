@@ -305,6 +305,16 @@ public final class MainMenuActivity extends PreferenceActivity {
                 e.printStackTrace();
                 return false;
             }
+
+            // Garantir que a criação de .nomedia ocorra apenas após as cópias finalizarem.
+            // Executar o processamento de imagens aqui, em background, antes de retornar.
+            try {
+                processFolderForImages(new File(MEDIA_DIR, "overlays"));
+            } catch (Exception e) {
+                e.printStackTrace();
+                // Mesmo que falhe, não impedimos o restante do fluxo.
+            }
+
             return true;
         }
 
@@ -320,9 +330,8 @@ public final class MainMenuActivity extends PreferenceActivity {
             progressDialog.dismiss();
             prefs.edit().putBoolean("firstRun", false).apply();
 
-            ExecutorService imageExecutor = Executors.newSingleThreadExecutor();
-            imageExecutor.submit(() -> processFolderForImages(new File(MEDIA_DIR, "overlays")));
-            imageExecutor.shutdown();
+            // Removed asynchronous image executor here because image processing is
+            // performed in doInBackground after copying completes.
 
             finalStartup();
         }

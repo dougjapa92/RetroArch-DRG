@@ -66,15 +66,16 @@ public final class RetroActivityFuture extends RetroActivityCamera {
 
     // ===================== AUTOCONFIGURATION =====================
     private static final int INPUT_SELECT_4 = 4;
-	private static final int INPUT_SELECT_104 = 104;
+    private static final int INPUT_SELECT_104 = 104;
     private static final int INPUT_SELECT_109 = 109;
     private static final int INPUT_SELECT_196 = 196;
-    private static final int TIMEOUT_SECONDS = 10;
+    private static final int TIMEOUT_SECONDS = 15;
+    private static final int HOLD_DURATION_MS = 1200;
     
     private AlertDialog dialog;
     private CountDownLatch latch;
     private int selectedInput = -1;
-
+    
     /** Método chamado via JNI de forma síncrona */
     public boolean createCfgForUnknownControllerSync(int vendorId, int productId, String deviceName) {
         final int[] attemptsLeft = {3};
@@ -100,75 +101,192 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             messageView.setGravity(Gravity.CENTER);
             messageView.setTextSize(16);
             messageView.setPadding(40, 30, 40, 30);
-            messageView.setMinHeight(200);
+            messageView.setLines(8);
             builder.setView(messageView);
     
-            final Handler handler = new Handler(Looper.getMainLooper());
-            final int[] remainingSeconds = {15};
-            final boolean[] lastInputInvalid = {false};
+            final Handler mainHandler = new Handler(Looper.getMainLooper());
+            final Handler holdHandler = new Handler(Looper.getMainLooper());
+            final int[] remainingSeconds = {TIMEOUT_SECONDS};
+            final int[] currentKeyCode = {0};
+            final boolean[] successWaitingForRelease = {false};
+            final boolean[] isShowingInvalidMessage = {false};
+            final boolean[] failedWaitingForRelease = {false};
+            final boolean[] isProcessActive = {true};
+            final long[] resultShownTimestamp = {0};
+            
+            final String MESSAGE_TEMPLATE = "%s\n\n%s\n\nTentativas restantes: %d\n\n%ds";
+            final String SUCCESS_TEMPLATE = "✅ Controle configurado com sucesso!\n\nBotão: %d\n\nSolte o botão para continuar.";
+            final String FAILURE_MESSAGE = "❌ Falha na configuração!\n\n"
+                + "Feche o RetroArch DRG para tentar novamente ou configure manualmente em:\n\n"
+                + "Configurações > Entrada > RetroPad Binds > Controle da porta 1 > Definir todos os Controles";
     
-            // Função auxiliar para atualizar a mensagem
-            Runnable updateMessage = () -> {
-                if (!lastInputInvalid[0]) {
-                    messageView.setText("Pressione SELECT (Options) para autoconfigurar o controle.\n\n"
-                            + "Tentativas restantes: " + attemptsLeft[0] + "\n\n"
-                            + remainingSeconds[0] + "s");
-                } else {
-                    messageView.setText("Botão inválido!\n\nPressione SELECT (Options) para autoconfigurar o controle.\n\n"
-                            + "Tentativas restantes: " + attemptsLeft[0] + "\n\n"
-                            + remainingSeconds[0] + "s");
+            final Runnable[] countdownRunnableHolder = new Runnable[1];
+    
+            final Runnable updateMessage = () -> {
+                if (successWaitingForRelease[0]) {
+                    messageView.setLines(5);
+                    String successText = String.format(SUCCESS_TEMPLATE, selectedInput);
+                    messageView.setText(successText);
+                    return;
                 }
+    
+                if (failedWaitingForRelease[0]) {
+                    messageView.setLines(8);
+                    messageView.setText(FAILURE_MESSAGE);
+                    return;
+                }
+    
+                String feedbackLine = " ";
+                String instructionLine = "Pressione e segure SELECT (Options) para configurar o controle.";
+    
+                if (isShowingInvalidMessage[0]) {
+                    feedbackLine = "BOTÃO INVÁLIDO!";
+                } else if (currentKeyCode[0] != 0) {
+                    feedbackLine = "Botão: " + currentKeyCode[0];
+                }
+                
+                String formattedText = String.format(MESSAGE_TEMPLATE,
+                        instructionLine,
+                        feedbackLine,
+                        attemptsLeft[0],
+                        remainingSeconds[0]);
+                messageView.setText(formattedText);
             };
     
-            // Primeira mensagem antes de mostrar o diálogo
-            updateMessage.run();
+            final Runnable holdSuccessRunnable = () -> {
+                Log.d("AutoConfig", "holdSuccessRunnable: EXECUTADO");
+                isProcessActive[0] = false;
+                mainHandler.removeCallbacks(countdownRunnableHolder[0]);
+                Log.d("AutoConfig", "holdSuccessRunnable: Countdown removido");
+                selectedInput = currentKeyCode[0];
+                successWaitingForRelease[0] = true;
+                resultShownTimestamp[0] = System.currentTimeMillis();
+                Log.d("AutoConfig", "holdSuccessRunnable: Timestamp=" + resultShownTimestamp[0] + ", selectedInput=" + selectedInput);
+                updateMessage.run();
+            };
+            
+            final Runnable invalidPressRunnable = () -> {
+                Log.d("AutoConfig", "invalidPressRunnable: EXECUTADO");
+                if (attemptsLeft[0] > 0) {
+                    attemptsLeft[0]--;
+                }
     
-            dialog = builder.create();
+                if (attemptsLeft[0] <= 0) {
+                    Log.d("AutoConfig", "invalidPressRunnable: Tentativas esgotadas, configurando falha");
+                    isProcessActive[0] = false;
+                    mainHandler.removeCallbacks(countdownRunnableHolder[0]);
+                    Log.d("AutoConfig", "invalidPressRunnable: Countdown removido");
+                    failedWaitingForRelease[0] = true;
+                    resultShownTimestamp[0] = System.currentTimeMillis();
+                    Log.d("AutoConfig", "invalidPressRunnable: Timestamp=" + resultShownTimestamp[0]);
+                } else {
+                    isShowingInvalidMessage[0] = true;
+                    Log.d("AutoConfig", "invalidPressRunnable: Tentativas restantes=" + attemptsLeft[0]);
+                }
+                updateMessage.run();
+            };
     
-            final Runnable countdownRunnable = new Runnable() {
-                @Override
-                public void run() {
-                    if (remainingSeconds[0] <= 0 || selectedInput != -1 || attemptsLeft[0] <= 0) {
+            countdownRunnableHolder[0] = () -> {
+                Log.d("AutoConfig", "Countdown: Tick - remainingSeconds=" + remainingSeconds[0] + 
+                      ", isProcessActive=" + isProcessActive[0] + 
+                      ", successWaiting=" + successWaitingForRelease[0] + 
+                      ", failedWaiting=" + failedWaitingForRelease[0]);
+                
+                // Verifica PRIMEIRO se há resultado, antes de qualquer outra coisa
+                if (successWaitingForRelease[0] || failedWaitingForRelease[0]) {
+                    Log.d("AutoConfig", "Countdown: ABORTADO - Já tem resultado");
+                    return; // Se já tem resultado, para completamente
+                }
+                
+                if (!isProcessActive[0]) {
+                    Log.d("AutoConfig", "Countdown: ABORTADO - Processo inativo");
+                    return;
+                }
+    
+                if (remainingSeconds[0] <= 0) {
+                    Log.d("AutoConfig", "Countdown: TIMEOUT ATINGIDO - Fechando diálogo");
+                    isProcessActive[0] = false;
+                    holdHandler.removeCallbacks(holdSuccessRunnable);
+                    holdHandler.removeCallbacks(invalidPressRunnable);
+                    // Só fecha o diálogo se NÃO houver resultado (sucesso ou falha)
+                    if (!successWaitingForRelease[0] && !failedWaitingForRelease[0]) {
+                        Log.d("AutoConfig", "Countdown: Sem resultado, executando dismiss");
                         if (selectedInput == -1 && latch.getCount() > 0) latch.countDown();
                         if (dialog != null && dialog.isShowing()) dialog.dismiss();
                     } else {
-                        updateMessage.run();
-                        remainingSeconds[0]--;
-                        handler.postDelayed(this, 1000);
+                        Log.d("AutoConfig", "Countdown: TEM resultado, NÃO vai fechar");
                     }
+                    return;
                 }
+                
+                updateMessage.run();
+                remainingSeconds[0]--;
+                mainHandler.postDelayed(countdownRunnableHolder[0], 1000);
             };
+            
+            final Runnable countdownRunnable = countdownRunnableHolder[0];
+    
+            updateMessage.run();
+            dialog = builder.create();
     
             dialog.setOnKeyListener((d, keyCode, event) -> {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                    if (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_104 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196) {
-                        selectedInput = keyCode;
-                        if (latch.getCount() > 0) latch.countDown();
-                        handler.removeCallbacks(countdownRunnable);
-                        dialog.dismiss();
-                        return true;
-                    } else {
-                        attemptsLeft[0]--;
-                        lastInputInvalid[0] = true;
-                        updateMessage.run();
-                        if (attemptsLeft[0] <= 0) {
-                            selectedInput = -1;
-                            if (latch.getCount() > 0) latch.countDown();
-                            handler.removeCallbacks(countdownRunnable);
-                            dialog.dismiss();
-                        }
+                    if (event.getRepeatCount() > 0 || !isProcessActive[0]) {
                         return true;
                     }
+                    
+                    currentKeyCode[0] = keyCode;
+                    boolean isSelectKey = (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_104 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196);
+    
+                    if (isSelectKey) {
+                        holdHandler.postDelayed(holdSuccessRunnable, HOLD_DURATION_MS);
+                    } else {
+                        holdHandler.postDelayed(invalidPressRunnable, HOLD_DURATION_MS);
+                    }
+                    updateMessage.run();
+                    return true;
+    
+                } else if (event.getAction() == KeyEvent.ACTION_UP) {
+                    if (keyCode == currentKeyCode[0]) {
+                        Log.d("AutoConfig", "ACTION_UP: keyCode=" + keyCode + 
+                              ", successWaiting=" + successWaitingForRelease[0] + 
+                              ", failedWaiting=" + failedWaitingForRelease[0]);
+                        
+                        if (successWaitingForRelease[0] || failedWaitingForRelease[0]) {
+                            // Verifica se já passaram pelo menos 2 segundos desde que o resultado foi exibido
+                            long elapsedTime = System.currentTimeMillis() - resultShownTimestamp[0];
+                            Log.d("AutoConfig", "ACTION_UP: elapsedTime=" + elapsedTime + "ms");
+                            
+                            if (elapsedTime >= 2000) {
+                                Log.d("AutoConfig", "ACTION_UP: 2s passados, FECHANDO diálogo");
+                                isProcessActive[0] = false;
+                                if (latch.getCount() > 0) latch.countDown();
+                                dialog.dismiss();
+                            } else {
+                                Log.d("AutoConfig", "ACTION_UP: Ainda faltam " + (2000 - elapsedTime) + "ms");
+                            }
+                            // Se ainda não passaram 2 segundos, ignora o release e mantém o diálogo aberto
+                            return true;
+                        }
+    
+                        holdHandler.removeCallbacks(holdSuccessRunnable);
+                        holdHandler.removeCallbacks(invalidPressRunnable);
+                        
+                        currentKeyCode[0] = 0;
+                        isShowingInvalidMessage[0] = false;
+                        updateMessage.run();
+                    }
+                    return true;
                 }
                 return false;
             });
     
-            dialog.setOnShowListener(d -> handler.post(countdownRunnable));
+            dialog.setOnShowListener(d -> mainHandler.post(countdownRunnable));
             dialog.show();
         });
     
         try {
-            latch.await(15, TimeUnit.SECONDS);
+            latch.await(TIMEOUT_SECONDS + 1, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             e.printStackTrace();
             Thread.currentThread().interrupt();
@@ -182,7 +300,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             String baseFile;
             switch (selectedInput) {
                 case INPUT_SELECT_4: baseFile = "Base4.cfg"; break;
-				case INPUT_SELECT_104: baseFile = "Base104.cfg"; break;
+                case INPUT_SELECT_104: baseFile = "Base104.cfg"; break;
                 case INPUT_SELECT_109: baseFile = "Base109.cfg"; break;
                 case INPUT_SELECT_196: baseFile = "Base196.cfg"; break;
                 default: baseFile = "Base4.cfg"; break;
@@ -193,7 +311,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     
         return false;
     }
-    
+   
     /** Criação do arquivo CFG */
     private static void createCfgFromBase(String baseFile, String deviceName,
                                           int vendorId, int productId, Context context) {
@@ -370,4 +488,4 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             }
         }
     }
-}
+}  

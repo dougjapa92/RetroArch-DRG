@@ -21,6 +21,7 @@ import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.text.SpannableString;
 import android.text.style.StyleSpan;
+import android.view.View;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -43,19 +44,14 @@ public final class MainMenuActivity extends PreferenceActivity {
     private String selectedAspectRatioIndex = "1"; 
 
     private final String[] ROOT_FOLDERS = {"assets", "cheats", "database", "filters", "info", "shaders", "system"};
-
     private final Map<String, String> ROOT_FLAGS = new HashMap<String, String>() {{
-        put("assets", "assets_directory");
-        put("cheats", "cheat_database_path");
-        put("database", "database_directory");
-        put("filters", "filters_directory");
-        put("info", "info_directory");
-        put("shaders", "shaders_directory");
+        put("assets", "assets_directory"); put("cheats", "cheat_database_path");
+        put("database", "database_directory"); put("filters", "filters_directory");
+        put("info", "info_directory"); put("shaders", "shaders_directory");
         put("system", "system_directory");
     }};
 
     private final String[] MEDIA_FOLDERS = {"overlays", "config", "remaps"};
-
     private final Map<String, String> MEDIA_FLAGS = new HashMap<String, String>() {{
         put("config", "rgui_config_directory");
         put("overlays", "overlay_directory");
@@ -68,6 +64,10 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     private String archCores;
     private String archAutoconfig;
+
+    private boolean permissionsHandled = false;
+    private boolean wentToSettings = false;
+    private boolean firstDenialHandled = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -82,13 +82,21 @@ public final class MainMenuActivity extends PreferenceActivity {
         checkRuntimePermissions();
     }
 
+    private boolean addPermission(List<String> permissionsList, String permission) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
+                permissionsList.add(permission);
+                return !shouldShowRequestPermissionRationale(permission);
+            }
+        }
+        return true;
+    }
+
     private void checkRuntimePermissions() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             List<String> permissionsList = new ArrayList<>();
-            if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)
-                permissionsList.add(Manifest.permission.READ_EXTERNAL_STORAGE);
-            if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED)
-                permissionsList.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+            addPermission(permissionsList, Manifest.permission.READ_EXTERNAL_STORAGE);
+            addPermission(permissionsList, Manifest.permission.WRITE_EXTERNAL_STORAGE);
             if (!permissionsList.isEmpty()) {
                 requestPermissions(permissionsList.toArray(new String[0]), REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
                 return;
@@ -98,22 +106,69 @@ public final class MainMenuActivity extends PreferenceActivity {
     }
 
     private void handlePermissionStatus(String[] permissions) {
-        List<String> missing = new ArrayList<>();
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) missing.add("READ");
-            if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) missing.add("WRITE");
-        }
-        if (missing.isEmpty()) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || permissionsHandled) return;
+
+        List<String> missingPermissions = new ArrayList<>();
+        addPermission(missingPermissions, Manifest.permission.READ_EXTERNAL_STORAGE);
+        addPermission(missingPermissions, Manifest.permission.WRITE_EXTERNAL_STORAGE);
+
+        if (missingPermissions.isEmpty()) {
             prefs.edit().putInt("deniedCount", 0).apply();
+            permissionsHandled = true;
             startExtractionOrRetro();
         } else {
-            finish(); // Simplificado para o exemplo, manter sua lógica de AlertDialog se desejar
+            int deniedCount = prefs.getInt("deniedCount", 0);
+            if (permissions != null) deniedCount++;
+            prefs.edit().putInt("deniedCount", deniedCount).apply();
+
+            if (deniedCount >= 2 || wentToSettings) {
+                new AlertDialog.Builder(this)
+                        .setTitle("Permissão Negada!")
+                        .setMessage("Ative as permissões manualmente nas configurações.")
+                        .setCancelable(false)
+                        .setPositiveButton("ABRIR CONFIGURAÇÕES", (dialog, which) -> {
+                            wentToSettings = true;
+                            Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+                            Uri uri = Uri.fromParts("package", getPackageName(), null);
+                            intent.setData(uri);
+                            startActivity(intent);
+                        })
+                        .setNegativeButton("SAIR", (dialog, which) -> finish())
+                        .show();
+            } else if (!firstDenialHandled) {
+                firstDenialHandled = true;
+                new AlertDialog.Builder(this)
+                        .setTitle("Permissões Necessárias!")
+                        .setMessage("O aplicativo precisa das permissões de armazenamento.")
+                        .setCancelable(false)
+                        .setPositiveButton("CONCEDER", (dialog, which) -> {
+                            if (permissions != null)
+                                requestPermissions(permissions, REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS);
+                            else
+                                checkRuntimePermissions();
+                        })
+                        .setNegativeButton("SAIR", (dialog, which) -> finish())
+                        .show();
+            }
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (wentToSettings) {
+            handlePermissionStatus(null);
+            wentToSettings = false;
         }
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        if (requestCode == REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS) handlePermissionStatus(permissions);
+        if (requestCode == REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS) {
+            handlePermissionStatus(permissions);
+        } else {
+            super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        }
     }
 
     private void startExtractionOrRetro() {
@@ -124,9 +179,9 @@ public final class MainMenuActivity extends PreferenceActivity {
     private void showAspectRatioDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("Configuração Inicial").setMessage("Escolha a proporção de tela dos jogos:")
-               .setPositiveButton("TELA CHEIA (16:9)", (dialog, which) -> selectedAspectRatioIndex = "1")
-               .setNegativeButton("ORIGINAL (4:3)", (dialog, which) -> selectedAspectRatioIndex = "20")
-               .setOnDismissListener(dialog -> new UnifiedExtractionTask().execute())
+               .setPositiveButton("TELA CHEIA (16:9)", (d, w) -> selectedAspectRatioIndex = "1")
+               .setNegativeButton("ORIGINAL (4:3)", (d, w) -> selectedAspectRatioIndex = "20")
+               .setOnDismissListener(d -> new UnifiedExtractionTask().execute())
                .setCancelable(false).create().show();
     }
 
@@ -139,8 +194,8 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
             progressDialog.setTitle("Configurando RetroArch DRG...");
-            String archMessage = archCores.equals("cores64") ? "\nCores: arm64-v8a (64-bit)" : "\nCores: armeabi-v7a (32-bit)";
-            String message = archMessage + "\n\nClique em \"Sair\" após a configuração...\n\n(Customizado por Doug Retro Games)";
+            String archMessage = archCores.equals("cores64") ? "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)" : "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
+            String message = archMessage + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do sistema.\n\n(Customizado por Doug Retro Games)";
             SpannableString spannable = new SpannableString(message);
             int start = message.indexOf("\"Sair\"");
             if (start != -1) spannable.setSpan(new StyleSpan(Typeface.BOLD), start, start + 6, 0);
@@ -164,7 +219,6 @@ public final class MainMenuActivity extends PreferenceActivity {
             executor.shutdown();
             try { executor.awaitTermination(30, TimeUnit.MINUTES); } catch (InterruptedException e) { return false; }
 
-            // CRIAÇÃO NOMEDIA (Lista fixa enviada por você para evitar o loop 100% travado)
             createNomediaFiles();
 
             try { updateRetroarchCfg(); } catch (IOException e) { return false; }
@@ -239,10 +293,9 @@ public final class MainMenuActivity extends PreferenceActivity {
             originalCfg.getParentFile().mkdirs();
 
             Map<String, String> cfgFlags = new HashMap<>();
-            for (Map.Entry<String, String> entry : ROOT_FLAGS.entrySet()) cfgFlags.put(entry.getValue(), new File(ROOT_DIR, entry.getKey()).getAbsolutePath());
-            for (Map.Entry<String, String> entry : MEDIA_FLAGS.entrySet()) cfgFlags.put(entry.getValue(), new File(MEDIA_DIR, entry.getKey()).getAbsolutePath());
+            for (Map.Entry<String, String> e : ROOT_FLAGS.entrySet()) cfgFlags.put(e.getValue(), new File(ROOT_DIR, e.getKey()).getAbsolutePath());
+            for (Map.Entry<String, String> e : MEDIA_FLAGS.entrySet()) cfgFlags.put(e.getValue(), new File(MEDIA_DIR, e.getKey()).getAbsolutePath());
 
-            // RESTAURAÇÃO DE TODAS AS FLAGS ORIGINAIS
             cfgFlags.put("menu_driver", "ozone");
             cfgFlags.put("menu_scale_factor", "0.600000");
             cfgFlags.put("ozone_menu_color_theme", "10");
@@ -297,8 +350,8 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
 
             try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
-                for (Map.Entry<String, String> entry : cfgFlags.entrySet()) {
-                    out.write((entry.getKey() + " = \"" + entry.getValue() + "\"\n").getBytes());
+                for (Map.Entry<String, String> e : cfgFlags.entrySet()) {
+                    out.write((e.getKey() + " = \"" + e.getValue() + "\"\n").getBytes());
                 }
             }
         }
@@ -327,4 +380,3 @@ public final class MainMenuActivity extends PreferenceActivity {
         retro.putExtra("EXTERNAL", Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files");
     }
 }
-

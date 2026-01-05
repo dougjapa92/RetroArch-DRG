@@ -188,7 +188,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
         ProgressDialog progressDialog;
         AtomicInteger processedFiles = new AtomicInteger(0);
-        final int totalFiles = 3655; 
+        final int totalFiles = 3653; 
 
         @Override
         protected void onPreExecute() {

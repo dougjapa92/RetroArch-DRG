@@ -21,14 +21,7 @@ import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.text.SpannableString;
 import android.text.style.StyleSpan;
-import android.graphics.Color;
-import android.graphics.Typeface;
-import android.view.Gravity;
 import android.view.View;
-import android.widget.Button;
-import android.widget.LinearLayout;
-import android.widget.RelativeLayout;
-import android.widget.TextView;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -49,8 +42,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     public static String PACKAGE_NAME;
     private SharedPreferences prefs;
 
-    // NOVO: Variável para armazenar a escolha da proporção de tela do usuário.
-    private String selectedAspectRatioIndex = "1"; // Padrão é "Tela cheia"
+    private String selectedAspectRatioIndex = "1"; // Padrão 16:9
 
     private final String[] ROOT_FOLDERS = {
             "assets", "cheats", "database", "filters", "info", "shaders", "system"
@@ -134,9 +126,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         addPermission(missingPermissions, Manifest.permission.READ_EXTERNAL_STORAGE);
         addPermission(missingPermissions, Manifest.permission.WRITE_EXTERNAL_STORAGE);
 
-        boolean allGranted = missingPermissions.isEmpty();
-
-        if (allGranted) {
+        if (missingPermissions.isEmpty()) {
             prefs.edit().putInt("deniedCount", 0).apply();
             permissionsHandled = true;
             startExtractionOrRetro();
@@ -148,7 +138,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             if (deniedCount >= 2 || wentToSettings) {
                 new AlertDialog.Builder(this)
                         .setTitle("Permissão Negada!")
-                        .setMessage("Ative as permissões manualmente nas configurações ou reinstale o aplicativo.")
+                        .setMessage("Ative as permissões manualmente nas configurações.")
                         .setCancelable(false)
                         .setPositiveButton("ABRIR CONFIGURAÇÕES", (dialog, which) -> {
                             wentToSettings = true;
@@ -163,7 +153,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 firstDenialHandled = true;
                 new AlertDialog.Builder(this)
                         .setTitle("Permissões Necessárias!")
-                        .setMessage("O aplicativo precisa das permissões de armazenamento para funcionar corretamente.")
+                        .setMessage("O aplicativo precisa das permissões de armazenamento.")
                         .setCancelable(false)
                         .setPositiveButton("CONCEDER", (dialog, which) -> {
                             if (permissions != null)
@@ -195,7 +185,6 @@ public final class MainMenuActivity extends PreferenceActivity {
         }
     }
 
-    // ALTERADO: Este método agora chama o diálogo em vez de iniciar a tarefa diretamente.
     private void startExtractionOrRetro() {
         boolean firstRun = prefs.getBoolean("firstRun", true);
         if (firstRun) {
@@ -207,6 +196,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     private void showAspectRatioDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("Configuração Inicial");
         builder.setMessage("Escolha a proporção de tela dos jogos:");
     
         builder.setPositiveButton("TELA CHEIA (16:9)", (dialog, which) -> {
@@ -221,14 +211,15 @@ public final class MainMenuActivity extends PreferenceActivity {
             new UnifiedExtractionTask().execute();
         });
     
-        builder.setCancelable(true);
+        builder.setCancelable(false);
         builder.create().show();
     }
 
     private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
         ProgressDialog progressDialog;
         AtomicInteger processedFiles = new AtomicInteger(0);
-        int totalFiles = 0;
+        // Otimização: Total fixo evita o loop recursivo inicial que trava TVs Boxes
+        final int totalFiles = 3655; 
 
         @Override
         protected void onPreExecute() {
@@ -240,28 +231,23 @@ public final class MainMenuActivity extends PreferenceActivity {
             String message = archMessage + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do sistema.\n\n(Customizado por Doug Retro Games)";
             SpannableString spannable = new SpannableString(message);
             int start = message.indexOf("\"Sair\"");
-            int end = start + "\"Sair\"".length();
-            spannable.setSpan(new StyleSpan(Typeface.BOLD), start, end, 0);
+            if (start != -1) {
+                int end = start + "\"Sair\"".length();
+                spannable.setSpan(new StyleSpan(Typeface.BOLD), start, end, 0);
+            }
             progressDialog.setMessage(spannable);
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);
+            progressDialog.setMax(totalFiles); // Define o máximo imediatamente
             progressDialog.show();
         }
 
         @Override
         protected Boolean doInBackground(Void... voids) {
             archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
-            totalFiles = countAllFiles(ROOT_FOLDERS)
-                    + countAllFiles(MEDIA_FOLDERS)
-                    + countAllFiles(new String[]{archCores, archAutoconfig});
 
-            if (totalFiles > 0) {
-                runOnUiThread(() -> progressDialog.setMax(totalFiles));
-            }
-
-            int cores = Runtime.getRuntime().availableProcessors();
-            int poolSize = Math.max(2, Math.min(cores, 4));
-            ExecutorService executor = Executors.newFixedThreadPool(poolSize);
+            // Otimização: Apenas 2 threads para não sobrecarregar IO e CPU de aparelhos fracos
+            ExecutorService executor = Executors.newFixedThreadPool(2);
 
             for (String folder : ROOT_FOLDERS) {
                 executor.submit(() -> {
@@ -301,18 +287,10 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             try {
                 updateRetroarchCfg();
+                processFolderForImages(new File(MEDIA_DIR, "overlays"));
             } catch (IOException e) {
                 e.printStackTrace();
                 return false;
-            }
-
-            // Garantir que a criação de .nomedia ocorra apenas após as cópias finalizarem.
-            // Executar o processamento de imagens aqui, em background, antes de retornar.
-            try {
-                processFolderForImages(new File(MEDIA_DIR, "overlays"));
-            } catch (Exception e) {
-                e.printStackTrace();
-                // Mesmo que falhe, não impedimos o restante do fluxo.
             }
 
             return true;
@@ -327,12 +305,8 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         @Override
         protected void onPostExecute(Boolean result) {
-            progressDialog.dismiss();
+            if (progressDialog.isShowing()) progressDialog.dismiss();
             prefs.edit().putBoolean("firstRun", false).apply();
-
-            // Removed asynchronous image executor here because image processing is
-            // performed in doInBackground after copying completes.
-
             finalStartup();
         }
 
@@ -345,6 +319,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                     String fullPath = assetFolder + "/" + asset;
                     File outFile = new File(targetFolder, asset);
 
+                    // Pular shader glslp se não for arm64 (Lógica original)
                     if (fullPath.equals("config/global.glslp")) {
                         boolean hasArm64 = false;
                         if (Build.SUPPORTED_ABIS != null) {
@@ -363,7 +338,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
                     boolean isDir = false;
                     try (InputStream check = getAssets().open(fullPath)) {
-                        // It's a file
+                        // Arquivo válido
                     } catch (IOException e) {
                         isDir = true;
                     }
@@ -373,7 +348,8 @@ public final class MainMenuActivity extends PreferenceActivity {
                     } else {
                         try (InputStream in = getAssets().open(fullPath);
                              FileOutputStream out = new FileOutputStream(outFile)) {
-                            byte[] buffer = new byte[8192];
+                            // Otimização: Buffer maior de 64KB para escritas mais rápidas
+                            byte[] buffer = new byte[65536];
                             int read;
                             while ((read = in.read(buffer)) != -1) {
                                 out.write(buffer, 0, read);
@@ -385,29 +361,6 @@ public final class MainMenuActivity extends PreferenceActivity {
             } else {
                 publishProgress(processedFiles.incrementAndGet());
             }
-        }
-        
-        private int countFilesRecursive(String path) {
-            try {
-                String[] assets = getAssets().list(path);
-                if (assets == null || assets.length == 0) {
-                    return 1;
-                }
-
-                int count = 0;
-                for (String asset : assets) {
-                    count += countFilesRecursive(path + "/" + asset);
-                }
-                return count;
-            } catch (IOException e) {
-                return 1;
-            }
-        }
-
-        private int countAllFiles(String[] folders) {
-            int count = 0;
-            for (String folder : folders) count += countFilesRecursive(folder);
-            return count;
         }
 
         private void processFolderForImages(File dir) {
@@ -425,26 +378,18 @@ public final class MainMenuActivity extends PreferenceActivity {
         }
         
         private boolean hasImages(File dir) {
-            if (dir == null || !dir.exists() || !dir.isDirectory()) return false;
-
             String[] images = dir.list((d, name) -> {
                 String lower = name.toLowerCase();
                 return lower.endsWith(".jpg") || lower.endsWith(".png") || lower.endsWith(".bmp") ||
                         lower.endsWith(".svg") || lower.endsWith(".cpt");
             });
-
             return images != null && images.length > 0;
         }
 
-        // ALTERADO: Este método agora usa a variável 'selectedAspectRatioIndex' da classe externa.
         private void updateRetroarchCfg() throws IOException {
             File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
-            if (!originalCfg.exists()) {
-                originalCfg.getParentFile().mkdirs();
-            }
-            if (originalCfg.exists()) {
-                originalCfg.delete();
-            }
+            if (!originalCfg.exists()) originalCfg.getParentFile().mkdirs();
+            if (originalCfg.exists()) originalCfg.delete();
 
             Map<String, String> cfgFlags = new HashMap<>();
 
@@ -462,7 +407,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             cfgFlags.put("input_overlay_opacity", "0.700000");
             cfgFlags.put("input_overlay_hide_when_gamepad_connected", "true");
             cfgFlags.put("video_smooth", "false");
-            cfgFlags.put("aspect_ratio_index", selectedAspectRatioIndex); // <-- MUDANÇA APLICADA AQUI
+            cfgFlags.put("aspect_ratio_index", selectedAspectRatioIndex); 
             cfgFlags.put("netplay_nickname", "RetroGameBox");
             cfgFlags.put("menu_enable_widgets", "true");
             cfgFlags.put("pause_nonactive", "false");

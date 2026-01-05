@@ -155,13 +155,11 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     
             final Runnable holdSuccessRunnable = () -> {
                 Log.d("AutoConfig", "holdSuccessRunnable: EXECUTADO");
-                isProcessActive[0] = false;
-                mainHandler.removeCallbacks(countdownRunnableHolder[0]);
-                Log.d("AutoConfig", "holdSuccessRunnable: Countdown removido");
                 selectedInput = currentKeyCode[0];
                 successWaitingForRelease[0] = true;
                 resultShownTimestamp[0] = System.currentTimeMillis();
-                Log.d("AutoConfig", "holdSuccessRunnable: Timestamp=" + resultShownTimestamp[0] + ", selectedInput=" + selectedInput);
+                remainingSeconds[0] = 10; // Reseta o contador para 10 segundos
+                Log.d("AutoConfig", "holdSuccessRunnable: Contador resetado para 10s, selectedInput=" + selectedInput);
                 updateMessage.run();
             };
             
@@ -173,12 +171,10 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     
                 if (attemptsLeft[0] <= 0) {
                     Log.d("AutoConfig", "invalidPressRunnable: Tentativas esgotadas, configurando falha");
-                    isProcessActive[0] = false;
-                    mainHandler.removeCallbacks(countdownRunnableHolder[0]);
-                    Log.d("AutoConfig", "invalidPressRunnable: Countdown removido");
                     failedWaitingForRelease[0] = true;
                     resultShownTimestamp[0] = System.currentTimeMillis();
-                    Log.d("AutoConfig", "invalidPressRunnable: Timestamp=" + resultShownTimestamp[0]);
+                    remainingSeconds[0] = 10; // Reseta o contador para 10 segundos
+                    Log.d("AutoConfig", "invalidPressRunnable: Contador resetado para 10s");
                 } else {
                     isShowingInvalidMessage[0] = true;
                     Log.d("AutoConfig", "invalidPressRunnable: Tentativas restantes=" + attemptsLeft[0]);
@@ -192,12 +188,6 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                       ", successWaiting=" + successWaitingForRelease[0] + 
                       ", failedWaiting=" + failedWaitingForRelease[0]);
                 
-                // Verifica PRIMEIRO se há resultado, antes de qualquer outra coisa
-                if (successWaitingForRelease[0] || failedWaitingForRelease[0]) {
-                    Log.d("AutoConfig", "Countdown: ABORTADO - Já tem resultado");
-                    return; // Se já tem resultado, para completamente
-                }
-                
                 if (!isProcessActive[0]) {
                     Log.d("AutoConfig", "Countdown: ABORTADO - Processo inativo");
                     return;
@@ -208,14 +198,8 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                     isProcessActive[0] = false;
                     holdHandler.removeCallbacks(holdSuccessRunnable);
                     holdHandler.removeCallbacks(invalidPressRunnable);
-                    // Só fecha o diálogo se NÃO houver resultado (sucesso ou falha)
-                    if (!successWaitingForRelease[0] && !failedWaitingForRelease[0]) {
-                        Log.d("AutoConfig", "Countdown: Sem resultado, executando dismiss");
-                        if (selectedInput == -1 && latch.getCount() > 0) latch.countDown();
-                        if (dialog != null && dialog.isShowing()) dialog.dismiss();
-                    } else {
-                        Log.d("AutoConfig", "Countdown: TEM resultado, NÃO vai fechar");
-                    }
+                    if (selectedInput == -1 && latch.getCount() > 0) latch.countDown();
+                    if (dialog != null && dialog.isShowing()) dialog.dismiss();
                     return;
                 }
                 
@@ -488,4 +472,4 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             }
         }
     }
-}  
+}

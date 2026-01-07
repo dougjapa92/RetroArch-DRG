@@ -261,7 +261,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 
                 try (InputStream in = getAssets().open(fullPath)) {
                     try (FileOutputStream out = new FileOutputStream(outFile)) {
-                        byte[] buffer = new byte[65536]; 
+                        byte[] buffer = new byte[256 * 1024]; 
                         int read;
                         while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
                     }

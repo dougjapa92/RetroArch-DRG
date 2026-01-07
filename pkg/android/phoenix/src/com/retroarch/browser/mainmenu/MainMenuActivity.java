@@ -83,18 +83,11 @@ public final class MainMenuActivity extends PreferenceActivity {
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
         UserPreferences.updateConfigFile(this);
 
-        // >>> ALTERAÇÃO: decisão centralizada de cores32/cores64
         decideCoresFolder();
 
         checkRuntimePermissions();
     }
 
-    /**
-     * Decide entre cores32 e cores64 de forma robusta:
-     * - Preferência: arquitetura do processo atual (Process.is64Bit(), API 23+)
-     * - Fallback: SO 64-bit (SUPPORTED_64_BIT_ABIS, API 21+) ou os.arch em versões antigas
-     * Também inicializa archAutoconfig conforme a versão do SDK.
-     */
     private void decideCoresFolder() {
         boolean process64 = false;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -368,6 +361,18 @@ public final class MainMenuActivity extends PreferenceActivity {
             for (Map.Entry<String, String> e : MEDIA_FLAGS.entrySet())
                 cfgFlags.put(e.getValue(), new File(MEDIA_DIR, e.getKey()).getAbsolutePath());
 
+            // Obtém o ID único do dispositivo
+            String androidId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
+            
+            // Extrai os últimos 6 dígitos para o Nickname
+            String uniqueSuffix;
+            if (androidId != null && androidId.length() >= 6) {
+                uniqueSuffix = androidId.substring(androidId.length() - 6).toUpperCase();
+            } else {
+                // Fallback de segurança (ex: 123456)
+                uniqueSuffix = String.format("%06d", new java.util.Random().nextInt(1000000));
+            }
+
             cfgFlags.put("menu_driver", "ozone");
             cfgFlags.put("menu_scale_factor", "0.600000");
             cfgFlags.put("ozone_menu_color_theme", "10");
@@ -375,7 +380,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             cfgFlags.put("input_overlay_hide_when_gamepad_connected", "true");
             cfgFlags.put("video_smooth", "false");
             cfgFlags.put("aspect_ratio_index", selectedAspectRatioIndex);
-            cfgFlags.put("netplay_nickname", "RetroGameBox");
+            cfgFlags.put("netplay_nickname", "RetroGameBox-" + uniqueSuffix);
             cfgFlags.put("menu_enable_widgets", "true");
             cfgFlags.put("pause_nonactive", "false");
             cfgFlags.put("menu_mouse_enable", "false");

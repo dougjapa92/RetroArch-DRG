@@ -1,3 +1,4 @@
+
 package com.retroarch.browser.mainmenu;
 
 import com.retroarch.browser.preferences.util.UserPreferences;
@@ -41,13 +42,16 @@ public final class MainMenuActivity extends PreferenceActivity {
     private final int REQUEST_CODE_ASK_MULTIPLE_PERMISSIONS = 124;
     public static String PACKAGE_NAME;
     private SharedPreferences prefs;
-    private String selectedAspectRatioIndex = "1"; 
+    private String selectedAspectRatioIndex = "1";
 
     private final String[] ROOT_FOLDERS = {"assets", "cheats", "database", "filters", "info", "shaders", "system"};
     private final Map<String, String> ROOT_FLAGS = new HashMap<String, String>() {{
-        put("assets", "assets_directory"); put("cheats", "cheat_database_path");
-        put("database", "database_directory"); put("filters", "filters_directory");
-        put("info", "info_directory"); put("shaders", "shaders_directory");
+        put("assets", "assets_directory");
+        put("cheats", "cheat_database_path");
+        put("database", "database_directory");
+        put("filters", "filters_directory");
+        put("info", "info_directory");
+        put("shaders", "shaders_directory");
         put("system", "system_directory");
     }};
 
@@ -75,11 +79,44 @@ public final class MainMenuActivity extends PreferenceActivity {
         PACKAGE_NAME = getPackageName();
         ROOT_DIR = new File(getApplicationInfo().dataDir);
         setVolumeControlStream(AudioManager.STREAM_MUSIC);
+
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
         UserPreferences.updateConfigFile(this);
-        String arch = System.getProperty("os.arch");
-        archCores = arch.contains("64") ? "cores64" : "cores32";
+
+        // >>> ALTERAÇÃO: decisão centralizada de cores32/cores64
+        decideCoresFolder();
+
         checkRuntimePermissions();
+    }
+
+    /**
+     * Decide entre cores32 e cores64 de forma robusta:
+     * - Preferência: arquitetura do processo atual (Process.is64Bit(), API 23+)
+     * - Fallback: SO 64-bit (SUPPORTED_64_BIT_ABIS, API 21+) ou os.arch em versões antigas
+     * Também inicializa archAutoconfig conforme a versão do SDK.
+     */
+    private void decideCoresFolder() {
+        boolean process64 = false;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            try {
+                process64 = android.os.Process.is64Bit();
+            } catch (Throwable ignored) {}
+        }
+
+        boolean os64 = false;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            String[] abis64 = Build.SUPPORTED_64_BIT_ABIS;
+            os64 = (abis64 != null && abis64.length > 0);
+        } else {
+            String arch = System.getProperty("os.arch");
+            os64 = arch != null && arch.contains("64");
+        }
+
+        boolean prefer64 = process64 || os64;
+        this.archCores = prefer64 ? "cores64" : "cores32";
+
+        this.archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1)
+                ? "autoconfig-legacy" : "autoconfig";
     }
 
     private boolean addPermission(List<String> permissionsList, String permission) {
@@ -179,22 +216,24 @@ public final class MainMenuActivity extends PreferenceActivity {
     private void showAspectRatioDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("Configuração Inicial").setMessage("Escolha a proporção de tela dos jogos:")
-               .setPositiveButton("TELA CHEIA (16:9)", (d, w) -> selectedAspectRatioIndex = "1")
-               .setNegativeButton("ORIGINAL (4:3)", (d, w) -> selectedAspectRatioIndex = "20")
-               .setOnDismissListener(d -> new UnifiedExtractionTask().execute())
-               .setCancelable(false).create().show();
+                .setPositiveButton("TELA CHEIA (16:9)", (d, w) -> selectedAspectRatioIndex = "1")
+                .setNegativeButton("ORIGINAL (4:3)", (d, w) -> selectedAspectRatioIndex = "20")
+                .setOnDismissListener(d -> new UnifiedExtractionTask().execute())
+                .setCancelable(false).create().show();
     }
 
     private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
         ProgressDialog progressDialog;
         AtomicInteger processedFiles = new AtomicInteger(0);
-        final int totalFiles = 3653; 
+        final int totalFiles = 3653;
 
         @Override
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
             progressDialog.setTitle("Configurando RetroArch DRG...");
-            String archMessage = archCores.equals("cores64") ? "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)" : "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
+            String archMessage = archCores.equals("cores64")
+                    ? "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)"
+                    : "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
             String message = archMessage + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do sistema.\n\n(Customizado por Doug Retro Games)";
             SpannableString spannable = new SpannableString(message);
             int start = message.indexOf("\"Sair\"");
@@ -208,39 +247,64 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         @Override
         protected Boolean doInBackground(Void... voids) {
+            // archAutoconfig já é definido em decideCoresFolder(), mas mantemos por segurança
             archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
+
             ExecutorService executor = Executors.newFixedThreadPool(2);
 
-            for (String f : ROOT_FOLDERS) executor.submit(() -> { try { copyAssetFolder(f, new File(ROOT_DIR, f)); } catch (IOException e) {} });
-            for (String f : MEDIA_FOLDERS) executor.submit(() -> { try { copyAssetFolder(f, new File(MEDIA_DIR, f)); } catch (IOException e) {} });
-            executor.submit(() -> { try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores")); } catch (IOException e) {} });
-            executor.submit(() -> { try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig")); } catch (IOException e) {} });
+            for (String f : ROOT_FOLDERS) {
+                executor.submit(() -> {
+                    try { copyAssetFolder(f, new File(ROOT_DIR, f)); } catch (IOException e) {}
+                });
+            }
+
+            for (String f : MEDIA_FOLDERS) {
+                executor.submit(() -> {
+                    try { copyAssetFolder(f, new File(MEDIA_DIR, f)); } catch (IOException e) {}
+                });
+            }
+
+            executor.submit(() -> {
+                try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores")); } catch (IOException e) {}
+            });
+
+            executor.submit(() -> {
+                try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig")); } catch (IOException e) {}
+            });
 
             executor.shutdown();
-            try { executor.awaitTermination(30, TimeUnit.MINUTES); } catch (InterruptedException e) { return false; }
+            try {
+                executor.awaitTermination(30, TimeUnit.MINUTES);
+            } catch (InterruptedException e) {
+                return false;
+            }
 
             createNomediaFiles();
 
-            try { updateRetroarchCfg(); } catch (IOException e) { return false; }
+            try {
+                updateRetroarchCfg();
+            } catch (IOException e) {
+                return false;
+            }
             return true;
         }
 
         private void createNomediaFiles() {
             String[] folders = {
-                "overlays/gamepads/720-med/img", "overlays/gamepads/Piixel-Gamepads/Piixel Retropad/img",
-                "overlays/gamepads/arcade/img", "overlays/gamepads/arcade-anim/img", "overlays/gamepads/arcade-minimal/img",
-                "overlays/gamepads/cdi_anim_portrait/img", "overlays/gamepads/dual-shock/img", "overlays/gamepads/example",
-                "overlays/gamepads/flat/img", "overlays/gamepads/flat/old", "overlays/gamepads/flat/src",
-                "overlays/gamepads/flip_phone/img", "overlays/gamepads/gameboy/img", "overlays/gamepads/gb_anim_portrait/img",
-                "overlays/gamepads/gba/img", "overlays/gamepads/gba-anim_landscape/img", "overlays/gamepads/gba-grey/img",
-                "overlays/gamepads/gba_landscape_6x/img", "overlays/gamepads/genesis/img", "overlays/gamepads/lite/img",
-                "overlays/gamepads/n64/img", "overlays/gamepads/n64/old", "overlays/gamepads/neo-ds-portrait/img/clear",
-                "overlays/gamepads/neo-retropad/img/clear", "overlays/gamepads/neo-retropad/img/default",
-                "overlays/gamepads/neo-retropad/src/clear", "overlays/gamepads/neo-retropad/src/default",
-                "overlays/gamepads/neo-retropad/src/template", "overlays/gamepads/nes/img", "overlays/gamepads/nes-small/img",
-                "overlays/gamepads/old/Low-resolution", "overlays/gamepads/old", "overlays/gamepads/psx/img",
-                "overlays/gamepads/quadpad/img", "overlays/gamepads/retropad/img", "overlays/gamepads/rgpad/modern",
-                "overlays/gamepads/rgpad/retro", "overlays/gamepads/scummvm/img", "overlays/gamepads/snes/img"
+                    "overlays/gamepads/720-med/img", "overlays/gamepads/Piixel-Gamepads/Piixel Retropad/img",
+                    "overlays/gamepads/arcade/img", "overlays/gamepads/arcade-anim/img", "overlays/gamepads/arcade-minimal/img",
+                    "overlays/gamepads/cdi_anim_portrait/img", "overlays/gamepads/dual-shock/img", "overlays/gamepads/example",
+                    "overlays/gamepads/flat/img", "overlays/gamepads/flat/old", "overlays/gamepads/flat/src",
+                    "overlays/gamepads/flip_phone/img", "overlays/gamepads/gameboy/img", "overlays/gamepads/gb_anim_portrait/img",
+                    "overlays/gamepads/gba/img", "overlays/gamepads/gba-anim_landscape/img", "overlays/gamepads/gba-grey/img",
+                    "overlays/gamepads/gba_landscape_6x/img", "overlays/gamepads/genesis/img", "overlays/gamepads/lite/img",
+                    "overlays/gamepads/n64/img", "overlays/gamepads/n64/old", "overlays/gamepads/neo-ds-portrait/img/clear",
+                    "overlays/gamepads/neo-retropad/img/clear", "overlays/gamepads/neo-retropad/img/default",
+                    "overlays/gamepads/neo-retropad/src/clear", "overlays/gamepads/neo-retropad/src/default",
+                    "overlays/gamepads/neo-retropad/src/template", "overlays/gamepads/nes/img", "overlays/gamepads/nes-small/img",
+                    "overlays/gamepads/old/Low-resolution", "overlays/gamepads/old", "overlays/gamepads/psx/img",
+                    "overlays/gamepads/quadpad/img", "overlays/gamepads/retropad/img", "overlays/gamepads/rgpad/modern",
+                    "overlays/gamepads/rgpad/retro", "overlays/gamepads/scummvm/img", "overlays/gamepads/snes/img"
             };
             for (String path : folders) {
                 File folder = new File(MEDIA_DIR, path);
@@ -254,31 +318,40 @@ public final class MainMenuActivity extends PreferenceActivity {
             String[] assets = getAssets().list(assetFolder);
             if (!targetFolder.exists()) targetFolder.mkdirs();
             if (assets == null) return;
+
             for (String asset : assets) {
                 String fullPath = assetFolder + "/" + asset;
                 File outFile = new File(targetFolder, asset);
-                if (fullPath.equals("config/global.glslp") && !isArm64()) { publishProgress(processedFiles.incrementAndGet()); continue; }
-                
+
+                // Usa a decisão centralizada: se não for arm64, pula preset específico
+                if (fullPath.equals("config/global.glslp") && !isArm64()) {
+                    publishProgress(processedFiles.incrementAndGet());
+                    continue;
+                }
+
                 try (InputStream in = getAssets().open(fullPath)) {
                     try (FileOutputStream out = new FileOutputStream(outFile)) {
-                        byte[] buffer = new byte[256 * 1024]; 
+                        byte[] buffer = new byte[256 * 1024];
                         int read;
                         while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
                     }
                     publishProgress(processedFiles.incrementAndGet());
-                } catch (IOException e) { copyAssetFolder(fullPath, outFile); }
+                } catch (IOException e) {
+                    // Se não for arquivo, é diretório: copiar recursivamente
+                    copyAssetFolder(fullPath, outFile);
+                }
             }
         }
 
+        // >>> ALTERAÇÃO: simplificado para refletir a decisão centralizada
         private boolean isArm64() {
-            if (Build.SUPPORTED_ABIS != null) {
-                for (String abi : Build.SUPPORTED_ABIS) if (abi.toLowerCase().contains("arm64")) return true;
-            }
-            return false;
+            return "cores64".equals(archCores);
         }
 
         @Override
-        protected void onProgressUpdate(Integer... v) { progressDialog.setProgress(v[0]); }
+        protected void onProgressUpdate(Integer... v) {
+            progressDialog.setProgress(v[0]);
+        }
 
         @Override
         protected void onPostExecute(Boolean r) {
@@ -293,8 +366,10 @@ public final class MainMenuActivity extends PreferenceActivity {
             originalCfg.getParentFile().mkdirs();
 
             Map<String, String> cfgFlags = new HashMap<>();
-            for (Map.Entry<String, String> e : ROOT_FLAGS.entrySet()) cfgFlags.put(e.getValue(), new File(ROOT_DIR, e.getKey()).getAbsolutePath());
-            for (Map.Entry<String, String> e : MEDIA_FLAGS.entrySet()) cfgFlags.put(e.getValue(), new File(MEDIA_DIR, e.getKey()).getAbsolutePath());
+            for (Map.Entry<String, String> e : ROOT_FLAGS.entrySet())
+                cfgFlags.put(e.getValue(), new File(ROOT_DIR, e.getKey()).getAbsolutePath());
+            for (Map.Entry<String, String> e : MEDIA_FLAGS.entrySet())
+                cfgFlags.put(e.getValue(), new File(MEDIA_DIR, e.getKey()).getAbsolutePath());
 
             cfgFlags.put("menu_driver", "ozone");
             cfgFlags.put("menu_scale_factor", "0.600000");
@@ -323,7 +398,8 @@ public final class MainMenuActivity extends PreferenceActivity {
             cfgFlags.put("osk_overlay_directory", new File(MEDIA_DIR, "overlays/keyboards").getAbsolutePath());
             cfgFlags.put("input_overlay", new File(MEDIA_DIR, "overlays/gamepads/neo-retropad/neo-retropad.cfg").getAbsolutePath());
             cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
-            cfgFlags.put("video_driver", (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && "cores64".equals(archCores)) ? "vulkan" : "gl");
+            cfgFlags.put("video_driver",
+                    (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && "cores64".equals(archCores)) ? "vulkan" : "gl");
             cfgFlags.put("bundle_assets_extract_enable", "false");
             cfgFlags.put("bundle_assets_extract_last_version", "1756737486");
             cfgFlags.put("bundle_assets_extract_version_current", "1756737486");
@@ -360,10 +436,17 @@ public final class MainMenuActivity extends PreferenceActivity {
     public void finalStartup() {
         Intent retro = new Intent(this, RetroActivityFuture.class);
         retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        startRetroActivity(retro, null, new File(ROOT_DIR, "cores").getAbsolutePath(),
+
+        startRetroActivity(
+                retro,
+                null,
+                new File(ROOT_DIR, "cores").getAbsolutePath(),
                 new File(CONFIG_DIR, "retroarch.cfg").getAbsolutePath(),
                 Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
-                ROOT_DIR.getAbsolutePath(), getApplicationInfo().sourceDir);
+                ROOT_DIR.getAbsolutePath(),
+                getApplicationInfo().sourceDir
+        );
+
         startActivity(retro);
         finish();
     }

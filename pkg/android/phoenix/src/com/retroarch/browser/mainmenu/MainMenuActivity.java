@@ -247,9 +247,6 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         @Override
         protected Boolean doInBackground(Void... voids) {
-            // archAutoconfig já é definido em decideCoresFolder(), mas mantemos por segurança
-            archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
-
             ExecutorService executor = Executors.newFixedThreadPool(2);
 
             for (String f : ROOT_FOLDERS) {

@@ -1,5 +1,6 @@
 #!/bin/bash
 
+# Lista de cores para download
 CORES_LIST=(
   "81_libretro_android.so.zip"
   "a5200_libretro_android.so.zip"
@@ -43,6 +44,7 @@ CORES_LIST=(
   "vice_x64_libretro_android.so.zip"
 )
 
+# Função para baixar e preparar um único core
 baixar_core() {
   local ARCH=$1
   local CORES_DIR=$2
@@ -58,19 +60,18 @@ baixar_core() {
   while [[ $RETRY -lt $MAX_RETRIES ]]; do
     echo "[$ARCH] Baixando $CORE_FILE (tentativa $((RETRY+1)))..."
     if curl -sS -fL "${BASE_URL}${CORE_FILE}" -o "$TEMP_DIR/$CORE_FILE"; then
+      # Descompacta o zip original do buildbot
       unzip -oq "$TEMP_DIR/$CORE_FILE" -d "$TEMP_DIR"
       local SO_FILE="$TEMP_DIR/${CORE_FILE%.zip}"
       local DEST_FILE="$CORES_DIR/${CORE_FILE%.zip}"
 
-      # Evita sobrescrever caso já exista
-      if [[ ! -f "$DEST_FILE" ]]; then
-        cp "$SO_FILE" "$DEST_FILE"
+      # Move o .so para a pasta final de coleta
+      if [[ -f "$SO_FILE" ]]; then
+        mv "$SO_FILE" "$DEST_FILE"
+        touch "$TEMP_DIR/$CORE_FILE.success"
+        echo "[$ARCH] $CORE_FILE processado."
       fi
-
-      # Marca sucesso criando arquivo temporário
-      touch "$TEMP_DIR/$CORE_FILE.success"
-
-      echo "[$ARCH] $CORE_FILE atualizado com sucesso."
+      
       rm -f "$TEMP_DIR/$CORE_FILE"
       return 0
     else
@@ -80,58 +81,62 @@ baixar_core() {
       WAIT=$((WAIT * 2))
     fi
   done
-
-  echo "[$ARCH] Erro crítico: não foi possível baixar $CORE_FILE após $MAX_RETRIES tentativas."
   return 1
 }
 
-baixar_cores() {
-  local ARCH=$1
-  local CORES_DIR=$2
-  local TEMP_DIR=$3
+# Função principal de processamento por arquitetura
+processar_arquitetura() {
+  local ARCH_LIBRETRO=$1 # "arm64-v8a" ou "armeabi-v7a"
+  local ZIP_NAME=$2      # "cores64.zip" ou "cores32.zip"
+  local ASSETS_DIR="app/src/main/assets" # Ajuste para o seu diretório de assets
+  
+  local CORES_TEMP_DIR="temp_cores_$ARCH_LIBRETRO"
+  local DOWNLOAD_TEMP="temp_download_$ARCH_LIBRETRO"
   local MAX_JOBS=4
 
-  mkdir -p "$CORES_DIR" "$TEMP_DIR"
+  echo "=============================================="
+  echo " Iniciando Processamento: $ARCH_LIBRETRO -> $ZIP_NAME"
+  echo "=============================================="
+
+  mkdir -p "$CORES_TEMP_DIR" "$DOWNLOAD_TEMP"
 
   # Inicia downloads em paralelo
   for CORE_FILE in "${CORES_LIST[@]}"; do
-    baixar_core "$ARCH" "$CORES_DIR" "$TEMP_DIR" "$CORE_FILE" &
+    baixar_core "$ARCH_LIBRETRO" "$CORES_TEMP_DIR" "$DOWNLOAD_TEMP" "$CORE_FILE" &
     
-    # Limita o número de jobs simultâneos
+    # Controle de jobs simultâneos
     while [[ $(jobs -r | wc -l) -ge $MAX_JOBS ]]; do
       sleep 1
     done
   done
 
-  wait  # Aguarda todos terminarem
+  wait # Aguarda todos os downloads e unzips terminarem
 
-  local SUCCESSFUL=()
-  local FAILED=()
-
-  # Verifica sucesso pela existência do arquivo .success
-  for CORE_FILE in "${CORES_LIST[@]}"; do
-    if [[ -f "$TEMP_DIR/$CORE_FILE.success" ]]; then
-      SUCCESSFUL+=("$CORE_FILE")
-    else
-      FAILED+=("$CORE_FILE")
-    fi
-  done
-
-  rm -rf "$TEMP_DIR"
-
-  # Resumo final
-  echo "===== Resumo do download ====="
-  echo "Total de cores: ${#CORES_LIST[@]}"
-  echo "Sucesso: ${#SUCCESSFUL[@]}"
-  echo "Falha: ${#FAILED[@]}"
-
-  if [[ ${#FAILED[@]} -gt 0 ]]; then
-    echo "Cores que falharam:"
-    printf '%s\n' "${FAILED[@]}"
+  # Verifica se a pasta tem arquivos antes de zipar
+  if [ "$(ls -A $CORES_TEMP_DIR)" ]; then
+    echo "Gerando $ZIP_NAME sem compressão (Stored)..."
+    mkdir -p "$ASSETS_DIR"
+    
+    # Remove o zip antigo se existir para evitar acumular arquivos
+    rm -f "$ASSETS_DIR/$ZIP_NAME"
+    
+    # Entra na pasta para que o zip não tenha caminhos relativos
+    (cd "$CORES_TEMP_DIR" && zip -0 -j "../../$ASSETS_DIR/$ZIP_NAME" *.so)
+    
+    echo "Sucesso: $ZIP_NAME criado em $ASSETS_DIR"
   else
-    echo "Todos os cores foram baixados com sucesso."
+    echo "Erro: Nenhum core foi baixado para $ARCH_LIBRETRO"
   fi
+
+  # Limpeza
+  rm -rf "$CORES_TEMP_DIR" "$DOWNLOAD_TEMP"
 }
 
-# Exemplo de uso:
-# baixar_cores "arm64-v8a" "/caminho/para/cores" "/caminho/temporario" 
+# Execução do script
+# Certifique-se de estar na raiz do seu projeto Android ao executar
+processar_arquitetura "arm64-v8a" "cores64.zip"
+processar_arquitetura "armeabi-v7a" "cores32.zip"
+
+echo "=============================================="
+echo " Processo Finalizado!"
+echo "=============================================="

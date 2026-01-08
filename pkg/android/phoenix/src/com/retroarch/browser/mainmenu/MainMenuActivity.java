@@ -1,4 +1,3 @@
-
 package com.retroarch.browser.mainmenu;
 
 import com.retroarch.browser.preferences.util.UserPreferences;
@@ -32,7 +31,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -84,16 +83,13 @@ public final class MainMenuActivity extends PreferenceActivity {
         UserPreferences.updateConfigFile(this);
 
         decideCoresFolder();
-
         checkRuntimePermissions();
     }
 
     private void decideCoresFolder() {
         boolean process64 = false;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            try {
-                process64 = android.os.Process.is64Bit();
-            } catch (Throwable ignored) {}
+            try { process64 = android.os.Process.is64Bit(); } catch (Throwable ignored) {}
         }
 
         boolean os64 = false;
@@ -107,9 +103,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         boolean prefer64 = process64 || os64;
         this.archCores = prefer64 ? "cores64" : "cores32";
-
-        this.archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1)
-                ? "autoconfig-legacy" : "autoconfig";
+        this.archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1) ? "autoconfig-legacy" : "autoconfig";
     }
 
     private boolean addPermission(List<String> permissionsList, String permission) {
@@ -215,68 +209,118 @@ public final class MainMenuActivity extends PreferenceActivity {
                 .setCancelable(false).create().show();
     }
 
-    private class UnifiedExtractionTask extends AsyncTask<Void, Integer, Boolean> {
+    private class UnifiedExtractionTask extends AsyncTask<Void, Long, Boolean> {
         ProgressDialog progressDialog;
-        AtomicInteger processedFiles = new AtomicInteger(0);
-        final int totalFiles = 3653;
+        AtomicLong totalExtractedBytes = new AtomicLong(0);
+        long totalSizeInBytes = 0;
 
         @Override
         protected void onPreExecute() {
             progressDialog = new ProgressDialog(MainMenuActivity.this);
             progressDialog.setTitle("Configurando RetroArch DRG...");
-            String archMessage = archCores.equals("cores64")
-                    ? "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)"
-                    : "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
-            String message = archMessage + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do sistema.\n\n(Customizado por Doug Retro Games)";
-            SpannableString spannable = new SpannableString(message);
-            int start = message.indexOf("\"Sair\"");
-            if (start != -1) spannable.setSpan(new StyleSpan(Typeface.BOLD), start, start + 6, 0);
-            progressDialog.setMessage(spannable);
+            progressDialog.setMessage("Calculando espaço necessário...");
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);
-            progressDialog.setMax(totalFiles);
+            progressDialog.setIndeterminate(true);
             progressDialog.show();
         }
 
         @Override
         protected Boolean doInBackground(Void... voids) {
+            // Cálculo do tamanho real
+            totalSizeInBytes = 0;
+            for (String f : ROOT_FOLDERS) totalSizeInBytes += getAssetSize(f);
+            for (String f : MEDIA_FOLDERS) totalSizeInBytes += getAssetSize(f);
+            totalSizeInBytes += getAssetSize(archCores);
+            totalSizeInBytes += getAssetSize(archAutoconfig);
+
+            final int totalMB = (int) (totalSizeInBytes / (1024 * 1024));
+
+            runOnUiThread(() -> {
+                progressDialog.setIndeterminate(false);
+                progressDialog.setMax(totalMB);
+
+                String archMessage = archCores.equals("cores64")
+                        ? "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)"
+                        : "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
+                String message = archMessage + "\nEspaço: " + totalMB + " MB" + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do sistema.\n\n(Customizado por Doug Retro Games)";
+                
+                SpannableString spannable = new SpannableString(message);
+                int start = message.indexOf("\"Sair\"");
+                if (start != -1) spannable.setSpan(new StyleSpan(Typeface.BOLD), start, start + 6, 0);
+                progressDialog.setMessage(spannable);
+            });
+
+            // Extração com 2 threads para estabilidade no RK3229
             ExecutorService executor = Executors.newFixedThreadPool(2);
 
-            for (String f : ROOT_FOLDERS) {
-                executor.submit(() -> {
-                    try { copyAssetFolder(f, new File(ROOT_DIR, f)); } catch (IOException e) {}
-                });
-            }
-
-            for (String f : MEDIA_FOLDERS) {
-                executor.submit(() -> {
-                    try { copyAssetFolder(f, new File(MEDIA_DIR, f)); } catch (IOException e) {}
-                });
-            }
-
-            executor.submit(() -> {
-                try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores")); } catch (IOException e) {}
-            });
-
-            executor.submit(() -> {
-                try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig")); } catch (IOException e) {}
-            });
+            for (String f : ROOT_FOLDERS) executor.submit(() -> { try { copyAssetFolder(f, new File(ROOT_DIR, f)); } catch (IOException e) {} });
+            for (String f : MEDIA_FOLDERS) executor.submit(() -> { try { copyAssetFolder(f, new File(MEDIA_DIR, f)); } catch (IOException e) {} });
+            executor.submit(() -> { try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores")); } catch (IOException e) {} });
+            executor.submit(() -> { try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig")); } catch (IOException e) {} });
 
             executor.shutdown();
-            try {
-                executor.awaitTermination(30, TimeUnit.MINUTES);
-            } catch (InterruptedException e) {
-                return false;
-            }
+            try { executor.awaitTermination(30, TimeUnit.MINUTES); } catch (InterruptedException e) { return false; }
 
             createNomediaFiles();
-
-            try {
-                updateRetroarchCfg();
-            } catch (IOException e) {
-                return false;
-            }
+            try { updateRetroarchCfg(); } catch (IOException e) { return false; }
             return true;
+        }
+
+        private long getAssetSize(String path) {
+            long size = 0;
+            try {
+                String[] list = getAssets().list(path);
+                if (list == null || list.length == 0) {
+                    try (InputStream is = getAssets().open(path)) { return is.available(); }
+                } else {
+                    for (String file : list) size += getAssetSize(path + "/" + file);
+                }
+            } catch (IOException ignored) {}
+            return size;
+        }
+
+        private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
+            String[] assets = getAssets().list(assetFolder);
+            if (!targetFolder.exists()) targetFolder.mkdirs();
+            if (assets == null) return;
+
+            for (String asset : assets) {
+                String fullPath = assetFolder + "/" + asset;
+                File outFile = new File(targetFolder, asset);
+
+                if (fullPath.equals("config/global.glslp") && !archCores.equals("cores64")) continue;
+
+                try (InputStream in = getAssets().open(fullPath)) {
+                    // Se list().length for 0, é um arquivo
+                    if (getAssets().list(fullPath).length == 0) {
+                        try (FileOutputStream out = new FileOutputStream(outFile)) {
+                            byte[] buffer = new byte[256 * 1024]; // Buffer de 256KB
+                            int read;
+                            while ((read = in.read(buffer)) != -1) {
+                                out.write(buffer, 0, read);
+                                publishProgress(totalExtractedBytes.addAndGet(read));
+                            }
+                        }
+                    } else {
+                        copyAssetFolder(fullPath, outFile);
+                    }
+                } catch (IOException e) {
+                    copyAssetFolder(fullPath, outFile);
+                }
+            }
+        }
+
+        @Override
+        protected void onProgressUpdate(Long... values) {
+            progressDialog.setProgress((int) (values[0] / (1024 * 1024)));
+        }
+
+        @Override
+        protected void onPostExecute(Boolean r) {
+            if (progressDialog.isShowing()) progressDialog.dismiss();
+            prefs.edit().putBoolean("firstRun", false).apply();
+            finalStartup();
         }
 
         private void createNomediaFiles() {
@@ -304,52 +348,6 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
         }
 
-        private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
-            String[] assets = getAssets().list(assetFolder);
-            if (!targetFolder.exists()) targetFolder.mkdirs();
-            if (assets == null) return;
-
-            for (String asset : assets) {
-                String fullPath = assetFolder + "/" + asset;
-                File outFile = new File(targetFolder, asset);
-
-                // Usa a decisão centralizada: se não for arm64, pula preset específico
-                if (fullPath.equals("config/global.glslp") && !isArm64()) {
-                    publishProgress(processedFiles.incrementAndGet());
-                    continue;
-                }
-
-                try (InputStream in = getAssets().open(fullPath)) {
-                    try (FileOutputStream out = new FileOutputStream(outFile)) {
-                        byte[] buffer = new byte[256 * 1024];
-                        int read;
-                        while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
-                    }
-                    publishProgress(processedFiles.incrementAndGet());
-                } catch (IOException e) {
-                    // Se não for arquivo, é diretório: copiar recursivamente
-                    copyAssetFolder(fullPath, outFile);
-                }
-            }
-        }
-
-        // >>> ALTERAÇÃO: simplificado para refletir a decisão centralizada
-        private boolean isArm64() {
-            return "cores64".equals(archCores);
-        }
-
-        @Override
-        protected void onProgressUpdate(Integer... v) {
-            progressDialog.setProgress(v[0]);
-        }
-
-        @Override
-        protected void onPostExecute(Boolean r) {
-            if (progressDialog.isShowing()) progressDialog.dismiss();
-            prefs.edit().putBoolean("firstRun", false).apply();
-            finalStartup();
-        }
-
         private void updateRetroarchCfg() throws IOException {
             File originalCfg = new File(CONFIG_DIR, "retroarch.cfg");
             if (originalCfg.exists()) originalCfg.delete();
@@ -361,15 +359,11 @@ public final class MainMenuActivity extends PreferenceActivity {
             for (Map.Entry<String, String> e : MEDIA_FLAGS.entrySet())
                 cfgFlags.put(e.getValue(), new File(MEDIA_DIR, e.getKey()).getAbsolutePath());
 
-            // Obtém o ID único do dispositivo
             String androidId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
-            
-            // Extrai os últimos 6 dígitos para o Nickname
             String uniqueSuffix;
             if (androidId != null && androidId.length() >= 6) {
                 uniqueSuffix = androidId.substring(androidId.length() - 6).toUpperCase();
             } else {
-                // Fallback de segurança (ex: 123456)
                 uniqueSuffix = String.format("%06d", new java.util.Random().nextInt(1000000));
             }
 
@@ -400,8 +394,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             cfgFlags.put("osk_overlay_directory", new File(MEDIA_DIR, "overlays/keyboards").getAbsolutePath());
             cfgFlags.put("input_overlay", new File(MEDIA_DIR, "overlays/gamepads/neo-retropad/neo-retropad.cfg").getAbsolutePath());
             cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
-            cfgFlags.put("video_driver",
-                    (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && "cores64".equals(archCores)) ? "vulkan" : "gl");
+            cfgFlags.put("video_driver", (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && "cores64".equals(archCores)) ? "vulkan" : "gl");
             cfgFlags.put("bundle_assets_extract_enable", "false");
             cfgFlags.put("bundle_assets_extract_last_version", "1756737486");
             cfgFlags.put("bundle_assets_extract_version_current", "1756737486");
@@ -438,17 +431,10 @@ public final class MainMenuActivity extends PreferenceActivity {
     public void finalStartup() {
         Intent retro = new Intent(this, RetroActivityFuture.class);
         retro.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-
-        startRetroActivity(
-                retro,
-                null,
-                new File(ROOT_DIR, "cores").getAbsolutePath(),
+        startRetroActivity(retro, null, new File(ROOT_DIR, "cores").getAbsolutePath(),
                 new File(CONFIG_DIR, "retroarch.cfg").getAbsolutePath(),
                 Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD),
-                ROOT_DIR.getAbsolutePath(),
-                getApplicationInfo().sourceDir
-        );
-
+                ROOT_DIR.getAbsolutePath(), getApplicationInfo().sourceDir);
         startActivity(retro);
         finish();
     }

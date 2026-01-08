@@ -1,3 +1,4 @@
+
 package com.retroarch.browser.mainmenu;
 
 import com.retroarch.browser.preferences.util.UserPreferences;
@@ -226,18 +227,21 @@ public final class MainMenuActivity extends PreferenceActivity {
             totalMB = archCores.equals("cores64") ? 547 : 436;
 
             progressDialog = new ProgressDialog(MainMenuActivity.this);
+            // (Opcional) Mostrar a configuração aplicada no título
             progressDialog.setTitle("Configurando RetroArch DRG...");
+
             String archMessage = archCores.equals("cores64")
                     ? "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)"
                     : "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
-            
-            // Inclusão do tamanho em MB na mensagem original
-            String message = archMessage + "\n Espaço necessário: " + totalMB + " MB" + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do sistema.\n\n(Customizado por Doug Retro Games)";
-            
+
+            String message = archMessage
+                    + "\n Espaço necessário: " + totalMB + " MB"
+                    + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do sistema.\n\n(Customizado por Doug Retro Games)";
+
             SpannableString spannable = new SpannableString(message);
             int start = message.indexOf("\"Sair\"");
             if (start != -1) spannable.setSpan(new StyleSpan(Typeface.BOLD), start, start + 6, 0);
-            
+
             progressDialog.setMessage(spannable);
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             progressDialog.setCancelable(false);
@@ -247,29 +251,35 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         @Override
         protected Boolean doInBackground(Void... voids) {
-            // Inteligência de Threads dinâmica para manter performance no Snapdragon 8 Gen 3
+            // Detecta núcleos e escolhe threads/buffer conforme a regra solicitada
             int cpuCount = Runtime.getRuntime().availableProcessors();
-            int threadCount = (cpuCount > 4) ? 6 : 2;
+            final int threadCount = (cpuCount > 4) ? 4 : 2;
+            final int bufferSize = (cpuCount > 4) ? (1024 * 1024) : (256 * 1024);
+
             ExecutorService executor = Executors.newFixedThreadPool(threadCount);
 
+            // Copia ROOT_FOLDERS para ROOT_DIR
             for (String f : ROOT_FOLDERS) {
                 executor.submit(() -> {
-                    try { copyAssetFolder(f, new File(ROOT_DIR, f)); } catch (IOException e) {}
+                    try { copyAssetFolder(f, new File(ROOT_DIR, f), bufferSize); } catch (IOException ignored) {}
                 });
             }
 
+            // Copia MEDIA_FOLDERS para MEDIA_DIR
             for (String f : MEDIA_FOLDERS) {
                 executor.submit(() -> {
-                    try { copyAssetFolder(f, new File(MEDIA_DIR, f)); } catch (IOException e) {}
+                    try { copyAssetFolder(f, new File(MEDIA_DIR, f), bufferSize); } catch (IOException ignored) {}
                 });
             }
 
+            // Copia cores (cores32/cores64) para ROOT_DIR/cores
             executor.submit(() -> {
-                try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores")); } catch (IOException e) {}
+                try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores"), bufferSize); } catch (IOException ignored) {}
             });
 
+            // Copia autoconfig (legacy ou atual) para MEDIA_DIR/autoconfig
             executor.submit(() -> {
-                try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig")); } catch (IOException e) {}
+                try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig"), bufferSize); } catch (IOException ignored) {}
             });
 
             executor.shutdown();
@@ -309,12 +319,15 @@ public final class MainMenuActivity extends PreferenceActivity {
             for (String path : folders) {
                 File folder = new File(MEDIA_DIR, path);
                 if (folder.exists()) {
-                    try { new File(folder, ".nomedia").createNewFile(); } catch (IOException e) {}
+                    try { new File(folder, ".nomedia").createNewFile(); } catch (IOException ignored) {}
                 }
             }
         }
 
-        private void copyAssetFolder(String assetFolder, File targetFolder) throws IOException {
+        /**
+         * Versão com buffer dinâmico.
+         */
+        private void copyAssetFolder(String assetFolder, File targetFolder, int bufferSize) throws IOException {
             String[] assets = getAssets().list(assetFolder);
             if (!targetFolder.exists()) targetFolder.mkdirs();
             if (assets == null) return;
@@ -328,9 +341,10 @@ public final class MainMenuActivity extends PreferenceActivity {
                 }
 
                 try (InputStream in = getAssets().open(fullPath)) {
+                    // Se list(fullPath).length == 0 => é arquivo
                     if (getAssets().list(fullPath).length == 0) {
                         try (FileOutputStream out = new FileOutputStream(outFile)) {
-                            byte[] buffer = new byte[256 * 1024];
+                            byte[] buffer = new byte[bufferSize];
                             int read;
                             while ((read = in.read(buffer)) != -1) {
                                 out.write(buffer, 0, read);
@@ -344,10 +358,12 @@ public final class MainMenuActivity extends PreferenceActivity {
                             }
                         }
                     } else {
-                        copyAssetFolder(fullPath, outFile);
+                        // É diretório: recursão com mesmo bufferSize
+                        copyAssetFolder(fullPath, outFile, bufferSize);
                     }
                 } catch (IOException e) {
-                    copyAssetFolder(fullPath, outFile);
+                    // Se falhar abrir como arquivo, tenta recursão (diretório)
+                    copyAssetFolder(fullPath, outFile, bufferSize);
                 }
             }
         }
@@ -380,7 +396,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 cfgFlags.put(e.getValue(), new File(MEDIA_DIR, e.getKey()).getAbsolutePath());
 
             String androidId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
-            
+
             String uniqueSuffix;
             if (androidId != null && androidId.length() >= 6) {
                 uniqueSuffix = androidId.substring(androidId.length() - 6).toUpperCase();

@@ -252,7 +252,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected Boolean doInBackground(Void... voids) {
             // Detecta núcleos e escolhe threads/buffer conforme a regra solicitada
             int cpuCount = Runtime.getRuntime().availableProcessors();
-            final int threadCount = 2;
+            final int threadCount = (cpuCount > 2) ? 2 : 1;
             final int bufferSize = (cpuCount > 4) ? (1024 * 1024) : (256 * 1024);
 
             ExecutorService executor = Executors.newFixedThreadPool(threadCount);

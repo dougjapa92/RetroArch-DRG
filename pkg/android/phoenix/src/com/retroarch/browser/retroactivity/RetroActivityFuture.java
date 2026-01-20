@@ -76,7 +76,6 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     private CountDownLatch latch;
     private int selectedInput = -1;
     
-    /** Método chamado via JNI de forma síncrona */
     public boolean createCfgForUnknownControllerSync(int vendorId, int productId, String deviceName) {
         final int[] attemptsLeft = {3};
         selectedInput = -1;
@@ -86,7 +85,6 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             AlertDialog.Builder builder = new AlertDialog.Builder(this);
             builder.setCancelable(false);
     
-            // Título
             TextView titleView = new TextView(this);
             titleView.setText("Autoconfiguração de Controle");
             titleView.setGravity(Gravity.CENTER);
@@ -95,7 +93,6 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             titleView.setPadding(20, 40, 20, 20);
             builder.setCustomTitle(titleView);
     
-            // Mensagem
             TextView messageView = new TextView(this);
             messageView.setTextAlignment(View.TEXT_ALIGNMENT_CENTER);
             messageView.setGravity(Gravity.CENTER);
@@ -125,137 +122,93 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             final Runnable updateMessage = () -> {
                 if (successWaitingForRelease[0]) {
                     messageView.setLines(5);
-                    String successText = String.format(SUCCESS_TEMPLATE, selectedInput);
-                    messageView.setText(successText);
+                    messageView.setText(String.format(SUCCESS_TEMPLATE, selectedInput));
                     return;
                 }
-    
                 if (failedWaitingForRelease[0]) {
                     messageView.setLines(8);
                     messageView.setText(FAILURE_MESSAGE);
                     return;
                 }
-    
-                String feedbackLine = " ";
+                String feedbackLine = isShowingInvalidMessage[0] ? "BOTÃO INVÁLIDO!" : 
+                                     (currentKeyCode[0] != 0 ? "Botão: " + currentKeyCode[0] : " ");
                 String instructionLine = "Pressione e segure SELECT (Options) para configurar o controle.";
-    
-                if (isShowingInvalidMessage[0]) {
-                    feedbackLine = "BOTÃO INVÁLIDO!";
-                } else if (currentKeyCode[0] != 0) {
-                    feedbackLine = "Botão: " + currentKeyCode[0];
-                }
-                
-                String formattedText = String.format(MESSAGE_TEMPLATE,
-                        instructionLine,
-                        feedbackLine,
-                        attemptsLeft[0],
-                        remainingSeconds[0]);
-                messageView.setText(formattedText);
+                messageView.setText(String.format(MESSAGE_TEMPLATE, instructionLine, feedbackLine, attemptsLeft[0], remainingSeconds[0]));
             };
     
             final Runnable holdSuccessRunnable = () -> {
-                Log.d("AutoConfig", "holdSuccessRunnable: EXECUTADO");
                 selectedInput = currentKeyCode[0];
                 successWaitingForRelease[0] = true;
                 resultShownTimestamp[0] = System.currentTimeMillis();
-                remainingSeconds[0] = 10; // Reseta o contador para 10 segundos
-                Log.d("AutoConfig", "holdSuccessRunnable: Contador resetado para 10s, selectedInput=" + selectedInput);
+                remainingSeconds[0] = 10; // Reset para tempo de leitura
                 updateMessage.run();
             };
             
             final Runnable invalidPressRunnable = () -> {
-                Log.d("AutoConfig", "invalidPressRunnable: EXECUTADO");
-                if (attemptsLeft[0] > 0) {
-                    attemptsLeft[0]--;
-                }
-    
+                if (attemptsLeft[0] > 0) attemptsLeft[0]--;
                 if (attemptsLeft[0] <= 0) {
-                    Log.d("AutoConfig", "invalidPressRunnable: Tentativas esgotadas, configurando falha");
                     failedWaitingForRelease[0] = true;
                     resultShownTimestamp[0] = System.currentTimeMillis();
-                    remainingSeconds[0] = 10; // Reseta o contador para 10 segundos
-                    Log.d("AutoConfig", "invalidPressRunnable: Contador resetado para 10s");
+                    remainingSeconds[0] = 10; // Reset para tempo de leitura
                 } else {
                     isShowingInvalidMessage[0] = true;
-                    Log.d("AutoConfig", "invalidPressRunnable: Tentativas restantes=" + attemptsLeft[0]);
                 }
                 updateMessage.run();
             };
     
             countdownRunnableHolder[0] = () -> {
-                Log.d("AutoConfig", "Countdown: Tick - remainingSeconds=" + remainingSeconds[0] + 
-                      ", isProcessActive=" + isProcessActive[0] + 
-                      ", successWaiting=" + successWaitingForRelease[0] + 
-                      ", failedWaiting=" + failedWaitingForRelease[0]);
-                
-                if (!isProcessActive[0]) {
-                    Log.d("AutoConfig", "Countdown: ABORTADO - Processo inativo");
-                    return;
-                }
-    
+                if (!isProcessActive[0]) return;
                 if (remainingSeconds[0] <= 0) {
-                    Log.d("AutoConfig", "Countdown: TIMEOUT ATINGIDO - Fechando diálogo");
                     isProcessActive[0] = false;
-                    holdHandler.removeCallbacks(holdSuccessRunnable);
-                    holdHandler.removeCallbacks(invalidPressRunnable);
+                    holdHandler.removeCallbacksAndMessages(null);
                     if (selectedInput == -1 && latch.getCount() > 0) latch.countDown();
                     if (dialog != null && dialog.isShowing()) dialog.dismiss();
                     return;
                 }
-                
                 updateMessage.run();
                 remainingSeconds[0]--;
                 mainHandler.postDelayed(countdownRunnableHolder[0], 1000);
             };
-            
-            final Runnable countdownRunnable = countdownRunnableHolder[0];
     
-            updateMessage.run();
             dialog = builder.create();
-    
             dialog.setOnKeyListener((d, keyCode, event) -> {
                 if (event.getAction() == KeyEvent.ACTION_DOWN) {
-                    if (event.getRepeatCount() > 0 || !isProcessActive[0]) {
-                        return true;
-                    }
-                    
+                    if (event.getRepeatCount() > 0 || !isProcessActive[0]) return true;
                     currentKeyCode[0] = keyCode;
                     boolean isSelectKey = (keyCode == INPUT_SELECT_4 || keyCode == INPUT_SELECT_104 || keyCode == INPUT_SELECT_109 || keyCode == INPUT_SELECT_196);
-    
-                    if (isSelectKey) {
-                        holdHandler.postDelayed(holdSuccessRunnable, HOLD_DURATION_MS);
-                    } else {
-                        holdHandler.postDelayed(invalidPressRunnable, HOLD_DURATION_MS);
-                    }
+                    if (isSelectKey) holdHandler.postDelayed(holdSuccessRunnable, HOLD_DURATION_MS);
+                    else holdHandler.postDelayed(invalidPressRunnable, HOLD_DURATION_MS);
                     updateMessage.run();
                     return true;
-    
                 } else if (event.getAction() == KeyEvent.ACTION_UP) {
                     if (keyCode == currentKeyCode[0]) {
-                        Log.d("AutoConfig", "ACTION_UP: keyCode=" + keyCode + 
-                              ", successWaiting=" + successWaitingForRelease[0] + 
-                              ", failedWaiting=" + failedWaitingForRelease[0]);
-                        
-                        if (successWaitingForRelease[0] || failedWaitingForRelease[0]) {
-                            // Verifica se já passaram pelo menos 2 segundos desde que o resultado foi exibido
-                            long elapsedTime = System.currentTimeMillis() - resultShownTimestamp[0];
-                            Log.d("AutoConfig", "ACTION_UP: elapsedTime=" + elapsedTime + "ms");
-                            
-                            if (elapsedTime >= 2000) {
-                                Log.d("AutoConfig", "ACTION_UP: 2s passados, FECHANDO diálogo");
+                        if (successWaitingForRelease[0]) {
+                            isProcessActive[0] = false;
+                            mainHandler.removeCallbacksAndMessages(null);
+                            if (latch.getCount() > 0) latch.countDown();
+                            dialog.dismiss();
+                            return true;
+                        }
+                        if (failedWaitingForRelease[0]) {
+                            long elapsed = System.currentTimeMillis() - resultShownTimestamp[0];
+                            if (elapsed >= 2000) {
                                 isProcessActive[0] = false;
+                                mainHandler.removeCallbacksAndMessages(null);
                                 if (latch.getCount() > 0) latch.countDown();
                                 dialog.dismiss();
                             } else {
-                                Log.d("AutoConfig", "ACTION_UP: Ainda faltam " + (2000 - elapsedTime) + "ms");
+                                mainHandler.postDelayed(() -> {
+                                    if (dialog.isShowing()) {
+                                        isProcessActive[0] = false;
+                                        if (latch.getCount() > 0) latch.countDown();
+                                        dialog.dismiss();
+                                    }
+                                }, 2000 - elapsed);
                             }
-                            // Se ainda não passaram 2 segundos, ignora o release e mantém o diálogo aberto
                             return true;
                         }
-    
                         holdHandler.removeCallbacks(holdSuccessRunnable);
                         holdHandler.removeCallbacks(invalidPressRunnable);
-                        
                         currentKeyCode[0] = 0;
                         isShowingInvalidMessage[0] = false;
                         updateMessage.run();
@@ -265,14 +218,14 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 return false;
             });
     
-            dialog.setOnShowListener(d -> mainHandler.post(countdownRunnable));
+            dialog.setOnShowListener(d -> mainHandler.post(countdownRunnableHolder[0]));
             dialog.show();
         });
     
         try {
-            latch.await(TIMEOUT_SECONDS + 1, TimeUnit.SECONDS);
+            // Ajustado para comportar o tempo extra de leitura de 10s
+            latch.await(TIMEOUT_SECONDS + 12, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
-            e.printStackTrace();
             Thread.currentThread().interrupt();
         }
     
@@ -292,42 +245,27 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             createCfgFromBase(baseFile, deviceName, vendorId, productId, this);
             return true;
         }
-    
         return false;
     }
    
-    /** Criação do arquivo CFG */
-    private static void createCfgFromBase(String baseFile, String deviceName,
-                                          int vendorId, int productId, Context context) {
-    
+    private static void createCfgFromBase(String baseFile, String deviceName, int vendorId, int productId, Context context) {
         File basePath = new File(context.getExternalMediaDirs()[0], "autoconfig/bases");
         File androidPath = new File(context.getExternalMediaDirs()[0], "autoconfig/android");
         if (!androidPath.exists()) androidPath.mkdirs();
-    
         File base = new File(basePath, baseFile);
         File output = new File(androidPath, deviceName + ".cfg");
-    
         try {
-            // lê o conteúdo base
             String baseContent = Utils.readFileToString(base);
-    
-            // monta as linhas novas que irão no topo
             StringBuilder newContent = new StringBuilder();
             newContent.append("input_device = \"").append(deviceName).append("\"\n");
             newContent.append("input_vendor_id = \"").append(vendorId).append("\"\n");
             newContent.append("input_product_id = \"").append(productId).append("\"\n");
-    
-            // adiciona o conteúdo base depois
             newContent.append(baseContent);
-    
-            // escreve no arquivo
             try (FileWriter writer = new FileWriter(output)) {
                 writer.write(newContent.toString());
                 writer.flush();
             }
-    
             Log.i("RetroActivityFuture", "Configuração criada: " + output.getName());
-    
         } catch (IOException e) {
             Log.e("RetroActivityFuture", "Erro ao criar CFG: " + e.getMessage());
         }
@@ -336,17 +274,14 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     private static class Utils {
         static String readFileToString(File file) throws IOException {
             byte[] bytes = new byte[(int) file.length()];
-            java.io.FileInputStream fis = new java.io.FileInputStream(file);
-            try {
+            try (java.io.FileInputStream fis = new java.io.FileInputStream(file)) {
                 fis.read(bytes);
-            } finally {
-                fis.close();
             }
             return new String(bytes);
         }
     }
 
-    // ===================== ACTIVITY METHODS =====================
+    // ===================== ACTIVITY METHODS (RESTORED) =====================
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -421,7 +356,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                             | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
                             | View.SYSTEM_UI_FLAG_FULLSCREEN
                             | View.SYSTEM_UI_FLAG_LOW_PROFILE
-                            | View.SYSTEM_UI_FLAG_IMMERSIVE);
+                            | View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY);
                 } else {
                     mDecorView.setSystemUiVisibility(View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                             | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
@@ -451,7 +386,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 InputManager im = (InputManager) getSystemService(Context.INPUT_SERVICE);
                 m.invoke(im, !state);
             } catch (NoSuchMethodException e) {
-                // Método não existe — provavelmente não é NVIDIA
+                // Not Nvidia
             } catch (Exception e) {
                 Log.w("RetroActivityFuture", e.getMessage());
             }
@@ -459,14 +394,10 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     }
 
     private void attemptTogglePointerIcon(boolean state) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N && Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             try {
-                if (state) {
-                    PointerIcon nullPointerIcon = PointerIcon.getSystemIcon(this, PointerIcon.TYPE_NULL);
-                    mDecorView.setPointerIcon(nullPointerIcon);
-                } else {
-                    mDecorView.setPointerIcon(null);
-                }
+                PointerIcon icon = state ? PointerIcon.getSystemIcon(this, PointerIcon.TYPE_NULL) : null;
+                mDecorView.setPointerIcon(icon);
             } catch (Exception e) {
                 Log.w("RetroActivityFuture", e.getMessage());
             }

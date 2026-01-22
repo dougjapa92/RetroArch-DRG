@@ -1,4 +1,3 @@
-
 package com.retroarch.browser.retroactivity;
 
 import android.util.Log;
@@ -114,6 +113,8 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             final boolean[] failedWaitingForRelease = {false};
             final boolean[] isProcessActive = {true};
             final long[] resultShownTimestamp = {0};
+            // Novo: timestamp do RELEASE especificamente para falha (para contar os 2s a partir do ACTION_UP)
+            final long[] failureReleaseTimestamp = { -1 };
 
             final String MESSAGE_TEMPLATE = "%s\n\n%s\n\nTentativas restantes: %d\n\n%ds";
             final String SUCCESS_TEMPLATE = "✅ Controle configurado com sucesso!\n\nBotão: %d\n\nSolte o botão para continuar.";
@@ -173,8 +174,9 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 if (attemptsLeft[0] <= 0) {
                     Log.d("AutoConfig", "invalidPressRunnable: Tentativas esgotadas, configurando falha");
                     failedWaitingForRelease[0] = true;
-                    resultShownTimestamp[0] = System.currentTimeMillis();
+                    resultShownTimestamp[0] = System.currentTimeMillis(); // mantém para logs/telemetria, mas NÃO usamos para o fechamento de 2s
                     remainingSeconds[0] = 10; // 10s para leitura do resultado (falha)
+                    failureReleaseTimestamp[0] = -1; // garante que a contagem de 2s começará no RELEASE
                     Log.d("AutoConfig", "invalidPressRunnable: Contador resetado para 10s");
                 } else {
                     isShowingInvalidMessage[0] = true;
@@ -246,19 +248,22 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                             dialog.dismiss();
                             return true;
                         } else if (failedWaitingForRelease[0]) {
-                            // FALHA: exige pelo menos 2s de exibição
-                            long elapsedTime = System.currentTimeMillis() - resultShownTimestamp[0];
-                            Log.d("AutoConfig", "ACTION_UP: Falha — elapsedTime=" + elapsedTime + "ms");
+                            // FALHA: 2s CONTADOS A PARTIR DO RELEASE
+                            if (failureReleaseTimestamp[0] < 0) {
+                                failureReleaseTimestamp[0] = System.currentTimeMillis();
+                            }
+                            long elapsedSinceRelease = System.currentTimeMillis() - failureReleaseTimestamp[0];
+                            Log.d("AutoConfig", "ACTION_UP: Falha — elapsedSinceRelease=" + elapsedSinceRelease + "ms");
 
-                            if (elapsedTime >= 2000) {
-                                Log.d("AutoConfig", "ACTION_UP: 2s passados, FECHANDO diálogo (falha)");
+                            if (elapsedSinceRelease >= 2000) {
+                                Log.d("AutoConfig", "ACTION_UP: 2s passados desde o RELEASE, FECHANDO diálogo (falha)");
                                 isProcessActive[0] = false;
                                 if (latch.getCount() > 0) latch.countDown();
                                 dialog.dismiss();
                             } else {
-                                long waitMs = 2000 - elapsedTime;
-                                Log.d("AutoConfig", "ACTION_UP: Aguardando " + waitMs + "ms para fechar (falha)");
-                                // Agenda fechamento ao completar 2s de exibição
+                                long waitMs = 2000 - elapsedSinceRelease;
+                                Log.d("AutoConfig", "ACTION_UP: Aguardando " + waitMs + "ms para fechar (falha, contado do RELEASE)");
+                                // Agenda fechamento ao completar 2s desde o release
                                 mainHandler.postDelayed(() -> {
                                     if (isProcessActive[0] && dialog != null && dialog.isShowing()) {
                                         isProcessActive[0] = false;

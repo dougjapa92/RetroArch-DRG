@@ -1509,6 +1509,18 @@ static void android_input_poll_input_gingerbread(
          return;
       source            = AInputEvent_getSource(event);
       type_event        = AInputEvent_getType(event);
+
+      /* Ignorar botões de volume — devolver ao Android para controle de volume */
+      if (type_event == AINPUT_EVENT_TYPE_KEY)
+      {
+         int keycode = AKeyEvent_getKeyCode(event);
+         if (keycode == AKEYCODE_VOLUME_UP || keycode == AKEYCODE_VOLUME_DOWN)
+         {
+            AInputQueue_finishEvent(android_app->inputQueue, event, 0);
+            return;
+         }
+      }
+
       id                = android_input_get_id(event);
       port              = android_input_get_id_port(android, id, source);
 
@@ -1574,6 +1586,19 @@ static void android_input_poll_input_default(android_input_t *android)
                android_app->inputQueue, event);
          int        source = AInputEvent_getSource(event);
          int    type_event = AInputEvent_getType(event);
+
+         /* Ignorar botões de volume — devolver ao Android para controle de volume */
+         if (type_event == AINPUT_EVENT_TYPE_KEY)
+         {
+            int keycode = AKeyEvent_getKeyCode(event);
+            if (keycode == AKEYCODE_VOLUME_UP || keycode == AKEYCODE_VOLUME_DOWN)
+            {
+               if (!predispatched)
+                  AInputQueue_finishEvent(android_app->inputQueue, event, 0);
+               continue;
+            }
+         }
+
          int            id = android_input_get_id(event);
          int          port = android_input_get_id_port(android, id, source);
 

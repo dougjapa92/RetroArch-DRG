@@ -992,10 +992,38 @@ static int android_input_recover_port(android_input_t *android, int id)
    if (!engine_lookup_name(device_name, &vendorId,
 			   &productId, sizeof(device_name), id))
        return -1;
-   int ret = android_input_get_id_index_from_name(android, device_name);
-   if (ret >= 0)
-       android->pad_states[ret].id = id;
-   return ret;
+
+   /* Find a slot with the same name whose stored id is no longer
+    * active (i.e. the original controller was disconnected and this
+    * is the same physical device reconnecting with a new id).
+    * We must NOT steal a slot whose id still belongs to a different
+    * controller that is currently connected — that is what caused
+    * two identical controllers to be mapped to the same port. */
+   int i;
+   for (i = 0; i < android->pads_connected; i++)
+   {
+      if (!string_is_equal(device_name, android->pad_states[i].name))
+         continue;
+
+      /* Check whether the id currently stored in this slot is still
+       * alive (i.e. Android still reports an active device with that
+       * id). If it is, skip — that slot belongs to another controller. */
+      char existing_name[256] = { 0 };
+      int  existing_vendor    = 0;
+      int  existing_product   = 0;
+      bool slot_still_active  = engine_lookup_name(existing_name,
+            &existing_vendor, &existing_product,
+            sizeof(existing_name), android->pad_states[i].id);
+
+      if (slot_still_active)
+         continue; /* slot owner is still connected — do not steal it */
+
+      /* Slot owner disconnected: reassign to the new id */
+      android->pad_states[i].id = id;
+      return i;
+   }
+
+   return -1;
 }
 
 
@@ -1329,21 +1357,34 @@ static void handle_hotplug(android_input_t *android,
       }
    }
 
-   // Lógica para tratar dispositivos genéricos e "Virtual"
-   if (strcmp(device_name, "Virtual") == 0)
+   /* Generic device and "Virtual" name handling.
+    * RetroArch uses the same cfg file for identical controllers and
+    * differentiates them only by port (displaying "#2", "#3", etc. in
+    * the UI). The name_buf must remain the original device_name so that
+    * input_autoconfigure_connect finds the correct cfg file for every
+    * port. Do NOT append suffixes here. */
+   if (string_is_empty(name_buf))
    {
-       // Se o nome for "Virtual", criamos o novo nome com VID/PID para garantir unicidade.
-       snprintf(name_buf, sizeof(name_buf), "Generic Gamepad (%d-%d)", vendorId, productId);
-   }
-   else if (!string_is_empty(device_name))
-   {
-       // Se não for "Virtual" mas tiver um nome, usamos o nome original.
-       strlcpy(name_buf, device_name, sizeof(name_buf));
-   }
-   else
-   {
-       // Se não tiver nome algum, usamos um fallback genérico com VID/PID 0-0.
-       snprintf(name_buf, sizeof(name_buf), "Generic Gamepad (0-0)");
+      if (strcmp(device_name, "Virtual") == 0)
+      {
+         /* "Virtual" devices carry no useful name — use VID/PID so that
+          * at least different Virtual devices get distinct cfg lookups. */
+         snprintf(name_buf, sizeof(name_buf),
+               "Generic Gamepad (%04x-%04x)", vendorId, productId);
+      }
+      else if (!string_is_empty(device_name))
+      {
+         /* Keep the original name intact. RetroArch's autoconfigure
+          * system will load the same cfg for both controllers and assign
+          * each one to its own port via pads_connected. */
+         strlcpy(name_buf, device_name, sizeof(name_buf));
+      }
+      else
+      {
+         /* No name at all — use VID/PID as generic fallback. */
+         snprintf(name_buf, sizeof(name_buf),
+               "Generic Gamepad (%04x-%04x)", vendorId, productId);
+      }
    }
   
    if (strstr(android_app->current_ime, "net.obsidianx.android.mogaime"))

@@ -65,22 +65,24 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     };
 
     // ===================== AUTOCONFIGURATION =====================
-    private static final int INPUT_SELECT_4 = 4;
+    private static final int INPUT_SELECT_4   = 4;
     private static final int INPUT_SELECT_104 = 104;
     private static final int INPUT_SELECT_109 = 109;
     private static final int INPUT_SELECT_196 = 196;
-    private static final int TIMEOUT_SECONDS = 15;
+    private static final int TIMEOUT_SECONDS  = 15;
     private static final int HOLD_DURATION_MS = 1200;
+    /** Total de segundos que o await aguarda: tempo do diálogo + margem para leitura do resultado */
+    private static final int AWAIT_TIMEOUT_SECONDS = TIMEOUT_SECONDS + 12;
 
     private AlertDialog dialog;
-    private CountDownLatch latch;
-    private int selectedInput = -1;
 
     /** Método chamado via JNI de forma síncrona — versão com alterações mínimas pedidas */
     public boolean createCfgForUnknownControllerSync(int vendorId, int productId, String deviceName) {
         final int[] attemptsLeft = {3};
-        selectedInput = -1;
-        latch = new CountDownLatch(1);
+        /* selectedInput e latch são locais para evitar condições de corrida
+         * caso o método seja chamado novamente antes de terminar. */
+        final int[] selectedInput      = {-1};
+        final CountDownLatch latch     = new CountDownLatch(1);
 
         runOnUiThread(() -> {
             AlertDialog.Builder builder = new AlertDialog.Builder(this);
@@ -127,7 +129,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             final Runnable updateMessage = () -> {
                 if (successWaitingForRelease[0]) {
                     messageView.setLines(5);
-                    String successText = String.format(SUCCESS_TEMPLATE, selectedInput);
+                    String successText = String.format(SUCCESS_TEMPLATE, selectedInput[0]);
                     messageView.setText(successText);
                     return;
                 }
@@ -157,11 +159,11 @@ public final class RetroActivityFuture extends RetroActivityCamera {
 
             final Runnable holdSuccessRunnable = () -> {
                 Log.d("AutoConfig", "holdSuccessRunnable: EXECUTADO");
-                selectedInput = currentKeyCode[0];
+                selectedInput[0] = currentKeyCode[0];
                 successWaitingForRelease[0] = true;
                 resultShownTimestamp[0] = System.currentTimeMillis();
                 remainingSeconds[0] = 10; // 10s para leitura do resultado (sucesso)
-                Log.d("AutoConfig", "holdSuccessRunnable: Contador resetado para 10s, selectedInput=" + selectedInput);
+                Log.d("AutoConfig", "holdSuccessRunnable: Contador resetado para 10s, selectedInput=" + selectedInput[0]);
                 updateMessage.run();
             };
 
@@ -173,8 +175,9 @@ public final class RetroActivityFuture extends RetroActivityCamera {
 
                 if (attemptsLeft[0] <= 0) {
                     Log.d("AutoConfig", "invalidPressRunnable: Tentativas esgotadas, configurando falha");
+                    isProcessActive[0] = false; // bloqueia novos keypresses durante a exibição da mensagem de falha
                     failedWaitingForRelease[0] = true;
-                    resultShownTimestamp[0] = System.currentTimeMillis(); // mantém para logs/telemetria, mas NÃO usamos para o fechamento de 2s
+                    resultShownTimestamp[0] = System.currentTimeMillis();
                     remainingSeconds[0] = 10; // 10s para leitura do resultado (falha)
                     failureReleaseTimestamp[0] = -1; // garante que a contagem de 2s começará no RELEASE
                     Log.d("AutoConfig", "invalidPressRunnable: Contador resetado para 10s");
@@ -293,8 +296,8 @@ public final class RetroActivityFuture extends RetroActivityCamera {
         });
 
         try {
-            // Estende o await para comportar os 10s extras de leitura do resultado
-            latch.await(TIMEOUT_SECONDS + 12, TimeUnit.SECONDS);
+            // Aguarda até AWAIT_TIMEOUT_SECONDS (diálogo + margem para leitura do resultado)
+            latch.await(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             e.printStackTrace();
             Thread.currentThread().interrupt();
@@ -304,14 +307,14 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             runOnUiThread(dialog::dismiss);
         }
 
-        if (selectedInput != -1) {
+        if (selectedInput[0] != -1) {
             String baseFile;
-            switch (selectedInput) {
-                case INPUT_SELECT_4: baseFile = "Base4.cfg"; break;
+            switch (selectedInput[0]) {
+                case INPUT_SELECT_4:   baseFile = "Base4.cfg";   break;
                 case INPUT_SELECT_104: baseFile = "Base104.cfg"; break;
                 case INPUT_SELECT_109: baseFile = "Base109.cfg"; break;
                 case INPUT_SELECT_196: baseFile = "Base196.cfg"; break;
-                default: baseFile = "Base4.cfg"; break;
+                default:               baseFile = "Base4.cfg";   break;
             }
             createCfgFromBase(baseFile, deviceName, vendorId, productId, this);
             return true;
@@ -324,12 +327,23 @@ public final class RetroActivityFuture extends RetroActivityCamera {
     private static void createCfgFromBase(String baseFile, String deviceName,
                                           int vendorId, int productId, Context context) {
 
-        File basePath = new File(context.getExternalMediaDirs()[0], "autoconfig/bases");
-        File androidPath = new File(context.getExternalMediaDirs()[0], "autoconfig/android");
+        File[] mediaDirs = context.getExternalMediaDirs();
+        if (mediaDirs == null || mediaDirs.length == 0 || mediaDirs[0] == null) {
+            Log.e("RetroActivityFuture", "External media dir não disponível");
+            return;
+        }
+
+        File basePath   = new File(mediaDirs[0], "autoconfig/bases");
+        File androidPath = new File(mediaDirs[0], "autoconfig/android");
         if (!androidPath.exists()) androidPath.mkdirs();
 
-        File base = new File(basePath, baseFile);
+        File base   = new File(basePath, baseFile);
         File output = new File(androidPath, deviceName + ".cfg");
+
+        if (!base.exists()) {
+            Log.e("RetroActivityFuture", "Arquivo base não encontrado: " + base.getAbsolutePath());
+            return;
+        }
 
         try {
             // lê o conteúdo base

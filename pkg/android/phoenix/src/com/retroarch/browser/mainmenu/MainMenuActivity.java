@@ -217,16 +217,15 @@ public final class MainMenuActivity extends PreferenceActivity {
     private class UnifiedExtractionTask extends AsyncTask<Void, Long, Boolean> {
         ProgressDialog progressDialog;
         AtomicLong totalExtractedBytes = new AtomicLong(0);
+        // Sincronizado via AtomicLong para acesso seguro entre threads paralelas
         AtomicLong lastPublishedMB = new AtomicLong(-1);
         int totalMB = 0;
 
         @Override
         protected void onPreExecute() {
-            // Aplicação dos valores Hardcoded solicitados
             totalMB = archCores.equals("cores64") ? 547 : 436;
 
             progressDialog = new ProgressDialog(MainMenuActivity.this);
-            // (Opcional) Mostrar a configuração aplicada no título
             progressDialog.setTitle("Configurando RetroArch DRG...");
 
             String archMessage = archCores.equals("cores64")
@@ -250,12 +249,13 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         @Override
         protected Boolean doInBackground(Void... voids) {
-            // Detecta núcleos e escolhe threads/buffer conforme a regra solicitada
             int cpuCount = Runtime.getRuntime().availableProcessors();
-            // TV boxes fracas: 4 núcleos lentos — 1 thread é mais eficiente no I/O
-            // Celulares médios+: 6-8 núcleos — 2 threads aproveitam bem
+
+            // TV boxes fracas têm 4 núcleos lentos — 1 thread evita contenção no I/O da eMMC.
+            // Celulares médios/top com 6+ núcleos aproveitam bem 2 threads paralelas.
             final int threadCount = (cpuCount >= 6) ? 2 : 1;
             final int bufferSize  = (cpuCount >= 6) ? (1024 * 1024) : (512 * 1024);
+
             ExecutorService executor = Executors.newFixedThreadPool(threadCount);
 
             // Copia ROOT_FOLDERS para ROOT_DIR
@@ -283,10 +283,17 @@ public final class MainMenuActivity extends PreferenceActivity {
             });
 
             executor.shutdown();
-            if (!executor.awaitTermination(20, TimeUnit.MINUTES)) {
+            try {
+                // Timeout de 20 minutos; se estourar, cancela e retorna falha
+                if (!executor.awaitTermination(20, TimeUnit.MINUTES)) {
+                    executor.shutdownNow();
+                    return false;
+                }
+            } catch (InterruptedException e) {
                 executor.shutdownNow();
                 return false;
             }
+
             createNomediaFiles();
 
             try {
@@ -323,21 +330,28 @@ public final class MainMenuActivity extends PreferenceActivity {
         }
 
         /**
-         * Versão com buffer dinâmico.
+         * Copia uma pasta de assets recursivamente.
+         *
+         * Detecta se cada entrada é arquivo ou diretório tentando abrir como stream:
+         * - Sucesso → é arquivo, copia o conteúdo.
+         * - IOException → é diretório, recursa.
+         * Isso elimina a chamada dupla a getAssets().list() que era feita antes
+         * para cada item, reduzindo o número de operações I/O no APK — especialmente
+         * relevante em TV boxes com armazenamento lento.
          */
         private void copyAssetFolder(String assetFolder, File targetFolder, int bufferSize) throws IOException {
             String[] assets = getAssets().list(assetFolder);
             if (assets == null || assets.length == 0) return;
             if (!targetFolder.exists()) targetFolder.mkdirs();
-        
+
             for (String asset : assets) {
                 String fullPath = assetFolder + "/" + asset;
                 File outFile = new File(targetFolder, asset);
-        
+
                 if (fullPath.equals("config/global.glslp") && !isArm64()) continue;
-        
+
                 try (InputStream in = getAssets().open(fullPath)) {
-                    // Se chegou aqui, é arquivo
+                    // Conseguiu abrir como stream: é um arquivo — copia o conteúdo
                     try (FileOutputStream out = new FileOutputStream(outFile)) {
                         byte[] buffer = new byte[bufferSize];
                         int read;
@@ -345,13 +359,15 @@ public final class MainMenuActivity extends PreferenceActivity {
                             out.write(buffer, 0, read);
                             long total = totalExtractedBytes.addAndGet(read);
                             long currentMB = total / (1024 * 1024);
+                            // Atualiza a UI apenas quando o MB muda;
+                            // getAndSet garante que só uma thread publica por MB
                             if (lastPublishedMB.getAndSet(currentMB) != currentMB) {
                                 publishProgress(currentMB);
                             }
                         }
                     }
                 } catch (IOException e) {
-                    // É diretório — recursão
+                    // Falhou ao abrir como stream: é um diretório — recursão
                     copyAssetFolder(fullPath, outFile, bufferSize);
                 }
             }

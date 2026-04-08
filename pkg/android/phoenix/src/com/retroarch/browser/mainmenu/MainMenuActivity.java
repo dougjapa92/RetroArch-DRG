@@ -437,7 +437,7 @@ public final class MainMenuActivity extends PreferenceActivity {
             cfgFlags.put("input_overlay", new File(MEDIA_DIR, "overlays/gamepads/neo-retropad/neo-retropad.cfg").getAbsolutePath());
             cfgFlags.put("video_threaded", "cores32".equals(archCores) ? "true" : "false");
             cfgFlags.put("video_driver",
-                    (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && "cores64".equals(archCores)) ? "vulkan" : "gl");
+                    (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && "cores64".equals(archCores)) ? "vulkan" : "gl");
             cfgFlags.put("bundle_assets_extract_enable", "false");
             cfgFlags.put("bundle_assets_extract_last_version", "1756737486");
             cfgFlags.put("bundle_assets_extract_version_current", "1756737486");

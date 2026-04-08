@@ -217,7 +217,7 @@ public final class MainMenuActivity extends PreferenceActivity {
     private class UnifiedExtractionTask extends AsyncTask<Void, Long, Boolean> {
         ProgressDialog progressDialog;
         AtomicLong totalExtractedBytes = new AtomicLong(0);
-        long lastPublishedMB = -1;
+        AtomicLong lastPublishedMB = new AtomicLong(-1);
         int totalMB = 0;
 
         @Override
@@ -252,9 +252,10 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected Boolean doInBackground(Void... voids) {
             // Detecta núcleos e escolhe threads/buffer conforme a regra solicitada
             int cpuCount = Runtime.getRuntime().availableProcessors();
-            final int threadCount = (cpuCount > 2) ? 2 : 1;
-            final int bufferSize = (cpuCount > 4) ? (1024 * 1024) : (256 * 1024);
-
+            // TV boxes fracas: 4 núcleos lentos — 1 thread é mais eficiente no I/O
+            // Celulares médios+: 6-8 núcleos — 2 threads aproveitam bem
+            final int threadCount = (cpuCount >= 6) ? 2 : 1;
+            final int bufferSize  = (cpuCount >= 6) ? (1024 * 1024) : (512 * 1024);
             ExecutorService executor = Executors.newFixedThreadPool(threadCount);
 
             // Copia ROOT_FOLDERS para ROOT_DIR
@@ -282,12 +283,10 @@ public final class MainMenuActivity extends PreferenceActivity {
             });
 
             executor.shutdown();
-            try {
-                executor.awaitTermination(30, TimeUnit.MINUTES);
-            } catch (InterruptedException e) {
+            if (!executor.awaitTermination(20, TimeUnit.MINUTES)) {
+                executor.shutdownNow();
                 return false;
             }
-
             createNomediaFiles();
 
             try {
@@ -328,40 +327,31 @@ public final class MainMenuActivity extends PreferenceActivity {
          */
         private void copyAssetFolder(String assetFolder, File targetFolder, int bufferSize) throws IOException {
             String[] assets = getAssets().list(assetFolder);
+            if (assets == null || assets.length == 0) return;
             if (!targetFolder.exists()) targetFolder.mkdirs();
-            if (assets == null) return;
-
+        
             for (String asset : assets) {
                 String fullPath = assetFolder + "/" + asset;
                 File outFile = new File(targetFolder, asset);
-
-                if (fullPath.equals("config/global.glslp") && !isArm64()) {
-                    continue;
-                }
-
+        
+                if (fullPath.equals("config/global.glslp") && !isArm64()) continue;
+        
                 try (InputStream in = getAssets().open(fullPath)) {
-                    // Se list(fullPath).length == 0 => é arquivo
-                    if (getAssets().list(fullPath).length == 0) {
-                        try (FileOutputStream out = new FileOutputStream(outFile)) {
-                            byte[] buffer = new byte[bufferSize];
-                            int read;
-                            while ((read = in.read(buffer)) != -1) {
-                                out.write(buffer, 0, read);
-                                long total = totalExtractedBytes.addAndGet(read);
-                                long currentMB = total / (1024 * 1024);
-                                // Atualiza a UI apenas quando o MB muda
-                                if (currentMB != lastPublishedMB) {
-                                    lastPublishedMB = currentMB;
-                                    publishProgress(currentMB);
-                                }
+                    // Se chegou aqui, é arquivo
+                    try (FileOutputStream out = new FileOutputStream(outFile)) {
+                        byte[] buffer = new byte[bufferSize];
+                        int read;
+                        while ((read = in.read(buffer)) != -1) {
+                            out.write(buffer, 0, read);
+                            long total = totalExtractedBytes.addAndGet(read);
+                            long currentMB = total / (1024 * 1024);
+                            if (lastPublishedMB.getAndSet(currentMB) != currentMB) {
+                                publishProgress(currentMB);
                             }
                         }
-                    } else {
-                        // É diretório: recursão com mesmo bufferSize
-                        copyAssetFolder(fullPath, outFile, bufferSize);
                     }
                 } catch (IOException e) {
-                    // Se falhar abrir como arquivo, tenta recursão (diretório)
+                    // É diretório — recursão
                     copyAssetFolder(fullPath, outFile, bufferSize);
                 }
             }

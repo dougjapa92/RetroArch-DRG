@@ -1091,6 +1091,9 @@ static void handle_hotplug(android_input_t *android,
    if (!engine_lookup_name(device_name, &vendorId,
             &productId, sizeof(device_name), id))
       return;
+
+   RARCH_LOG("[Hotplug] id=%d source=0x%08x name='%s' vid=%04x pid=%04x\n",
+            id, source, device_name, vendorId, productId);
 	  
    /* FIXME - per-device hacks for NVidia Shield, Xperia Play and
     * similar devices

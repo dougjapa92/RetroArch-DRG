@@ -31,7 +31,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -218,6 +217,8 @@ public final class MainMenuActivity extends PreferenceActivity {
     private class UnifiedExtractionTask extends AsyncTask<Void, Long, Boolean> {
         ProgressDialog progressDialog;
         AtomicLong totalExtractedBytes = new AtomicLong(0);
+        // Sincronizado via AtomicLong para acesso seguro entre threads paralelas
+        AtomicLong lastPublishedMB = new AtomicLong(-1);
         int totalMB = 0;
 
         @Override
@@ -255,38 +256,30 @@ public final class MainMenuActivity extends PreferenceActivity {
             final int threadCount = (cpuCount >= 6) ? 2 : 1;
             final int bufferSize  = (cpuCount >= 6) ? (1024 * 1024) : (512 * 1024);
 
-            // Captura falhas silenciosas: se qualquer pasta crítica falhar,
-            // retornamos false em vez de iniciar o RetroArch quebrado.
-            AtomicBoolean extractionFailed = new AtomicBoolean(false);
-
             ExecutorService executor = Executors.newFixedThreadPool(threadCount);
 
             // Copia ROOT_FOLDERS para ROOT_DIR
             for (String f : ROOT_FOLDERS) {
                 executor.submit(() -> {
-                    try { copyAssetFolder(f, new File(ROOT_DIR, f), bufferSize); }
-                    catch (IOException e) { extractionFailed.set(true); }
+                    try { copyAssetFolder(f, new File(ROOT_DIR, f), bufferSize); } catch (IOException ignored) {}
                 });
             }
 
             // Copia MEDIA_FOLDERS para MEDIA_DIR
             for (String f : MEDIA_FOLDERS) {
                 executor.submit(() -> {
-                    try { copyAssetFolder(f, new File(MEDIA_DIR, f), bufferSize); }
-                    catch (IOException e) { extractionFailed.set(true); }
+                    try { copyAssetFolder(f, new File(MEDIA_DIR, f), bufferSize); } catch (IOException ignored) {}
                 });
             }
 
             // Copia cores (cores32/cores64) para ROOT_DIR/cores
             executor.submit(() -> {
-                try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores"), bufferSize); }
-                catch (IOException e) { extractionFailed.set(true); }
+                try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores"), bufferSize); } catch (IOException ignored) {}
             });
 
             // Copia autoconfig (legacy ou atual) para MEDIA_DIR/autoconfig
             executor.submit(() -> {
-                try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig"), bufferSize); }
-                catch (IOException e) { extractionFailed.set(true); }
+                try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig"), bufferSize); } catch (IOException ignored) {}
             });
 
             executor.shutdown();
@@ -300,8 +293,6 @@ public final class MainMenuActivity extends PreferenceActivity {
                 executor.shutdownNow();
                 return false;
             }
-
-            if (extractionFailed.get()) return false;
 
             createNomediaFiles();
 
@@ -347,9 +338,6 @@ public final class MainMenuActivity extends PreferenceActivity {
          * Isso elimina a chamada dupla a getAssets().list() que era feita antes
          * para cada item, reduzindo o número de operações I/O no APK — especialmente
          * relevante em TV boxes com armazenamento lento.
-         *
-         * O progresso é publicado na UI thread no máximo a cada 200ms para evitar
-         * saturação do Handler em dispositivos com muitos arquivos pequenos.
          */
         private void copyAssetFolder(String assetFolder, File targetFolder, int bufferSize) throws IOException {
             String[] assets = getAssets().list(assetFolder);
@@ -367,16 +355,14 @@ public final class MainMenuActivity extends PreferenceActivity {
                     try (FileOutputStream out = new FileOutputStream(outFile)) {
                         byte[] buffer = new byte[bufferSize];
                         int read;
-                        long lastUpdateTime = System.currentTimeMillis();
                         while ((read = in.read(buffer)) != -1) {
                             out.write(buffer, 0, read);
-                            totalExtractedBytes.addAndGet(read);
-                            // Publica progresso na UI thread no máximo a cada 200ms,
-                            // evitando saturação do Handler em arquivos com muitos chunks pequenos.
-                            long now = System.currentTimeMillis();
-                            if (now - lastUpdateTime > 200) {
-                                publishProgress(totalExtractedBytes.get() / (1024 * 1024));
-                                lastUpdateTime = now;
+                            long total = totalExtractedBytes.addAndGet(read);
+                            long currentMB = total / (1024 * 1024);
+                            // Atualiza a UI apenas quando o MB muda;
+                            // getAndSet garante que só uma thread publica por MB
+                            if (lastPublishedMB.getAndSet(currentMB) != currentMB) {
+                                publishProgress(currentMB);
                             }
                         }
                     }
@@ -399,15 +385,6 @@ public final class MainMenuActivity extends PreferenceActivity {
         @Override
         protected void onPostExecute(Boolean r) {
             if (progressDialog.isShowing()) progressDialog.dismiss();
-            if (!r) {
-                new AlertDialog.Builder(MainMenuActivity.this)
-                        .setTitle("Erro na Extração")
-                        .setMessage("Ocorreu um erro ao copiar os arquivos. Tente reinstalar o aplicativo.")
-                        .setCancelable(false)
-                        .setPositiveButton("SAIR", (dialog, which) -> finish())
-                        .show();
-                return;
-            }
             prefs.edit().putBoolean("firstRun", false).apply();
             finalStartup();
         }

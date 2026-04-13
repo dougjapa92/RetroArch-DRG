@@ -223,7 +223,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
         @Override
         protected void onPreExecute() {
-            totalMB = archCores.equals("cores64") ? 547 : 436;
+            totalMB = archCores.equals("cores64") ? 550 : 438;
 
             progressDialog = new ProgressDialog(MainMenuActivity.this);
             progressDialog.setTitle("Configurando RetroArch DRG...");

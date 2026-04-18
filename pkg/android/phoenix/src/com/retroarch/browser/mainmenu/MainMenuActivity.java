@@ -16,6 +16,7 @@ import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
 import android.preference.PreferenceActivity;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
@@ -234,11 +235,11 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             String message = archMessage
                     + "\n Espaço necessário: " + totalMB + " MB"
-                    + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do sistema.\n\n(Customizado por Doug Retro Games)";
+                    + "\n\n(Customizado por Doug Retro Games)";
 
             SpannableString spannable = new SpannableString(message);
-            int start = message.indexOf("\"Sair\"");
-            if (start != -1) spannable.setSpan(new StyleSpan(Typeface.BOLD), start, start + 6, 0);
+            int start = message.indexOf("Doug Retro Games");
+            if (start != -1) spannable.setSpan(new StyleSpan(Typeface.BOLD), start, start + "Doug Retro Games".length(), 0);
 
             progressDialog.setMessage(spannable);
             progressDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
@@ -386,7 +387,31 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected void onPostExecute(Boolean r) {
             if (progressDialog.isShowing()) progressDialog.dismiss();
             prefs.edit().putBoolean("firstRun", false).apply();
-            finalStartup();
+
+            ProgressDialog closingDialog = new ProgressDialog(MainMenuActivity.this);
+            closingDialog.setTitle("Encerrando aplicativo...");
+            closingDialog.setMessage("Prossiga com a instalação do Retro Game Box");
+            closingDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
+            closingDialog.setCancelable(false);
+            closingDialog.setMax(5);
+            closingDialog.setProgress(0);
+            closingDialog.show();
+
+            final int[] secondsElapsed = {0};
+            new Handler().post(new Runnable() {
+                @Override
+                public void run() {
+                    secondsElapsed[0]++;
+                    closingDialog.setProgress(secondsElapsed[0]);
+                    if (secondsElapsed[0] < 5) {
+                        new Handler().postDelayed(this, 1000);
+                    } else {
+                        closingDialog.dismiss();
+                        finish();
+                        android.os.Process.killProcess(android.os.Process.myPid());
+                    }
+                }
+            });
         }
 
         private void updateRetroarchCfg() throws IOException {

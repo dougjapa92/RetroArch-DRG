@@ -390,7 +390,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             ProgressDialog closingDialog = new ProgressDialog(MainMenuActivity.this);
             closingDialog.setTitle("Encerrando aplicativo...");
-            closingDialog.setMessage("Prossiga com a instalação do Retro Game Box");
+            closingDialog.setMessage("\nProssiga com a instalação do Retro Game Box");
             closingDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             closingDialog.setCancelable(false);
             closingDialog.setMax(5);

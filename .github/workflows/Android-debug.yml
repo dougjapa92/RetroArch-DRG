@@ -19,7 +19,7 @@ env:
 
 jobs:
   build-phoenix:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     name: Build Phoenix
     steps:
       - uses: actions/checkout@v3

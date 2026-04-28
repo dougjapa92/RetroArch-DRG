@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RetroArch DRG</string>
+    <string name="autoconfig_title">Autoconfiguração de Controle</string>
+    <string name="autoconfig_instruction">Pressione e segure SELECT (Options) para configurar o controle.</string>
+    <string name="autoconfig_invalid_button">BOTÃO INVÁLIDO!</string>
+    <string name="autoconfig_button_label">Botão: %d</string>
+    <string name="autoconfig_attempts_label">Tentativas restantes: %d</string>
+    <string name="autoconfig_success_msg">✅ Controle configurado com sucesso!\n\nBotão: %d\n\nSolte o botão para continuar.</string>
+    <string name="autoconfig_failure_msg">❌ Falha na configuração!\n\nFeche o RetroArch DRG para tentar novamente ou configure manualmente em:\n\nConfigurações > Entrada > RetroPad Binds > Controle da porta 1 > Definir todos os Controles</string>
+    <string name="autoconfig_template">%1$s\n\n%2$s\n\nTentativas restantes: %3$d\n\n%4$ds</string>
+</resources>

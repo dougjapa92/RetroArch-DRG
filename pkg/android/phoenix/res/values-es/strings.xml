@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RetroArch DRG</string>
+    <string name="autoconfig_title">Autoconfiguración del Control</string>
+    <string name="autoconfig_instruction">Mantenga presionado SELECT (Options) para configurar el control.</string>
+    <string name="autoconfig_invalid_button">¡BOTÓN INVÁLIDO!</string>
+    <string name="autoconfig_button_label">Botón: %d</string>
+    <string name="autoconfig_attempts_label">Intentos restantes: %d</string>
+    <string name="autoconfig_success_msg">✅ ¡Control configurado con éxito!\n\nBotón: %d\n\nSuelte el botón para continuar.</string>
+    <string name="autoconfig_failure_msg">❌ ¡Fallo en la configuración!\n\nCierre RetroArch DRG para intentar de nuevo o configure manualmente en:\n\nAjustes > Entrada > Controles de RetroPad > Controles del puerto 1 > Establecer todos los controles</string>
+    <string name="autoconfig_template">%1$s\n\n%2$s\n\nIntentos restantes: %3$d\n\n%4$ds</string>
+</resources>

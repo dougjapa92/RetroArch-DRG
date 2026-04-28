@@ -108,8 +108,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         boolean prefer64 = process64 || os64;
         this.archCores = prefer64 ? "cores64" : "cores32";
 
-        this.archAutoconfig = (Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1)
-                ? "autoconfig-legacy" : "autoconfig";
+        this.archAutoconfig = "autoconfig";
     }
 
     private boolean addPermission(List<String> permissionsList, String permission) {

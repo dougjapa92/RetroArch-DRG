@@ -84,8 +84,8 @@ android {
         release {
             def keystorePath = "${buildDir}/keystore/release.keystore"
             def keystoreBase64 = System.getenv("KEYSTORE_BASE64")
-            def keystoreBytes = keystoreBase64?.decodeBase64()
-            if (keystoreBytes != null) {
+            if (keystoreBase64 != null) {
+                def keystoreBytes = keystoreBase64.decodeBase64()
                 def keystoreFile = new File(keystorePath)
                 keystoreFile.parentFile.mkdirs()
                 keystoreFile.bytes = keystoreBytes
@@ -93,15 +93,15 @@ android {
                 storePassword System.getenv("KEYSTORE_PASSWORD")
                 keyAlias System.getenv("KEY_ALIAS")
                 keyPassword System.getenv("KEY_PASSWORD")
-            } else {
-                throw new GradleException("Keystore base64 não encontrado ou inválido")
             }
         }
     }
 
     buildTypes {
         release {
-            signingConfig signingConfigs.release
+            if (signingConfigs.release.storeFile != null) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             shrinkResources false
         }
@@ -124,4 +124,4 @@ dependencies {
 String getManifestAttribute(String attribute) {
     def manifest = new XmlParser().parse("${project.projectDir}/AndroidManifest.xml")
     return manifest.attributes().find { ((String) it.key).contains(attribute) }?.value
-} 
+}

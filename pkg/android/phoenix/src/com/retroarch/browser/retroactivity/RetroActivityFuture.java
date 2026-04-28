@@ -22,6 +22,7 @@ import android.graphics.Typeface;
 
 import com.retroarch.browser.preferences.util.ConfigFile;
 import com.retroarch.browser.preferences.util.UserPreferences;
+import com.retroarch.R;
 
 import java.io.File;
 import java.io.FileWriter;
@@ -90,7 +91,7 @@ public final class RetroActivityFuture extends RetroActivityCamera {
 
             // Título
             TextView titleView = new TextView(this);
-            titleView.setText("Autoconfiguração de Controle");
+            titleView.setText(R.string.autoconfig_title);
             titleView.setGravity(Gravity.CENTER);
             titleView.setTypeface(null, Typeface.BOLD);
             titleView.setTextSize(20);
@@ -118,11 +119,9 @@ public final class RetroActivityFuture extends RetroActivityCamera {
             // Novo: timestamp do RELEASE especificamente para falha (para contar os 2s a partir do ACTION_UP)
             final long[] failureReleaseTimestamp = { -1 };
 
-            final String MESSAGE_TEMPLATE = "%s\n\n%s\n\nTentativas restantes: %d\n\n%ds";
-            final String SUCCESS_TEMPLATE = "✅ Controle configurado com sucesso!\n\nBotão: %d\n\nSolte o botão para continuar.";
-            final String FAILURE_MESSAGE = "❌ Falha na configuração!\n\n"
-                + "Feche o RetroArch DRG para tentar novamente ou configure manualmente em:\n\n"
-                + "Configurações > Entrada > RetroPad Binds > Controle da porta 1 > Definir todos os Controles";
+            final String MESSAGE_TEMPLATE = getString(R.string.autoconfig_template);
+            final String SUCCESS_TEMPLATE = getString(R.string.autoconfig_success_msg);
+            final String FAILURE_MESSAGE = getString(R.string.autoconfig_failure_msg);
 
             final Runnable[] countdownRunnableHolder = new Runnable[1];
 
@@ -141,12 +140,12 @@ public final class RetroActivityFuture extends RetroActivityCamera {
                 }
 
                 String feedbackLine = " ";
-                String instructionLine = "Pressione e segure SELECT (Options) para configurar o controle.";
+                String instructionLine = getString(R.string.autoconfig_instruction);
 
                 if (isShowingInvalidMessage[0]) {
-                    feedbackLine = "BOTÃO INVÁLIDO!";
+                    feedbackLine = getString(R.string.autoconfig_invalid_button);
                 } else if (currentKeyCode[0] != 0) {
-                    feedbackLine = "Botão: " + currentKeyCode[0];
+                    feedbackLine = String.format(getString(R.string.autoconfig_button_label), currentKeyCode[0]);
                 }
 
                 String formattedText = String.format(MESSAGE_TEMPLATE,

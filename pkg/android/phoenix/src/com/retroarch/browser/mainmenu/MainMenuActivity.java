@@ -438,6 +438,9 @@ public final class MainMenuActivity extends PreferenceActivity {
             cfgFlags.put("ozone_menu_color_theme", "10");
             cfgFlags.put("input_overlay_opacity", "0.700000");
             cfgFlags.put("input_overlay_hide_when_gamepad_connected", "true");
+            cfgFlags.put("video_shader_enable", "true");
+            cfgFlags.put("video_shader_preset_save_reference_enable", "true");
+            cfgFlags.put("video_shader_remember_last_dir", "true");
             cfgFlags.put("video_smooth", "false");
             cfgFlags.put("aspect_ratio_index", selectedAspectRatioIndex);
             cfgFlags.put("netplay_nickname", "RetroGameBox-" + uniqueSuffix);

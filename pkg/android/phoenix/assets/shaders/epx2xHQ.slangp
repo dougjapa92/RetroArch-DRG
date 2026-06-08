@@ -1,0 +1,27 @@
+shaders = 4
+
+shader0 = shaders/epx.slang
+filter_linear0 = false
+scale_type0 = source
+scale0 = 2.0
+
+shader1 = shaders/2xScaleHQ.slang
+filter_linear1 = false
+scale_type1 = source
+wrap_mode1 = "clamp_to_edge"
+srgb_framebuffer1 = "true"
+scale_x1 = 2.0
+scale_y1 = 2.0
+
+shader2 = shaders/bicubic-y.slang
+filter_linear2 = false
+scale_type_x2 = source
+scale_type_y2 = viewport
+scale2 = 1.0
+wrap_mode2 = "clamp_to_edge"
+srgb_framebuffer2 = "true"
+
+shader3 = shaders/bicubic-x.slang
+filter_linear3 = false
+wrap_mode3 = "clamp_to_edge"
+scale_type3 = viewport

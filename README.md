@@ -42,7 +42,7 @@ O RetroArch DRG mantém a filosofia de ser leve e eficiente, enquanto adiciona r
 Para clonar este repositório e seus submódulos necessários, use o seguinte comando:
 
 ```bash
-git clone --recursive https://github.com/seu-usuario/retroarch-drg.git
+git clone --recursive https://github.com/dougretrogames/RetroArch-DRG.git
 ```
 
 Se você já clonou o repositório sem os submódulos, pode inicializá-los com:

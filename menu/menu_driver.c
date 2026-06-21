@@ -1556,8 +1556,19 @@ static bool menu_input_key_bind_poll_find_hold_pad(
          continue;
 
       /* Dual button binding logic */
-      if (output->joykey == (uint16_t)b || output->joykey2 == (uint16_t)b)
-         return false; /* Duplicate - ignore */
+      if (output->joykey == (uint16_t)b)
+      {
+         /* Already in joykey - keep only this one */
+         output->joykey2 = NO_BTN;
+         return true;
+      }
+      if (output->joykey2 == (uint16_t)b)
+      {
+         /* Already in joykey2 - move to joykey and clear joykey2 */
+         output->joykey = b;
+         output->joykey2 = NO_BTN;
+         return true;
+      }
 
       if (output->joykey == NO_BTN)
       {
@@ -1614,8 +1625,19 @@ static bool menu_input_key_bind_poll_find_hold_pad(
          uint16_t hat_key = HAT_MAP(h, sane_trigger);
 
          /* Dual button binding logic for hats */
-         if (output->joykey == hat_key || output->joykey2 == hat_key)
-            return false; /* Duplicate - ignore */
+         if (output->joykey == hat_key)
+         {
+            /* Already in joykey - keep only this one */
+            output->joykey2 = NO_BTN;
+            return true;
+         }
+         if (output->joykey2 == hat_key)
+         {
+            /* Already in joykey2 - move to joykey and clear joykey2 */
+            output->joykey = hat_key;
+            output->joykey2 = NO_BTN;
+            return true;
+         }
 
          if (output->joykey == NO_BTN)
          {
@@ -1716,8 +1738,19 @@ static bool menu_input_key_bind_poll_find_trigger_pad(
          continue;
 
       /* Dual button binding logic */
-      if (output->joykey == (uint16_t)b || output->joykey2 == (uint16_t)b)
-         return false; /* Duplicate - ignore */
+      if (output->joykey == (uint16_t)b)
+      {
+         /* Already in joykey - keep only this one */
+         output->joykey2 = NO_BTN;
+         return true;
+      }
+      if (output->joykey2 == (uint16_t)b)
+      {
+         /* Already in joykey2 - move to joykey and clear joykey2 */
+         output->joykey = b;
+         output->joykey2 = NO_BTN;
+         return true;
+      }
 
       if (output->joykey == NO_BTN)
       {
@@ -1787,8 +1820,19 @@ static bool menu_input_key_bind_poll_find_trigger_pad(
          uint16_t hat_key = HAT_MAP(h, sane_trigger);
 
          /* Dual button binding logic for hats */
-         if (output->joykey == hat_key || output->joykey2 == hat_key)
-            return false; /* Duplicate - ignore */
+         if (output->joykey == hat_key)
+         {
+            /* Already in joykey - keep only this one */
+            output->joykey2 = NO_BTN;
+            return true;
+         }
+         if (output->joykey2 == hat_key)
+         {
+            /* Already in joykey2 - move to joykey and clear joykey2 */
+            output->joykey = hat_key;
+            output->joykey2 = NO_BTN;
+            return true;
+         }
 
          if (output->joykey == NO_BTN)
          {

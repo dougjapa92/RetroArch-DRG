@@ -134,6 +134,7 @@ static int16_t qnx_joypad_state(
       /* Auto-binds are per joypad, not per user. */
       const uint64_t joykey  = (binds[i].joykey != NO_BTN)
          ? binds[i].joykey  : joypad_info->auto_binds[i].joykey;
+      const uint64_t joykey2 = binds[i].joykey2;
       const uint32_t joyaxis = (binds[i].joyaxis != AXIS_NONE)
          ? binds[i].joyaxis : joypad_info->auto_binds[i].joyaxis;
       if (
@@ -141,6 +142,11 @@ static int16_t qnx_joypad_state(
             && (joykey <= 19)
             && ((controller->buttons & (1 << (uint16_t)joykey)) != 0)
          )
+         ret |= ( 1 << i);
+      else if (
+               (uint16_t)joykey2 != NO_BTN
+            && (joykey2 <= 19)
+            && ((controller->buttons & (1 << (uint16_t)joykey2)) != 0))
          ret |= ( 1 << i);
       else if (joyaxis != AXIS_NONE &&
             ((float)abs(qnx_joypad_axis_state(qnx, controller, port_idx, joyaxis))

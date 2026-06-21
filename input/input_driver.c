@@ -94,9 +94,11 @@
          (((normal_bind)->key      != RETROK_UNKNOWN) \
       || ((normal_bind)->mbutton   != NO_BTN) \
       || ((normal_bind)->joykey    != NO_BTN) \
+      || ((normal_bind)->joykey2   != NO_BTN) \
       || ((normal_bind)->joyaxis   != AXIS_NONE) \
       || ((autoconf_bind)->key     != RETROK_UNKNOWN) \
       || ((autoconf_bind)->joykey  != NO_BTN) \
+      || ((autoconf_bind)->joykey2 != NO_BTN) \
       || ((autoconf_bind)->joyaxis != AXIS_NONE)) \
 )
 
@@ -804,6 +806,7 @@ static int32_t input_state_wrap(
          {
             /* Auto-binds are per joypad, not per user. */
             const uint64_t bind_joykey     = binds[_port][id].joykey;
+            const uint64_t bind_joykey2    = binds[_port][id].joykey2;
             const uint64_t bind_joyaxis    = binds[_port][id].joyaxis;
             const uint64_t autobind_joykey = joypad_info->auto_binds[id].joykey;
             const uint64_t autobind_joyaxis= joypad_info->auto_binds[id].joyaxis;
@@ -811,6 +814,7 @@ static int32_t input_state_wrap(
             float axis_threshold           = joypad_info->axis_threshold;
             const uint64_t joykey          = (bind_joykey != NO_BTN)
                ? bind_joykey  : autobind_joykey;
+            const uint64_t joykey2         = bind_joykey2;
             const uint64_t joyaxis         = (bind_joyaxis != AXIS_NONE)
                ? bind_joyaxis : autobind_joyaxis;
 
@@ -818,6 +822,9 @@ static int32_t input_state_wrap(
             {
                if ((uint16_t)joykey != NO_BTN && joypad->button(
                         port, (uint16_t)joykey))
+                  return 1;
+               if ((uint16_t)joykey2 != NO_BTN && joypad->button(
+                        port, (uint16_t)joykey2))
                   return 1;
                if (joyaxis != AXIS_NONE &&
                      ((float)abs(joypad->axis(port, (uint32_t)joyaxis))
@@ -828,6 +835,9 @@ static int32_t input_state_wrap(
             {
                if ((uint16_t)joykey != NO_BTN && sec_joypad->button(
                         port, (uint16_t)joykey))
+                  return 1;
+               if ((uint16_t)joykey2 != NO_BTN && sec_joypad->button(
+                        port, (uint16_t)joykey2))
                   return 1;
                if (joyaxis != AXIS_NONE &&
                      ((float)abs(sec_joypad->axis(port, (uint32_t)joyaxis))
@@ -3874,6 +3884,16 @@ size_t input_config_get_bind_string(
       _len = input_config_get_bind_string_joykey(
             input_descriptor_label_show,
             s, "", bind, len);
+   if      (bind      && bind->joykey2 != NO_BTN)
+   {
+      struct retro_keybind temp_bind = *bind;
+      temp_bind.joykey = bind->joykey2;
+      if (*s)
+         _len += strlcpy(s + _len, ", ", len - _len);
+      _len += input_config_get_bind_string_joykey(
+            input_descriptor_label_show,
+            s + _len, "", &temp_bind, len - _len);
+   }
    else if (bind      && bind->joyaxis != AXIS_NONE)
       _len = input_config_get_bind_string_joyaxis(
             input_descriptor_label_show,
@@ -5103,6 +5123,7 @@ void config_read_keybinds_conf(void *data)
          key_store[bind->key]       = true;
 
          input_config_parse_joy_button  (str, conf, prefix, btn, bind);
+         input_config_parse_joy_button2 (str, conf, prefix, btn, bind);
          input_config_parse_joy_axis    (str, conf, prefix, btn, bind);
          input_config_parse_mouse_button(str, conf, prefix, btn, bind);
       }
@@ -5659,8 +5680,10 @@ static void input_keys_pressed(
    bool any_pressed               = false;
    bool libretro_hotkey_set       =
             binds_norm->joykey  != NO_BTN
+         || binds_norm->joykey2 != NO_BTN
          || binds_norm->joyaxis != AXIS_NONE
          || binds_auto->joykey  != NO_BTN
+         || binds_auto->joykey2 != NO_BTN
          || binds_auto->joyaxis != AXIS_NONE;
    bool keyboard_hotkey_set       =
          binds_norm->key != RETROK_UNKNOWN;
@@ -5839,6 +5862,7 @@ static void input_keys_pressed(
          if (!libretro_hotkey_set)
          {
             if (     binds[port][i].joykey  != NO_BTN
+                  || binds[port][i].joykey2 != NO_BTN
                   || binds[port][i].joyaxis != AXIS_NONE)
             {
                /* Allow blocking if keyboard hotkey is pressed */

@@ -196,8 +196,12 @@ static int16_t dos_joypad_state(
 		   /* Auto-binds are per joypad, not per user. */
 		   const uint64_t joykey  = (binds[i].joykey != NO_BTN)
 			   ? binds[i].joykey  : joypad_info->auto_binds[i].joykey;
+		   const uint64_t joykey2 = binds[i].joykey2;
 		   if ((uint16_t)joykey != NO_BTN && dos_joypad_button_state(
 					   buf, (uint16_t)joykey))
+			   ret |= ( 1 << i);
+		   else if ((uint16_t)joykey2 != NO_BTN && dos_joypad_button_state(
+					   buf, (uint16_t)joykey2))
 			   ret |= ( 1 << i);
 	   }
    }

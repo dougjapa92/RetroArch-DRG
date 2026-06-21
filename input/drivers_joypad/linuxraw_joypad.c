@@ -376,11 +376,16 @@ static int16_t linuxraw_joypad_state(
       /* Auto-binds are per joypad, not per user. */
       const uint64_t joykey  = (binds[i].joykey != NO_BTN)
          ? binds[i].joykey  : joypad_info->auto_binds[i].joykey;
+      const uint64_t joykey2 = binds[i].joykey2;
       const uint32_t joyaxis = (binds[i].joyaxis != AXIS_NONE)
          ? binds[i].joyaxis : joypad_info->auto_binds[i].joyaxis;
       if ((uint16_t)joykey != NO_BTN &&
             (joykey < NUM_BUTTONS)   &&
             (BIT32_GET(pad->buttons, joykey)))
+         ret |= ( 1 << i);
+      else if ((uint16_t)joykey2 != NO_BTN &&
+            (joykey2 < NUM_BUTTONS)   &&
+            (BIT32_GET(pad->buttons, joykey2)))
          ret |= ( 1 << i);
       else if (joyaxis != AXIS_NONE &&
             ((float)abs(linuxraw_joypad_axis_state(pad, port_idx, joyaxis))

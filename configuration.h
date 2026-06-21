@@ -1374,6 +1374,11 @@ void input_config_parse_joy_button(
       void *data, const char *prefix,
       const char *btn, void *bind_data);
 
+void input_config_parse_joy_button2(
+      char *s,
+      void *data, const char *prefix,
+      const char *btn, void *bind_data);
+
 void input_config_parse_joy_axis(
       char *s,
       void *conf_data, const char *prefix,

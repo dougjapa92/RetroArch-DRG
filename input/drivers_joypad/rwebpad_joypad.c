@@ -185,6 +185,7 @@ static int16_t rwebpad_joypad_state(
       /* Auto-binds are per joypad, not per user. */
       const uint64_t joykey  = (binds[i].joykey != NO_BTN)
          ? binds[i].joykey  : joypad_info->auto_binds[i].joykey;
+      const uint64_t joykey2 = binds[i].joykey2;
       const uint32_t joyaxis = (binds[i].joyaxis != AXIS_NONE)
          ? binds[i].joyaxis : joypad_info->auto_binds[i].joyaxis;
       if (
@@ -192,6 +193,11 @@ static int16_t rwebpad_joypad_state(
             && (joykey < gamepad_state.numButtons)
             && gamepad_state.digitalButton[(uint16_t)joykey]
          )
+         ret |= ( 1 << i);
+      else if (
+               (uint16_t)joykey2 != NO_BTN 
+            && (joykey2 < gamepad_state.numButtons)
+            && gamepad_state.digitalButton[(uint16_t)joykey2])
          ret |= ( 1 << i);
       else if (joyaxis != AXIS_NONE &&
             ((float)abs(rwebpad_joypad_axis_state(

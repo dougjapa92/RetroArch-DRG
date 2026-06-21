@@ -1555,9 +1555,30 @@ static bool menu_input_key_bind_poll_find_hold_pad(
       if (!found)
          continue;
 
-      output->joykey = b;
-      output->joyaxis = AXIS_NONE;
-      return true;
+      /* Dual button binding logic */
+      if (output->joykey == (uint16_t)b || output->joykey2 == (uint16_t)b)
+         return false; /* Duplicate - ignore */
+
+      if (output->joykey == NO_BTN)
+      {
+         output->joykey = b;
+         output->joyaxis = AXIS_NONE;
+         return true;
+      }
+      else if (output->joykey2 == NO_BTN)
+      {
+         output->joykey2 = b;
+         output->joyaxis = AXIS_NONE;
+         return true;
+      }
+      else
+      {
+         /* Both slots full - clear and start over */
+         output->joykey = b;
+         output->joykey2 = NO_BTN;
+         output->joyaxis = AXIS_NONE;
+         return true;
+      }
    }
 
    /* Axes are a bit tricky ... */
@@ -1590,9 +1611,32 @@ static bool menu_input_key_bind_poll_find_hold_pad(
 
       if (sane_trigger)
       {
-         output->joykey  = HAT_MAP(h, sane_trigger);
-         output->joyaxis = AXIS_NONE;
-         return true;
+         uint16_t hat_key = HAT_MAP(h, sane_trigger);
+
+         /* Dual button binding logic for hats */
+         if (output->joykey == hat_key || output->joykey2 == hat_key)
+            return false; /* Duplicate - ignore */
+
+         if (output->joykey == NO_BTN)
+         {
+            output->joykey = hat_key;
+            output->joyaxis = AXIS_NONE;
+            return true;
+         }
+         else if (output->joykey2 == NO_BTN)
+         {
+            output->joykey2 = hat_key;
+            output->joyaxis = AXIS_NONE;
+            return true;
+         }
+         else
+         {
+            /* Both slots full - clear and start over */
+            output->joykey = hat_key;
+            output->joykey2 = NO_BTN;
+            output->joyaxis = AXIS_NONE;
+            return true;
+         }
       }
    }
 
@@ -1671,9 +1715,30 @@ static bool menu_input_key_bind_poll_find_trigger_pad(
       if (!found)
          continue;
 
-      output->joykey = b;
-      output->joyaxis = AXIS_NONE;
-      return true;
+      /* Dual button binding logic */
+      if (output->joykey == (uint16_t)b || output->joykey2 == (uint16_t)b)
+         return false; /* Duplicate - ignore */
+
+      if (output->joykey == NO_BTN)
+      {
+         output->joykey = b;
+         output->joyaxis = AXIS_NONE;
+         return true;
+      }
+      else if (output->joykey2 == NO_BTN)
+      {
+         output->joykey2 = b;
+         output->joyaxis = AXIS_NONE;
+         return true;
+      }
+      else
+      {
+         /* Both slots full - clear and start over */
+         output->joykey = b;
+         output->joykey2 = NO_BTN;
+         output->joyaxis = AXIS_NONE;
+         return true;
+      }
    }
 
    /* Axes are a bit tricky ... */
@@ -1719,9 +1784,32 @@ static bool menu_input_key_bind_poll_find_trigger_pad(
 
       if (sane_trigger)
       {
-         output->joykey = HAT_MAP(h, sane_trigger);
-         output->joyaxis = AXIS_NONE;
-         return true;
+         uint16_t hat_key = HAT_MAP(h, sane_trigger);
+
+         /* Dual button binding logic for hats */
+         if (output->joykey == hat_key || output->joykey2 == hat_key)
+            return false; /* Duplicate - ignore */
+
+         if (output->joykey == NO_BTN)
+         {
+            output->joykey = hat_key;
+            output->joyaxis = AXIS_NONE;
+            return true;
+         }
+         else if (output->joykey2 == NO_BTN)
+         {
+            output->joykey2 = hat_key;
+            output->joyaxis = AXIS_NONE;
+            return true;
+         }
+         else
+         {
+            /* Both slots full - clear and start over */
+            output->joykey = hat_key;
+            output->joykey2 = NO_BTN;
+            output->joyaxis = AXIS_NONE;
+            return true;
+         }
       }
    }
 

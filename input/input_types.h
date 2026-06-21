@@ -85,8 +85,12 @@ struct retro_keybind
    uint16_t mbutton;
    /* Joypad key. Joypad POV (hats) are embedded into this key as well. */
    uint16_t joykey;
+   /* Second joypad key for dual binding. */
+   uint16_t joykey2;
    /* Default key binding value (for resetting bind). */
    uint16_t def_joykey;
+   /* Default second key binding value (for resetting bind). */
+   uint16_t def_joykey2;
    /* Determines whether or not the binding is valid. */
    bool valid;
 };

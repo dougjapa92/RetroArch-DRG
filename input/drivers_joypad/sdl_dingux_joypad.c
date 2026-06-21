@@ -585,6 +585,7 @@ static int16_t sdl_dingux_joypad_state(
       /* Auto-binds are per joypad, not per user. */
       const uint64_t joykey  = (binds[i].joykey != NO_BTN)
          ? binds[i].joykey  : joypad_info->auto_binds[i].joykey;
+      const uint64_t joykey2 = binds[i].joykey2;
 #if defined(SDL_DINGUX_HAS_ANALOG)
       const uint32_t joyaxis = (binds[i].joyaxis != AXIS_NONE)
          ? binds[i].joyaxis : joypad_info->auto_binds[i].joyaxis;
@@ -592,6 +593,9 @@ static int16_t sdl_dingux_joypad_state(
 
       if ((uint16_t)joykey != NO_BTN &&
             (joypad->pad_state & (1 << (uint16_t)joykey)))
+         ret |= (1 << i);
+      else if ((uint16_t)joykey2 != NO_BTN &&
+            (joypad->pad_state & (1 << (uint16_t)joykey2)))
          ret |= (1 << i);
 #if defined(SDL_DINGUX_HAS_ANALOG)
       else if (joyaxis != AXIS_NONE &&

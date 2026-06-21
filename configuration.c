@@ -5090,6 +5090,53 @@ static void save_keybind_joykey(config_file_t *conf,
       config_set_uint64(conf, key, bind->joykey);
 }
 
+static void save_keybind_joykey2(config_file_t *conf,
+      const char *prefix,
+      const char *base,
+      const struct retro_keybind *bind, bool save_empty)
+{
+   char key[64];
+   size_t _len = fill_pathname_join_delim(key, prefix,
+         base, '_', sizeof(key));
+   strlcpy(key + _len, "_btn2", sizeof(key) - _len);
+
+   if (bind->joykey2 == NO_BTN)
+   {
+       if (save_empty)
+         config_set_string(conf, key, "nul");
+   }
+   else if (GET_HAT_DIR(bind->joykey2))
+   {
+      char s[64];
+      const char *dir = NULL;
+      uint16_t hat = GET_HAT(bind->joykey2);
+      uint16_t hat_dir = GET_HAT_DIR(bind->joykey2);
+
+      switch (hat_dir)
+      {
+         case HAT_UP_MASK:
+            dir = "up";
+            break;
+         case HAT_DOWN_MASK:
+            dir = "down";
+            break;
+         case HAT_LEFT_MASK:
+            dir = "left";
+            break;
+         case HAT_RIGHT_MASK:
+            dir = "right";
+            break;
+         default:
+            dir = "";
+            break;
+      }
+      snprintf(s, sizeof(s), "h%u%s", hat, dir);
+      config_set_string(conf, key, s);
+   }
+   else
+      config_set_uint64(conf, key, bind->joykey2);
+}
+
 static void save_keybind_axis(config_file_t *conf,
       const char *prefix,
       const char *base,
@@ -5229,6 +5276,7 @@ static void input_config_save_keybinds_user(config_file_t *conf, unsigned user)
 
       config_set_string(conf, key, btn);
       save_keybind_joykey (conf, prefix, base, bind, true);
+      save_keybind_joykey2(conf, prefix, base, bind, true);
       save_keybind_axis   (conf, prefix, base, bind, true);
       save_keybind_mbutton(conf, prefix, base, bind, true);
    }
@@ -5275,6 +5323,8 @@ static void input_config_save_keybinds_user_override(config_file_t *conf,
 
       if (bind->joykey  != override_bind->joykey)
          save_keybind_joykey (conf, prefix, base, override_bind, true);
+      if (bind->joykey2 != override_bind->joykey2)
+         save_keybind_joykey2(conf, prefix, base, override_bind, true);
       if (bind->joyaxis != override_bind->joyaxis)
          save_keybind_axis   (conf, prefix, base, override_bind, true);
       if (bind->mbutton != override_bind->mbutton)
@@ -6626,6 +6676,7 @@ void input_config_reset_autoconfig_binds(unsigned port)
    for (i = 0; i < RARCH_BIND_LIST_END; i++)
    {
       input_autoconf_binds[port][i].joykey  = NO_BTN;
+      input_autoconf_binds[port][i].joykey2 = NO_BTN;
       input_autoconf_binds[port][i].joyaxis = AXIS_NONE;
       input_autoconf_binds[port][i].valid   = false;
 
@@ -6664,8 +6715,9 @@ void input_config_set_autoconfig_binds(unsigned port, void *data)
          const char *base = keybind->base;
          fill_pathname_join_delim(str, "input", base,  '_', sizeof(str));
 
-         input_config_parse_joy_button(str, config, "input", base, &binds[i]);
-         input_config_parse_joy_axis  (str, config, "input", base, &binds[i]);
+         input_config_parse_joy_button (str, config, "input", base, &binds[i]);
+         input_config_parse_joy_button2(str, config, "input", base, &binds[i]);
+         input_config_parse_joy_axis   (str, config, "input", base, &binds[i]);
       }
    }
 }
@@ -6880,6 +6932,49 @@ void input_config_parse_joy_button(
          free(bind->joykey_label);
 
       bind->joykey_label = strdup(tmp_a->value);
+   }
+}
+
+void input_config_parse_joy_button2(
+      char *s,
+      void *data, const char *prefix,
+      const char *btn, void *bind_data)
+{
+   char tmp[64], key[64];
+   config_file_t *conf             = (config_file_t*)data;
+   struct retro_keybind *bind      = (struct retro_keybind*)bind_data;
+
+   tmp[0]                          = '\0';
+
+   fill_pathname_join_delim(key, s, "btn2", '_', sizeof(key));
+
+   if (config_get_array(conf, key, tmp, sizeof(tmp)))
+   {
+      btn = tmp;
+      if (     btn[0] == 'n'
+            && btn[1] == 'u'
+            && btn[2] == 'l'
+            && btn[3] == '\0'
+         )
+         bind->joykey2 = NO_BTN;
+      else
+      {
+         if (*btn == 'h')
+         {
+            const char *str = btn + 1;
+            /* Parse hat? */
+            if (str && ISDIGIT((int)*str))
+            {
+               char        *dir = NULL;
+               uint16_t     hat = strtoul(str, &dir, 0);
+               uint16_t hat_dir = dir ? input_config_parse_hat(dir) : 0;
+               if (hat_dir)
+                  bind->joykey2 = HAT_MAP(hat, hat_dir);
+            }
+         }
+         else
+            bind->joykey2 = strtoull(tmp, NULL, 0);
+      }
    }
 }
 

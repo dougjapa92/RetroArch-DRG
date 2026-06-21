@@ -437,12 +437,17 @@ static int16_t sdl_joypad_state(
       /* Auto-binds are per joypad, not per user. */
       const uint64_t joykey  = (binds[i].joykey != NO_BTN)
          ? binds[i].joykey  : joypad_info->auto_binds[i].joykey;
+      const uint64_t joykey2 = binds[i].joykey2;
       const uint32_t joyaxis = (binds[i].joyaxis != AXIS_NONE)
          ? binds[i].joyaxis : joypad_info->auto_binds[i].joyaxis;
       if (
                (uint16_t)joykey != NO_BTN
             && sdl_joypad_button_state(pad, port_idx, (uint16_t)joykey)
          )
+         ret |= ( 1 << i);
+      else if (
+               (uint16_t)joykey2 != NO_BTN
+            && sdl_joypad_button_state(pad, port_idx, (uint16_t)joykey2))
          ret |= ( 1 << i);
       else if (joyaxis != AXIS_NONE &&
             ((float)abs(sdl_joypad_axis_state(pad, port_idx, joyaxis))

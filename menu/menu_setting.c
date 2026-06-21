@@ -2616,10 +2616,11 @@ static int setting_action_ok_bind_defaults(
    for ( i  = MENU_SETTINGS_BIND_BEGIN;
          i <= MENU_SETTINGS_BIND_LAST; i++, target++)
    {
-      target->key     = def_binds[i - MENU_SETTINGS_BIND_BEGIN].key;
-      target->joykey  = NO_BTN;
-      target->joyaxis = AXIS_NONE;
-      target->mbutton = NO_BTN;
+      target->key      = def_binds[i - MENU_SETTINGS_BIND_BEGIN].key;
+      target->joykey   = NO_BTN;
+      target->joykey2  = NO_BTN;
+      target->joyaxis  = AXIS_NONE;
+      target->mbutton  = NO_BTN;
    }
 
    return 0;

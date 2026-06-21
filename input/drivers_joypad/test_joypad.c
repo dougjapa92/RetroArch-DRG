@@ -385,8 +385,11 @@ static int16_t test_joypad_state(
 		   /* Auto-binds are per joypad, not per user. */
 		   const uint16_t joykey  = (binds[i].joykey != NO_BTN)
 			   ? binds[i].joykey  : joypad_info->auto_binds[i].joykey;
+		   const uint64_t joykey2 = binds[i].joykey2;
 		   /* Test input driver uses same button layout internally as RA, so no conversion is needed */
 		   if (joykey != NO_BTN && (test_joypads[port_idx].button_state & (1 << i)))
+			   ret |= ( 1 << i);
+		   else if ((uint16_t)joykey2 != NO_BTN && (test_joypads[port_idx].button_state & (1 << i)))
 			   ret |= ( 1 << i);
 	   }
    }

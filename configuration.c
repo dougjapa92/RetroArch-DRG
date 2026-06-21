@@ -6686,6 +6686,12 @@ void input_config_reset_autoconfig_binds(unsigned port)
          input_autoconf_binds[port][i].joykey_label = NULL;
       }
 
+      if (input_autoconf_binds[port][i].joykey2_label)
+      {
+         free(input_autoconf_binds[port][i].joykey2_label);
+         input_autoconf_binds[port][i].joykey2_label = NULL;
+      }
+
       if (input_autoconf_binds[port][i].joyaxis_label)
       {
          free(input_autoconf_binds[port][i].joyaxis_label);
@@ -6943,6 +6949,7 @@ void input_config_parse_joy_button2(
    char tmp[64], key[64];
    config_file_t *conf             = (config_file_t*)data;
    struct retro_keybind *bind      = (struct retro_keybind*)bind_data;
+   struct config_entry_list *tmp_a = NULL;
 
    tmp[0]                          = '\0';
 
@@ -6975,6 +6982,19 @@ void input_config_parse_joy_button2(
          else
             bind->joykey2 = strtoull(tmp, NULL, 0);
       }
+   }
+
+   fill_pathname_join_delim(key, s,
+         "btn2_label", '_', sizeof(key));
+
+   tmp_a = config_get_entry(conf, key);
+
+   if (tmp_a && !string_is_empty(tmp_a->value))
+   {
+      if (!string_is_empty(bind->joykey2_label))
+         free(bind->joykey2_label);
+
+      bind->joykey2_label = strdup(tmp_a->value);
    }
 }
 

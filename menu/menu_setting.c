@@ -2621,6 +2621,12 @@ static int setting_action_ok_bind_defaults(
       target->joykey2  = NO_BTN;
       target->joyaxis  = AXIS_NONE;
       target->mbutton  = NO_BTN;
+
+      if (target->joykey2_label)
+      {
+         free(target->joykey2_label);
+         target->joykey2_label = NULL;
+      }
    }
 
    return 0;

@@ -66,6 +66,8 @@ struct retro_keybind
 {
    /* Human-readable label for the control. */
    char     *joykey_label;
+   /* Human-readable label for the second joypad key. */
+   char     *joykey2_label;
    /* Human-readable label for an analog axis. */
    char     *joyaxis_label;
    /*

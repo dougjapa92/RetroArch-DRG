@@ -3991,18 +3991,6 @@ size_t input_config_get_bind_string_joykey(
    size_t _len = 0;
    if (GET_HAT_DIR(bind->joykey))
    {
-      if (      bind->joykey_label
-            && !string_is_empty(bind->joykey_label)
-            && input_descriptor_label_show)
-      {
-         _len = strlcpy(s, bind->joykey_label, len);
-         if (suffix && !string_is_empty(suffix))
-            _len += snprintf(s + _len, len - _len, " %s", suffix);
-         _len += snprintf(s + _len, len - _len, " (Hat #%u)",
-               (unsigned)GET_HAT(bind->joykey));
-         return _len;
-      }
-      /* TODO/FIXME - localize */
       _len  = snprintf(s, len,
             "Hat #%u ", (unsigned)GET_HAT(bind->joykey));
       switch (GET_HAT_DIR(bind->joykey))
@@ -4026,18 +4014,6 @@ size_t input_config_get_bind_string_joykey(
    }
    else
    {
-      if (      bind->joykey_label
-            && !string_is_empty(bind->joykey_label)
-            && input_descriptor_label_show)
-      {
-         _len = strlcpy(s, bind->joykey_label, len);
-         if (suffix && !string_is_empty(suffix))
-            _len += snprintf(s + _len, len - _len, " %s", suffix);
-         _len += snprintf(s + _len, len - _len, " (#%u)",
-               (unsigned)bind->joykey);
-         return _len;
-      }
-      /* TODO/FIXME - localize */
       _len  = strlcpy(s, "Button ", len);
       _len += snprintf(s + _len, len - _len, "%u",
             (unsigned)bind->joykey);

@@ -5275,6 +5275,18 @@ static void input_config_save_keybinds_user(config_file_t *conf, unsigned user)
       input_keymaps_translate_rk_to_str(bind->key, btn, sizeof(btn));
 
       config_set_string(conf, key, btn);
+
+      /* Save key2 */
+      if (bind->key2 != RETROK_UNKNOWN)
+      {
+         char key2_str[64];
+         char btn2[64];
+         size_t _len = fill_pathname_join_delim(key2_str, prefix, base, '_', sizeof(key2_str));
+         strlcpy(key2_str + _len, "_key2", sizeof(key2_str) - _len);
+         input_keymaps_translate_rk_to_str(bind->key2, btn2, sizeof(btn2));
+         config_set_string(conf, key2_str, btn2);
+      }
+
       save_keybind_joykey (conf, prefix, base, bind, true);
       save_keybind_joykey2(conf, prefix, base, bind, true);
       save_keybind_axis   (conf, prefix, base, bind, true);
@@ -6675,6 +6687,8 @@ void input_config_reset_autoconfig_binds(unsigned port)
 
    for (i = 0; i < RARCH_BIND_LIST_END; i++)
    {
+      input_autoconf_binds[port][i].key     = RETROK_UNKNOWN;
+      input_autoconf_binds[port][i].key2    = RETROK_UNKNOWN;
       input_autoconf_binds[port][i].joykey  = NO_BTN;
       input_autoconf_binds[port][i].joykey2 = NO_BTN;
       input_autoconf_binds[port][i].joyaxis = AXIS_NONE;

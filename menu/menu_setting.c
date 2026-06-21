@@ -2617,6 +2617,7 @@ static int setting_action_ok_bind_defaults(
          i <= MENU_SETTINGS_BIND_LAST; i++, target++)
    {
       target->key      = def_binds[i - MENU_SETTINGS_BIND_BEGIN].key;
+      target->key2     = RETROK_UNKNOWN;
       target->joykey   = NO_BTN;
       target->joykey2  = NO_BTN;
       target->joyaxis  = AXIS_NONE;

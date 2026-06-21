@@ -81,6 +81,8 @@ struct retro_keybind
    enum msg_hash_enums enum_idx;
 
    enum retro_key key;
+   /* Second keyboard key for dual binding. */
+   enum retro_key key2;
 
    uint16_t id;
    /* What mouse button ID has been mapped to this control. */

@@ -1521,8 +1521,38 @@ static bool menu_input_key_bind_poll_find_hold_pad(
       if (!found)
          continue;
 
-      output->key = (enum retro_key)b;
-      return true;
+      /* Dual key binding logic */
+      if (output->key == (enum retro_key)b)
+      {
+         /* Already in key - keep only this one */
+         output->key2 = RETROK_UNKNOWN;
+         return true;
+      }
+      if (output->key2 == (enum retro_key)b)
+      {
+         /* Already in key2 - move to key and clear key2 */
+         output->key = (enum retro_key)b;
+         output->key2 = RETROK_UNKNOWN;
+         return true;
+      }
+
+      if (output->key == RETROK_UNKNOWN)
+      {
+         output->key = (enum retro_key)b;
+         return true;
+      }
+      else if (output->key2 == RETROK_UNKNOWN)
+      {
+         output->key2 = (enum retro_key)b;
+         return true;
+      }
+      else
+      {
+         /* Both slots full - clear and start over */
+         output->key = (enum retro_key)b;
+         output->key2 = RETROK_UNKNOWN;
+         return true;
+      }
    }
 
    for (b = 0; b < MENU_MAX_MBUTTONS; b++)
@@ -1703,8 +1733,38 @@ static bool menu_input_key_bind_poll_find_trigger_pad(
       if (!found)
          continue;
 
-      output->key = (enum retro_key)b;
-      return true;
+      /* Dual key binding logic */
+      if (output->key == (enum retro_key)b)
+      {
+         /* Already in key - keep only this one */
+         output->key2 = RETROK_UNKNOWN;
+         return true;
+      }
+      if (output->key2 == (enum retro_key)b)
+      {
+         /* Already in key2 - move to key and clear key2 */
+         output->key = (enum retro_key)b;
+         output->key2 = RETROK_UNKNOWN;
+         return true;
+      }
+
+      if (output->key == RETROK_UNKNOWN)
+      {
+         output->key = (enum retro_key)b;
+         return true;
+      }
+      else if (output->key2 == RETROK_UNKNOWN)
+      {
+         output->key2 = (enum retro_key)b;
+         return true;
+      }
+      else
+      {
+         /* Both slots full - clear and start over */
+         output->key = (enum retro_key)b;
+         output->key2 = RETROK_UNKNOWN;
+         return true;
+      }
    }
 
    for (b = 0; b < MENU_MAX_MBUTTONS; b++)
@@ -4900,15 +4960,46 @@ static bool menu_input_key_bind_custom_bind_keyboard_cb(
    uint64_t input_bind_hold_us      = settings->uints.input_bind_hold    * 1000000;
    uint64_t input_bind_timeout_us   = settings->uints.input_bind_timeout * 1000000;
    uint64_t current_usec            = cpu_features_get_time_usec();
+   enum retro_key new_key           = (enum retro_key)code;
 
-   /* Clear old mapping bit */
-   input_keyboard_mapping_bits(0, binds->buffer.key);
-
-   /* Store key in bind */
-   binds->buffer.key                = (enum retro_key)code;
-
-   /* Store new mapping bit */
-   input_keyboard_mapping_bits(1, binds->buffer.key);
+   /* Dual key binding logic */
+   if (binds->buffer.key == new_key)
+   {
+      /* Already in key - keep only this one */
+      input_keyboard_mapping_bits(0, binds->buffer.key2);
+      binds->buffer.key2 = RETROK_UNKNOWN;
+   }
+   else if (binds->buffer.key2 == new_key)
+   {
+      /* Already in key2 - move to key and clear key2 */
+      input_keyboard_mapping_bits(0, binds->buffer.key);
+      input_keyboard_mapping_bits(0, binds->buffer.key2);
+      binds->buffer.key = new_key;
+      binds->buffer.key2 = RETROK_UNKNOWN;
+      input_keyboard_mapping_bits(1, binds->buffer.key);
+   }
+   else if (binds->buffer.key == RETROK_UNKNOWN)
+   {
+      /* Empty key slot */
+      input_keyboard_mapping_bits(0, binds->buffer.key);
+      binds->buffer.key = new_key;
+      input_keyboard_mapping_bits(1, binds->buffer.key);
+   }
+   else if (binds->buffer.key2 == RETROK_UNKNOWN)
+   {
+      /* Empty key2 slot */
+      binds->buffer.key2 = new_key;
+      input_keyboard_mapping_bits(1, binds->buffer.key2);
+   }
+   else
+   {
+      /* Both slots full - clear and start over */
+      input_keyboard_mapping_bits(0, binds->buffer.key);
+      input_keyboard_mapping_bits(0, binds->buffer.key2);
+      binds->buffer.key = new_key;
+      binds->buffer.key2 = RETROK_UNKNOWN;
+      input_keyboard_mapping_bits(1, binds->buffer.key);
+   }
 
    /* Write out the bind */
    *(binds->output)                 = binds->buffer;

@@ -92,11 +92,13 @@
 #define CHECK_INPUT_DRIVER_BLOCK_HOTKEY(normal_bind, autoconf_bind) \
 ( \
          (((normal_bind)->key      != RETROK_UNKNOWN) \
+      || ((normal_bind)->key2      != RETROK_UNKNOWN) \
       || ((normal_bind)->mbutton   != NO_BTN) \
       || ((normal_bind)->joykey    != NO_BTN) \
       || ((normal_bind)->joykey2   != NO_BTN) \
       || ((normal_bind)->joyaxis   != AXIS_NONE) \
       || ((autoconf_bind)->key     != RETROK_UNKNOWN) \
+      || ((autoconf_bind)->key2    != RETROK_UNKNOWN) \
       || ((autoconf_bind)->joykey  != NO_BTN) \
       || ((autoconf_bind)->joykey2 != NO_BTN) \
       || ((autoconf_bind)->joyaxis != AXIS_NONE)) \
@@ -3932,6 +3934,22 @@ size_t input_config_get_bind_string(
                msg_hash_to_str(MENU_ENUM_LABEL_VALUE_INPUT_KEY), key);
          delim = 1;
       }
+
+      /* Show key2 if set */
+      if (bind->key2 != RETROK_UNKNOWN)
+      {
+         char key2[64];
+         key2[0] = '\0';
+         input_keymaps_translate_rk_to_str(bind->key2, key2, sizeof(key2));
+         if (key2[0] != '\0')
+         {
+            if (delim)
+               _len += strlcpy(s + _len, ", ", len - _len);
+            _len += snprintf(s + _len, len - _len,
+                  msg_hash_to_str(MENU_ENUM_LABEL_VALUE_INPUT_KEY), key2);
+            delim = 1;
+         }
+      }
    }
 #endif
 
@@ -5110,6 +5128,25 @@ void config_read_keybinds_conf(void *data)
           * so that next clear leaves the new key alone */
          input_keyboard_mapping_bits(1, bind->key);
          key_store[bind->key]       = true;
+
+         /* Load key2 */
+         {
+            char key2_str[NAME_MAX_LENGTH];
+            struct config_entry_list *entry2 = NULL;
+            size_t _len = fill_pathname_join_delim(key2_str, prefix, btn, '_', sizeof(key2_str));
+            strlcpy(key2_str + _len, "_key2", sizeof(key2_str) - _len);
+
+            if (!key_store[bind->key2])
+               input_keyboard_mapping_bits(0, bind->key2);
+
+            entry2 = config_get_entry(conf, key2_str);
+            if (entry2 && !string_is_empty(entry2->value))
+               bind->key2 = input_config_translate_str_to_rk(
+                     entry2->value, strlen(entry2->value));
+
+            input_keyboard_mapping_bits(1, bind->key2);
+            key_store[bind->key2] = true;
+         }
 
          input_config_parse_joy_button  (str, conf, prefix, btn, bind);
          input_config_parse_joy_button2 (str, conf, prefix, btn, bind);

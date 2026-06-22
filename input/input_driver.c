@@ -3882,22 +3882,26 @@ size_t input_config_get_bind_string(
 
    *s                                 = '\0';
 
-   if      (bind      && bind->joykey  != NO_BTN)
-      _len = input_config_get_bind_string_joykey(
-            input_descriptor_label_show,
-            s, "", bind, len);
-   if      (bind      && bind->joykey2 != NO_BTN)
+   /* Check if user has any configured joypad bind */
+   if (bind && (bind->joykey != NO_BTN || bind->joykey2 != NO_BTN))
    {
-      struct retro_keybind temp_bind = *bind;
-      temp_bind.joykey = bind->joykey2;
-      temp_bind.joykey_label = bind->joykey2_label;
-      if (*s)
-         _len += strlcpy(s + _len, ", ", len - _len);
-      _len += input_config_get_bind_string_joykey(
-            input_descriptor_label_show,
-            s + _len, "", &temp_bind, len - _len);
+      if (bind->joykey != NO_BTN)
+         _len = input_config_get_bind_string_joykey(
+               input_descriptor_label_show,
+               s, "", bind, len);
+      if (bind->joykey2 != NO_BTN)
+      {
+         struct retro_keybind temp_bind = *bind;
+         temp_bind.joykey = bind->joykey2;
+         temp_bind.joykey_label = bind->joykey2_label;
+         if (*s)
+            _len += strlcpy(s + _len, ", ", len - _len);
+         _len += input_config_get_bind_string_joykey(
+               input_descriptor_label_show,
+               s + _len, "", &temp_bind, len - _len);
+      }
    }
-   else if (bind      && bind->joyaxis != AXIS_NONE)
+   else if (bind && bind->joyaxis != AXIS_NONE)
       _len = input_config_get_bind_string_joyaxis(
             input_descriptor_label_show,
             s, "", bind, len);
@@ -4009,6 +4013,17 @@ size_t input_config_get_bind_string_joykey(
    size_t _len = 0;
    if (GET_HAT_DIR(bind->joykey))
    {
+      /* Show label for D-Pad if available */
+      if (      bind->joykey_label
+            && !string_is_empty(bind->joykey_label)
+            && input_descriptor_label_show)
+      {
+         _len = strlcpy(s, bind->joykey_label, len);
+         if (suffix && !string_is_empty(suffix))
+            _len += snprintf(s + _len, len - _len, " %s", suffix);
+         return _len;
+      }
+      /* Fallback to generic hat format */
       _len  = snprintf(s, len,
             "Hat #%u ", (unsigned)GET_HAT(bind->joykey));
       switch (GET_HAT_DIR(bind->joykey))

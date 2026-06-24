@@ -1042,11 +1042,13 @@ static int16_t input_joypad_analog_axis(
 
    /* Keyboard bind priority */
    if (     bind_plus->key  != RETROK_UNKNOWN
-         || bind_minus->key != RETROK_UNKNOWN)
+         || bind_plus->key2 != RETROK_UNKNOWN
+         || bind_minus->key != RETROK_UNKNOWN
+         || bind_minus->key2 != RETROK_UNKNOWN)
    {
       input_driver_state_t *input_st = &input_driver_st;
 
-      if (bind_plus->key && input_state_wrap(
+      if ((bind_plus->key && input_state_wrap(
             input_st->current_driver,
             input_st->current_data,
             input_st->primary_joypad,
@@ -1055,9 +1057,19 @@ static int16_t input_joypad_analog_axis(
             (*input_st->libretro_input_binds),
             (input_st->flags & INP_FLAG_KB_MAPPING_BLOCKED) ? true : false,
             0, RETRO_DEVICE_KEYBOARD, 0,
-            bind_plus->key))
+            bind_plus->key)) ||
+          (bind_plus->key2 && input_state_wrap(
+            input_st->current_driver,
+            input_st->current_data,
+            input_st->primary_joypad,
+            NULL,
+            joypad_info,
+            (*input_st->libretro_input_binds),
+            (input_st->flags & INP_FLAG_KB_MAPPING_BLOCKED) ? true : false,
+            0, RETRO_DEVICE_KEYBOARD, 0,
+            bind_plus->key2)))
          res  = 0x7fff;
-      if (bind_minus->key && input_state_wrap(
+      if ((bind_minus->key && input_state_wrap(
             input_st->current_driver,
             input_st->current_data,
             input_st->primary_joypad,
@@ -1066,7 +1078,17 @@ static int16_t input_joypad_analog_axis(
             (*input_st->libretro_input_binds),
             (input_st->flags & INP_FLAG_KB_MAPPING_BLOCKED) ? true : false,
             0, RETRO_DEVICE_KEYBOARD, 0,
-            bind_minus->key))
+            bind_minus->key)) ||
+          (bind_minus->key2 && input_state_wrap(
+            input_st->current_driver,
+            input_st->current_data,
+            input_st->primary_joypad,
+            NULL,
+            joypad_info,
+            (*input_st->libretro_input_binds),
+            (input_st->flags & INP_FLAG_KB_MAPPING_BLOCKED) ? true : false,
+            0, RETRO_DEVICE_KEYBOARD, 0,
+            bind_minus->key2)))
          res += -0x7fff;
 
       if (res)
@@ -1138,9 +1160,14 @@ static int16_t input_joypad_analog_axis(
       uint16_t key_plus     = (bind_plus->joykey  == NO_BTN)
          ? joypad_info->auto_binds[ident_plus].joykey
          : bind_plus->joykey;
-      if (drv->button && drv->button(joypad_info->joy_idx, key_plus))
+      uint16_t key_minus2   = bind_minus->joykey2;
+      uint16_t key_plus2    = bind_plus->joykey2;
+
+      if (drv->button && (drv->button(joypad_info->joy_idx, key_plus) ||
+               (key_plus2 != NO_BTN && drv->button(joypad_info->joy_idx, key_plus2))))
          res  = 0x7fff;
-      if (drv->button && drv->button(joypad_info->joy_idx, key_minus))
+      if (drv->button && (drv->button(joypad_info->joy_idx, key_minus) ||
+               (key_minus2 != NO_BTN && drv->button(joypad_info->joy_idx, key_minus2))))
          res += -0x7fff;
    }
 
@@ -4051,6 +4078,10 @@ size_t input_config_get_bind_string_joykey(
       _len += snprintf(s + _len, len - _len, "%u",
             (unsigned)bind->joykey);
    }
+
+   if (suffix && !string_is_empty(suffix))
+      _len += snprintf(s + _len, len - _len, " %s", suffix);
+
    return _len;
 }
 
@@ -4073,6 +4104,10 @@ size_t input_config_get_bind_string_joyaxis(
    else if (AXIS_POS_GET(bind->joyaxis) != AXIS_DIR_NONE)
       _len += snprintf(s + _len, len - _len, "+%u",
             (unsigned)AXIS_POS_GET(bind->joyaxis));
+
+   if (suffix && !string_is_empty(suffix))
+      _len += snprintf(s + _len, len - _len, " %s", suffix);
+
    return _len;
 }
 
@@ -5759,14 +5794,14 @@ static void input_keys_pressed(
       else
          input_st->flags |= INP_FLAG_BLOCK_HOTKEY;
    }
-      
+
 #ifdef HAVE_MENU
    /* Prevent triggering menu actions after binding */
    if (     !(input_st->flags & INP_FLAG_MENU_PRESS_PENDING)
          && menu_state_get_ptr()->input_driver_flushing_input)
       input_st->flags |= INP_FLAG_WAIT_INPUT_RELEASE;
 #endif
-   
+
    /* Check libretro input if emulated device type is active,
     * except device type must be always active in menu. */
    if (     !(input_st->flags & INP_FLAG_BLOCK_LIBRETRO_INPUT)

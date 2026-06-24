@@ -1079,7 +1079,7 @@ static bool is_configured_as_physical_keyboard(int vendor_id, int product_id, co
 static void handle_hotplug(android_input_t *android,
       struct android_app *android_app, int *port, int id,
       int source)
-{   
+{
    char device_name[256];
    char name_buf[256];
    int vendorId             = 0;
@@ -1094,7 +1094,7 @@ static void handle_hotplug(android_input_t *android,
 
    RARCH_LOG("[Hotplug] id=%d source=0x%08x name='%s' vid=%04x pid=%04x\n",
             id, source, device_name, vendorId, productId);
-	  
+
    /* FIXME - per-device hacks for NVidia Shield, Xperia Play and
     * similar devices
     *
@@ -1120,7 +1120,7 @@ static void handle_hotplug(android_input_t *android,
     * and be grouped with the NVIDIA button of the virtual device.
     *
     */
-	  
+
    if (strstr(device_model, "SHIELD Android TV") && (
       strstr(device_name, "Virtual") ||
       strstr(device_name, "NVIDIA Corporation NVIDIA Controller v01.0")))
@@ -1294,9 +1294,9 @@ static void handle_hotplug(android_input_t *android,
    else if (
              string_starts_with_size(device_model, "AFT", STRLEN_CONST("AFT")) &&
              (
-              strstr(device_model, "AFTB") || 
+              strstr(device_model, "AFTB") ||
               strstr(device_model, "AFTT") ||
-              strstr(device_model, "AFTS") || 
+              strstr(device_model, "AFTS") ||
               strstr(device_model, "AFTM") ||
               strstr(device_model, "AFTRS")
              )
@@ -1389,7 +1389,7 @@ static void handle_hotplug(android_input_t *android,
                "Generic Gamepad (%04x-%04x)", vendorId, productId);
       }
    }
-  
+
    if (strstr(android_app->current_ime, "net.obsidianx.android.mogaime"))
       strlcpy(name_buf, android_app->current_ime, sizeof(name_buf));
    else if (strstr(android_app->current_ime, "com.ccpcreations.android.WiiUseAndroid"))
@@ -1609,7 +1609,7 @@ static void android_input_poll_input_default(android_input_t *android)
          {
              // Primeiro, tentamos recuperar uma porta, caso seja um dispositivo que foi desconectado.
              port = android_input_recover_port(android, id);
-         
+
              // Se, mesmo após a tentativa de recuperação, ainda não temos uma porta,
              // então é um dispositivo genuinamente novo e chamamos o hotplug.
              if (port < 0)
@@ -1808,6 +1808,9 @@ static int16_t android_input_state(
                      if (     (binds[port][i].key && binds[port][i].key < RETROK_LAST)
                            && ANDROID_KEYBOARD_PORT_INPUT_PRESSED(binds[port], i))
                         ret |= (1 << i);
+                     else if ((binds[port][i].key2 && binds[port][i].key2 < RETROK_LAST)
+                           && BIT_GET(android_key_state[ANDROID_KEYBOARD_PORT], rarch_keysym_lut[binds[port][i].key2]))
+                        ret |= (1 << i);
                   }
                }
             }
@@ -1822,6 +1825,12 @@ static int16_t android_input_state(
                if (     (binds[port][id].key && binds[port][id].key < RETROK_LAST)
                      && ANDROID_KEYBOARD_PORT_INPUT_PRESSED(binds[port], id)
                      && (id == RARCH_GAME_FOCUS_TOGGLE || !keyboard_mapping_blocked)
+                     )
+                  return 1;
+               if (     id < RARCH_ANALOG_BIND_LIST_END
+                     && (binds[port][id].key2 && binds[port][id].key2 < RETROK_LAST)
+                     && BIT_GET(android_key_state[ANDROID_KEYBOARD_PORT], rarch_keysym_lut[binds[port][id].key2])
+                     && !keyboard_mapping_blocked
                      )
                   return 1;
             }

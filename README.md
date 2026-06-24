@@ -11,6 +11,7 @@ Este projeto inclui as seguintes modificações em relação ao RetroArch origin
 - **Correção para Controles Genéricos**: Ajustes e mapeamentos específicos para garantir que controles genéricos (frequentemente problemáticos) funcionem corretamente sem configuração manual exaustiva.
 - **Pré-configuração por Dispositivo**: Otimizações automáticas de acordo com o hardware detectado, garantindo o melhor desempenho e compatibilidade desde a primeira execução.
 - **Unificação de Autoconfiguração**: Simplificação do sistema de autoconfiguração, removendo legados desnecessários para maior estabilidade.
+- **Mapeamento Duplo (Dual Binding)**: Suporte para configurar até dois botões físicos ou teclas de teclado para a mesma ação no RetroPad, permitindo maior flexibilidade em controles customizados ou teclados.
 
 ## Sobre o RetroArch
 

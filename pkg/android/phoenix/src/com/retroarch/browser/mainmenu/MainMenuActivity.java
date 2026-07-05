@@ -103,7 +103,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         boolean os64 = false;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             String[] abis64 = Build.SUPPORTED_64_BIT_ABIS;
-            os64 = (abis64 != null && abis.length > 0);
+            os64 = (abis64 != null && abis64.length > 0);
         } else {
             String arch = System.getProperty("os.arch");
             os64 = arch != null && arch.contains("64");
@@ -232,19 +232,12 @@ public final class MainMenuActivity extends PreferenceActivity {
             progressDialog.setTitle("Configurando RetroArch DRG...");
 
             String archMessage = archCores.equals("cores64")
-                    ? "
-Arquitetura dos Cores:
-  - arm64-v8a (64-bit)"
-                    : "
-Arquitetura dos Cores:
-  - armeabi-v7a (32-bit)";
+                    ? "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)"
+                    : "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
 
             String message = archMessage
-                    + "
- Espaço necessário: " + totalMB + " MB"
-                    + "
-
-(Customizado por Doug Retro Games)";
+                    + "\n Espaço necessário: " + totalMB + " MB"
+                    + "\n\n(Customizado por Doug Retro Games)";
 
             SpannableString spannable = new SpannableString(message);
             int start = message.indexOf("Doug Retro Games");
@@ -378,8 +371,7 @@ Arquitetura dos Cores:
 
             ProgressDialog closingDialog = new ProgressDialog(MainMenuActivity.this);
             closingDialog.setTitle("Encerrando aplicativo...");
-            closingDialog.setMessage("
-Prossiga com a instalação do Retro Game Box");
+            closingDialog.setMessage("\nProssiga com a instalação do Retro Game Box");
             closingDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             closingDialog.setCancelable(false);
             closingDialog.setMax(5);
@@ -514,8 +506,7 @@ Prossiga com a instalação do Retro Game Box");
 
             try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
                 for (Map.Entry<String, String> e : cfgFlags.entrySet()) {
-                    out.write((e.getKey() + " = "" + e.getValue() + ""
-").getBytes());
+                    out.write((e.getKey() + " = \"" + e.getValue() + "\"\n").getBytes());
                 }
             }
         }

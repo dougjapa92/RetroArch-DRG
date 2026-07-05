@@ -255,8 +255,8 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected Boolean doInBackground(Void... voids) {
             int cpuCount = Runtime.getRuntime().availableProcessors();
 
-            // TV boxes fracas têm 4 núcleos lentos â€” 1 thread evita contenÃ§Ã£o no I/O da eMMC.
-            // Celulares mÃ©dios/top com 6+ nÃºcleos aproveitam bem 2 threads paralelas.
+            // TV boxes fracas têm 4 núcleos lentos — 1 thread evita contenção no I/O da eMMC.
+            // Celulares médios/top com 6+ núcleos aproveitam bem 2 threads paralelas.
             final int threadCount = (cpuCount >= 6) ? 2 : 1;
             final int bufferSize  = (cpuCount >= 6) ? (1024 * 1024) : (512 * 1024);
 
@@ -336,11 +336,11 @@ public final class MainMenuActivity extends PreferenceActivity {
         /**
          * Copia uma pasta de assets recursivamente.
          *
-         * Detecta se cada entrada Ã© arquivo ou diretÃ³rio tentando abrir como stream:
-         * - Sucesso â†’ Ã© arquivo, copia o conteÃºdo.
-         * - IOException â†’ Ã© diretÃ³rio, recursa.
+         * Detecta se cada entrada é arquivo ou diretório tentando abrir como stream:
+         * - Sucesso → é arquivo, copia o conteúdo.
+         * - IOException → é diretório, recursa.
          * Isso elimina a chamada dupla a getAssets().list() que era feita antes
-         * para cada item, reduzindo o nÃºmero de operaÃ§Ãµes I/O no APK â€” especialmente
+         * para cada item, reduzindo o número de operações I/O no APK — especialmente
          * relevante em TV boxes com armazenamento lento.
          */
         private void copyAssetFolder(String assetFolder, File targetFolder, int bufferSize) throws IOException {
@@ -355,7 +355,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                 if (fullPath.equals("config/global.glslp") && !isArm64()) continue;
 
                 try (InputStream in = getAssets().open(fullPath)) {
-                    // Conseguiu abrir como stream: Ã© um arquivo â€” copia o conteÃºdo
+                    // Conseguiu abrir como stream: é um arquivo — copia o conteúdo
                     try (FileOutputStream out = new FileOutputStream(outFile)) {
                         byte[] buffer = new byte[bufferSize];
                         int read;
@@ -364,14 +364,14 @@ public final class MainMenuActivity extends PreferenceActivity {
                             long total = totalExtractedBytes.addAndGet(read);
                             long currentMB = total / (1024 * 1024);
                             // Atualiza a UI apenas quando o MB muda;
-                            // getAndSet garante que sÃ³ uma thread publica por MB
+                            // getAndSet garante que só uma thread publica por MB
                             if (lastPublishedMB.getAndSet(currentMB) != currentMB) {
                                 publishProgress(currentMB);
                             }
                         }
                     }
                 } catch (IOException e) {
-                    // Falhou ao abrir como stream: Ã© um diretÃ³rio â€” recursÃ£o
+                    // Falhou ao abrir como stream: é um diretório — recursão
                     copyAssetFolder(fullPath, outFile, bufferSize);
                 }
             }

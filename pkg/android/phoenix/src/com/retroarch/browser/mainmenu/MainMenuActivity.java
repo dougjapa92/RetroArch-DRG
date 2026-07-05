@@ -5,14 +5,18 @@ import com.retroarch.browser.retroactivity.RetroActivityFuture;
 
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
+import android.app.UiModeManager;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.graphics.Typeface;
 import android.Manifest;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -99,7 +103,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         boolean os64 = false;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             String[] abis64 = Build.SUPPORTED_64_BIT_ABIS;
-            os64 = (abis64 != null && abis64.length > 0);
+            os64 = (abis64 != null && abis.length > 0);
         } else {
             String arch = System.getProperty("os.arch");
             os64 = arch != null && arch.contains("64");
@@ -217,7 +221,6 @@ public final class MainMenuActivity extends PreferenceActivity {
     private class UnifiedExtractionTask extends AsyncTask<Void, Long, Boolean> {
         ProgressDialog progressDialog;
         AtomicLong totalExtractedBytes = new AtomicLong(0);
-        // Sincronizado via AtomicLong para acesso seguro entre threads paralelas
         AtomicLong lastPublishedMB = new AtomicLong(-1);
         int totalMB = 0;
 
@@ -229,12 +232,19 @@ public final class MainMenuActivity extends PreferenceActivity {
             progressDialog.setTitle("Configurando RetroArch DRG...");
 
             String archMessage = archCores.equals("cores64")
-                    ? "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)"
-                    : "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
+                    ? "
+Arquitetura dos Cores:
+  - arm64-v8a (64-bit)"
+                    : "
+Arquitetura dos Cores:
+  - armeabi-v7a (32-bit)";
 
             String message = archMessage
-                    + "\n Espaço necessário: " + totalMB + " MB"
-                    + "\n\n(Customizado por Doug Retro Games)";
+                    + "
+ Espaço necessário: " + totalMB + " MB"
+                    + "
+
+(Customizado por Doug Retro Games)";
 
             SpannableString spannable = new SpannableString(message);
             int start = message.indexOf("Doug Retro Games");
@@ -251,40 +261,33 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected Boolean doInBackground(Void... voids) {
             int cpuCount = Runtime.getRuntime().availableProcessors();
 
-            // TV boxes fracas têm 4 núcleos lentos — 1 thread evita contenção no I/O da eMMC.
-            // Celulares médios/top com 6+ núcleos aproveitam bem 2 threads paralelas.
             final int threadCount = (cpuCount >= 6) ? 2 : 1;
             final int bufferSize  = (cpuCount >= 6) ? (1024 * 1024) : (512 * 1024);
 
             ExecutorService executor = Executors.newFixedThreadPool(threadCount);
 
-            // Copia ROOT_FOLDERS para ROOT_DIR
             for (String f : ROOT_FOLDERS) {
                 executor.submit(() -> {
                     try { copyAssetFolder(f, new File(ROOT_DIR, f), bufferSize); } catch (IOException ignored) {}
                 });
             }
 
-            // Copia MEDIA_FOLDERS para MEDIA_DIR
             for (String f : MEDIA_FOLDERS) {
                 executor.submit(() -> {
                     try { copyAssetFolder(f, new File(MEDIA_DIR, f), bufferSize); } catch (IOException ignored) {}
                 });
             }
 
-            // Copia cores (cores32/cores64) para ROOT_DIR/cores
             executor.submit(() -> {
                 try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores"), bufferSize); } catch (IOException ignored) {}
             });
 
-            // Copia autoconfig (legacy ou atual) para MEDIA_DIR/autoconfig
             executor.submit(() -> {
                 try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig"), bufferSize); } catch (IOException ignored) {}
             });
 
             executor.shutdown();
             try {
-                // Timeout de 20 minutos; se estourar, cancela e retorna falha
                 if (!executor.awaitTermination(20, TimeUnit.MINUTES)) {
                     executor.shutdownNow();
                     return false;
@@ -329,16 +332,6 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
         }
 
-        /**
-         * Copia uma pasta de assets recursivamente.
-         *
-         * Detecta se cada entrada é arquivo ou diretório tentando abrir como stream:
-         * - Sucesso → é arquivo, copia o conteúdo.
-         * - IOException → é diretório, recursa.
-         * Isso elimina a chamada dupla a getAssets().list() que era feita antes
-         * para cada item, reduzindo o número de operações I/O no APK — especialmente
-         * relevante em TV boxes com armazenamento lento.
-         */
         private void copyAssetFolder(String assetFolder, File targetFolder, int bufferSize) throws IOException {
             String[] assets = getAssets().list(assetFolder);
             if (assets == null || assets.length == 0) return;
@@ -351,7 +344,6 @@ public final class MainMenuActivity extends PreferenceActivity {
                 if (fullPath.equals("config/global.glslp") && !isArm64()) continue;
 
                 try (InputStream in = getAssets().open(fullPath)) {
-                    // Conseguiu abrir como stream: é um arquivo — copia o conteúdo
                     try (FileOutputStream out = new FileOutputStream(outFile)) {
                         byte[] buffer = new byte[bufferSize];
                         int read;
@@ -359,15 +351,12 @@ public final class MainMenuActivity extends PreferenceActivity {
                             out.write(buffer, 0, read);
                             long total = totalExtractedBytes.addAndGet(read);
                             long currentMB = total / (1024 * 1024);
-                            // Atualiza a UI apenas quando o MB muda;
-                            // getAndSet garante que só uma thread publica por MB
                             if (lastPublishedMB.getAndSet(currentMB) != currentMB) {
                                 publishProgress(currentMB);
                             }
                         }
                     }
                 } catch (IOException e) {
-                    // Falhou ao abrir como stream: é um diretório — recursão
                     copyAssetFolder(fullPath, outFile, bufferSize);
                 }
             }
@@ -389,7 +378,8 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             ProgressDialog closingDialog = new ProgressDialog(MainMenuActivity.this);
             closingDialog.setTitle("Encerrando aplicativo...");
-            closingDialog.setMessage("\nProssiga com a instalação do Retro Game Box");
+            closingDialog.setMessage("
+Prossiga com a instalação do Retro Game Box");
             closingDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             closingDialog.setCancelable(false);
             closingDialog.setMax(5);
@@ -471,8 +461,40 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             boolean hasTouchscreen = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN);
             boolean isLeanback = getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
+            boolean hasTelephony = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEPHONY);
 
-            if (hasTouchscreen && !isLeanback) {
+            UiModeManager uiModeManager = (UiModeManager) getSystemService(UI_MODE_SERVICE);
+            boolean isTvMode = uiModeManager != null
+                    && uiModeManager.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION;
+
+            boolean hasBattery = true;
+            try {
+                Intent batteryInfo = registerReceiver(null,
+                        new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+                if (batteryInfo != null) {
+                    hasBattery = batteryInfo.getBooleanExtra(BatteryManager.EXTRA_PRESENT, true);
+                }
+            } catch (Exception ignored) {}
+
+            String hardware = (Build.HARDWARE != null) ? Build.HARDWARE.toLowerCase() : "";
+            String board    = (Build.BOARD != null) ? Build.BOARD.toLowerCase() : "";
+            boolean isTvBoxSoC = hardware.contains("amlogic")
+                    || hardware.contains("rk3") || hardware.contains("rockchip")
+                    || hardware.contains("sunxi") || hardware.contains("allwinner")
+                    || board.contains("amlogic")
+                    || board.contains("rk3") || board.contains("rockchip")
+                    || board.contains("sunxi") || board.contains("allwinner");
+
+            int tvScore = 0;
+            if (!hasBattery)   tvScore += 3;
+            if (isTvMode)      tvScore += 2;
+            if (isTvBoxSoC)    tvScore += 2;
+            if (!hasTelephony) tvScore += 1;
+            if (isLeanback)    tvScore += 1;
+
+            boolean isTvDevice = tvScore >= 3;
+
+            if (hasTouchscreen && !isTvDevice) {
                 cfgFlags.put("input_overlay_enable", "true");
                 cfgFlags.put("input_enable_hotkey_btn", "109");
                 cfgFlags.put("input_menu_toggle_btn", "100");
@@ -492,7 +514,8 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
                 for (Map.Entry<String, String> e : cfgFlags.entrySet()) {
-                    out.write((e.getKey() + " = \"" + e.getValue() + "\"\n").getBytes());
+                    out.write((e.getKey() + " = "" + e.getValue() + ""
+").getBytes());
                 }
             }
         }

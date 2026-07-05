@@ -5,14 +5,18 @@ import com.retroarch.browser.retroactivity.RetroActivityFuture;
 
 import android.app.AlertDialog;
 import android.app.ProgressDialog;
+import android.app.UiModeManager;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.graphics.Typeface;
 import android.Manifest;
 import android.media.AudioManager;
 import android.net.Uri;
 import android.os.AsyncTask;
+import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -229,12 +233,19 @@ public final class MainMenuActivity extends PreferenceActivity {
             progressDialog.setTitle("Configurando RetroArch DRG...");
 
             String archMessage = archCores.equals("cores64")
-                    ? "\nArquitetura dos Cores:\n  - arm64-v8a (64-bit)"
-                    : "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
+                    ? "
+Arquitetura dos Cores:
+  - arm64-v8a (64-bit)"
+                    : "
+Arquitetura dos Cores:
+  - armeabi-v7a (32-bit)";
 
             String message = archMessage
-                    + "\n Espaço necessário: " + totalMB + " MB"
-                    + "\n\n(Customizado por Doug Retro Games)";
+                    + "
+ Espaço necessário: " + totalMB + " MB"
+                    + "
+
+(Customizado por Doug Retro Games)";
 
             SpannableString spannable = new SpannableString(message);
             int start = message.indexOf("Doug Retro Games");
@@ -389,7 +400,8 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             ProgressDialog closingDialog = new ProgressDialog(MainMenuActivity.this);
             closingDialog.setTitle("Encerrando aplicativo...");
-            closingDialog.setMessage("\nProssiga com a instalação do Retro Game Box");
+            closingDialog.setMessage("
+Prossiga com a instalação do Retro Game Box");
             closingDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             closingDialog.setCancelable(false);
             closingDialog.setMax(5);
@@ -471,8 +483,40 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             boolean hasTouchscreen = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TOUCHSCREEN);
             boolean isLeanback = getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK);
+            boolean hasTelephony = getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEPHONY);
 
-            if (hasTouchscreen && !isLeanback) {
+            UiModeManager uiModeManager = (UiModeManager) getSystemService(UI_MODE_SERVICE);
+            boolean isTvMode = uiModeManager != null
+                    && uiModeManager.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION;
+
+            boolean hasBattery = true;
+            try {
+                Intent batteryInfo = registerReceiver(null,
+                        new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+                if (batteryInfo != null) {
+                    hasBattery = batteryInfo.getBooleanExtra(BatteryManager.EXTRA_PRESENT, true);
+                }
+            } catch (Exception ignored) {}
+
+            String hardware = (Build.HARDWARE != null) ? Build.HARDWARE.toLowerCase() : "";
+            String board    = (Build.BOARD != null) ? Build.BOARD.toLowerCase() : "";
+            boolean isTvBoxSoC = hardware.contains("amlogic")
+                    || hardware.contains("rk3") || hardware.contains("rockchip")
+                    || hardware.contains("sunxi") || hardware.contains("allwinner")
+                    || board.contains("amlogic")
+                    || board.contains("rk3") || board.contains("rockchip")
+                    || board.contains("sunxi") || board.contains("allwinner");
+
+            int tvScore = 0;
+            if (!hasBattery)   tvScore += 3;
+            if (isTvMode)      tvScore += 2;
+            if (isTvBoxSoC)    tvScore += 2;
+            if (!hasTelephony) tvScore += 1;
+            if (isLeanback)    tvScore += 1;
+
+            boolean isTvDevice = tvScore >= 3;
+
+            if (hasTouchscreen && !isTvDevice) {
                 cfgFlags.put("input_overlay_enable", "true");
                 cfgFlags.put("input_enable_hotkey_btn", "109");
                 cfgFlags.put("input_menu_toggle_btn", "100");
@@ -492,7 +536,8 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             try (FileOutputStream out = new FileOutputStream(originalCfg, false)) {
                 for (Map.Entry<String, String> e : cfgFlags.entrySet()) {
-                    out.write((e.getKey() + " = \"" + e.getValue() + "\"\n").getBytes());
+                    out.write((e.getKey() + " = "" + e.getValue() + ""
+").getBytes());
                 }
             }
         }

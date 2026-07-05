@@ -156,10 +156,10 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             if (deniedCount >= 2 || wentToSettings) {
                 new AlertDialog.Builder(this)
-                        .setTitle("PermissÃ£o Negada!")
-                        .setMessage("Ative as permissÃµes manualmente nas configuraÃ§Ãµes.")
+                        .setTitle("Permissão Negada!")
+                        .setMessage("Ative as permissões manualmente nas configurações.")
                         .setCancelable(false)
-                        .setPositiveButton("ABRIR CONFIGURAÃ‡Ã•ES", (dialog, which) -> {
+                        .setPositiveButton("ABRIR CONFIGURAÇÕES", (dialog, which) -> {
                             wentToSettings = true;
                             Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
                             Uri uri = Uri.fromParts("package", getPackageName(), null);
@@ -171,8 +171,8 @@ public final class MainMenuActivity extends PreferenceActivity {
             } else if (!firstDenialHandled) {
                 firstDenialHandled = true;
                 new AlertDialog.Builder(this)
-                        .setTitle("PermissÃµes NecessÃ¡rias!")
-                        .setMessage("O aplicativo precisa das permissÃµes de armazenamento.")
+                        .setTitle("Permissões Necessárias!")
+                        .setMessage("O aplicativo precisa das permissões de armazenamento.")
                         .setCancelable(false)
                         .setPositiveButton("CONCEDER", (dialog, which) -> {
                             if (permissions != null)
@@ -211,7 +211,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     private void showAspectRatioDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("ConfiguraÃ§Ã£o Inicial").setMessage("Escolha a proporÃ§Ã£o de tela dos jogos:")
+        builder.setTitle("Configuração Inicial").setMessage("Escolha a proporção de tela dos jogos:")
                 .setPositiveButton("TELA CHEIA (16:9)", (d, w) -> selectedAspectRatioIndex = "1")
                 .setNegativeButton("ORIGINAL (4:3)", (d, w) -> selectedAspectRatioIndex = "20")
                 .setOnDismissListener(d -> new UnifiedExtractionTask().execute())
@@ -237,8 +237,8 @@ public final class MainMenuActivity extends PreferenceActivity {
                     : "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
 
             String message = archMessage
-                    + "\n EspaÃ§o necessÃ¡rio: " + totalMB + " MB"
-                    + "\n\nClique em \"Sair\" apÃ³s a configuraÃ§Ã£o e prossiga com a instalaÃ§Ã£o do sistema.\n\n(Customizado por Doug Retro Games)";
+                    + "\n Espaço necessário: " + totalMB + " MB"
+                    + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do sistema.\n\n(Customizado por Doug Retro Games)";
 
             SpannableString spannable = new SpannableString(message);
             int start = message.indexOf("\"Sair\"");
@@ -255,7 +255,7 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected Boolean doInBackground(Void... voids) {
             int cpuCount = Runtime.getRuntime().availableProcessors();
 
-            // TV boxes fracas tÃªm 4 nÃºcleos lentos â€” 1 thread evita contenÃ§Ã£o no I/O da eMMC.
+            // TV boxes fracas têm 4 núcleos lentos â€” 1 thread evita contenÃ§Ã£o no I/O da eMMC.
             // Celulares mÃ©dios/top com 6+ nÃºcleos aproveitam bem 2 threads paralelas.
             final int threadCount = (cpuCount >= 6) ? 2 : 1;
             final int bufferSize  = (cpuCount >= 6) ? (1024 * 1024) : (512 * 1024);

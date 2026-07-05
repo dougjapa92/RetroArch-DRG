@@ -156,10 +156,10 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             if (deniedCount >= 2 || wentToSettings) {
                 new AlertDialog.Builder(this)
-                        .setTitle("PermissÃ£o Negada!")
-                        .setMessage("Ative as permissÃµes manualmente nas configuraÃ§Ãµes.")
+                        .setTitle("Permissão Negada!")
+                        .setMessage("Ative as permissões manualmente nas configurações.")
                         .setCancelable(false)
-                        .setPositiveButton("ABRIR CONFIGURAÃ‡Ã•ES", (dialog, which) -> {
+                        .setPositiveButton("ABRIR CONFIGURAÇÕES", (dialog, which) -> {
                             wentToSettings = true;
                             Intent intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
                             Uri uri = Uri.fromParts("package", getPackageName(), null);
@@ -171,8 +171,8 @@ public final class MainMenuActivity extends PreferenceActivity {
             } else if (!firstDenialHandled) {
                 firstDenialHandled = true;
                 new AlertDialog.Builder(this)
-                        .setTitle("PermissÃµes NecessÃ¡rias!")
-                        .setMessage("O aplicativo precisa das permissÃµes de armazenamento.")
+                        .setTitle("Permissões Necessárias!")
+                        .setMessage("O aplicativo precisa das permissões de armazenamento.")
                         .setCancelable(false)
                         .setPositiveButton("CONCEDER", (dialog, which) -> {
                             if (permissions != null)
@@ -211,7 +211,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
     private void showAspectRatioDialog() {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("ConfiguraÃ§Ã£o Inicial").setMessage("Escolha a proporÃ§Ã£o de tela dos jogos:")
+        builder.setTitle("Configuração Inicial").setMessage("Escolha a proporção de tela dos jogos:")
                 .setPositiveButton("TELA CHEIA (16:9)", (d, w) -> selectedAspectRatioIndex = "1")
                 .setNegativeButton("ORIGINAL (4:3)", (d, w) -> selectedAspectRatioIndex = "20")
                 .setOnDismissListener(d -> new UnifiedExtractionTask().execute())
@@ -221,7 +221,6 @@ public final class MainMenuActivity extends PreferenceActivity {
     private class UnifiedExtractionTask extends AsyncTask<Void, Long, Boolean> {
         ProgressDialog progressDialog;
         AtomicLong totalExtractedBytes = new AtomicLong(0);
-        // Sincronizado via AtomicLong para acesso seguro entre threads paralelas
         AtomicLong lastPublishedMB = new AtomicLong(-1);
         int totalMB = 0;
 
@@ -237,7 +236,7 @@ public final class MainMenuActivity extends PreferenceActivity {
                     : "\nArquitetura dos Cores:\n  - armeabi-v7a (32-bit)";
 
             String message = archMessage
-                    + "\n EspaÃ§o necessÃ¡rio: " + totalMB + " MB"
+                    + "\n Espaço necessário: " + totalMB + " MB"
                     + "\n\n(Customizado por Doug Retro Games)";
 
             SpannableString spannable = new SpannableString(message);
@@ -255,40 +254,33 @@ public final class MainMenuActivity extends PreferenceActivity {
         protected Boolean doInBackground(Void... voids) {
             int cpuCount = Runtime.getRuntime().availableProcessors();
 
-            // TV boxes fracas tÃªm 4 nÃºcleos lentos â€” 1 thread evita contenÃ§Ã£o no I/O da eMMC.
-            // Celulares mÃ©dios/top com 6+ nÃºcleos aproveitam bem 2 threads paralelas.
             final int threadCount = (cpuCount >= 6) ? 2 : 1;
             final int bufferSize  = (cpuCount >= 6) ? (1024 * 1024) : (512 * 1024);
 
             ExecutorService executor = Executors.newFixedThreadPool(threadCount);
 
-            // Copia ROOT_FOLDERS para ROOT_DIR
             for (String f : ROOT_FOLDERS) {
                 executor.submit(() -> {
                     try { copyAssetFolder(f, new File(ROOT_DIR, f), bufferSize); } catch (IOException ignored) {}
                 });
             }
 
-            // Copia MEDIA_FOLDERS para MEDIA_DIR
             for (String f : MEDIA_FOLDERS) {
                 executor.submit(() -> {
                     try { copyAssetFolder(f, new File(MEDIA_DIR, f), bufferSize); } catch (IOException ignored) {}
                 });
             }
 
-            // Copia cores (cores32/cores64) para ROOT_DIR/cores
             executor.submit(() -> {
                 try { copyAssetFolder(archCores, new File(ROOT_DIR, "cores"), bufferSize); } catch (IOException ignored) {}
             });
 
-            // Copia autoconfig (legacy ou atual) para MEDIA_DIR/autoconfig
             executor.submit(() -> {
                 try { copyAssetFolder(archAutoconfig, new File(MEDIA_DIR, "autoconfig"), bufferSize); } catch (IOException ignored) {}
             });
 
             executor.shutdown();
             try {
-                // Timeout de 20 minutos; se estourar, cancela e retorna falha
                 if (!executor.awaitTermination(20, TimeUnit.MINUTES)) {
                     executor.shutdownNow();
                     return false;
@@ -333,16 +325,6 @@ public final class MainMenuActivity extends PreferenceActivity {
             }
         }
 
-        /**
-         * Copia uma pasta de assets recursivamente.
-         *
-         * Detecta se cada entrada Ã© arquivo ou diretÃ³rio tentando abrir como stream:
-         * - Sucesso â†’ Ã© arquivo, copia o conteÃºdo.
-         * - IOException â†’ Ã© diretÃ³rio, recursa.
-         * Isso elimina a chamada dupla a getAssets().list() que era feita antes
-         * para cada item, reduzindo o nÃºmero de operaÃ§Ãµes I/O no APK â€” especialmente
-         * relevante em TV boxes com armazenamento lento.
-         */
         private void copyAssetFolder(String assetFolder, File targetFolder, int bufferSize) throws IOException {
             String[] assets = getAssets().list(assetFolder);
             if (assets == null || assets.length == 0) return;
@@ -355,7 +337,6 @@ public final class MainMenuActivity extends PreferenceActivity {
                 if (fullPath.equals("config/global.glslp") && !isArm64()) continue;
 
                 try (InputStream in = getAssets().open(fullPath)) {
-                    // Conseguiu abrir como stream: Ã© um arquivo â€” copia o conteÃºdo
                     try (FileOutputStream out = new FileOutputStream(outFile)) {
                         byte[] buffer = new byte[bufferSize];
                         int read;
@@ -363,15 +344,12 @@ public final class MainMenuActivity extends PreferenceActivity {
                             out.write(buffer, 0, read);
                             long total = totalExtractedBytes.addAndGet(read);
                             long currentMB = total / (1024 * 1024);
-                            // Atualiza a UI apenas quando o MB muda;
-                            // getAndSet garante que sÃ³ uma thread publica por MB
                             if (lastPublishedMB.getAndSet(currentMB) != currentMB) {
                                 publishProgress(currentMB);
                             }
                         }
                     }
                 } catch (IOException e) {
-                    // Falhou ao abrir como stream: Ã© um diretÃ³rio â€” recursÃ£o
                     copyAssetFolder(fullPath, outFile, bufferSize);
                 }
             }
@@ -393,7 +371,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             ProgressDialog closingDialog = new ProgressDialog(MainMenuActivity.this);
             closingDialog.setTitle("Encerrando aplicativo...");
-            closingDialog.setMessage("\nProssiga com a instalaÃ§Ã£o do Retro Game Box");
+            closingDialog.setMessage("\nProssiga com a instalação do Retro Game Box");
             closingDialog.setProgressStyle(ProgressDialog.STYLE_HORIZONTAL);
             closingDialog.setCancelable(false);
             closingDialog.setMax(5);
@@ -564,4 +542,3 @@ public final class MainMenuActivity extends PreferenceActivity {
         retro.putExtra("EXTERNAL", Environment.getExternalStorageDirectory().getAbsolutePath() + "/Android/data/" + PACKAGE_NAME + "/files");
     }
 }
-                 

@@ -238,7 +238,7 @@ public final class MainMenuActivity extends PreferenceActivity {
 
             String message = archMessage
                     + "\n Espaço necessário: " + totalMB + " MB"
-                    + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do sistema.\n\n(Customizado por Doug Retro Games)";
+                    + "\n\nClique em \"Sair\" após a configuração e prossiga com a instalação do sistema.)";
 
             SpannableString spannable = new SpannableString(message);
             int start = message.indexOf("\"Sair\"");
